@@ -1,0 +1,64 @@
+# Runs the family agent. Each tick works out, in Helsinki time, which jobs are
+# due (MyClub, Outlook, Wilma, digest, week-ahead) and runs only those.
+# GitHub cron is UTC and can run 10-30 min late; the hours below cover both
+# summer (UTC+3) and winter (UTC+2) time for the times in config.yaml.
+# If you change times in config.yaml, run the "Setup helpers" workflow with
+# "check" to see whether this cron still covers them.
+name: Family agent
+
+on:
+  schedule:
+    - cron: "15,45 3,4,5,9,10,13,14,15,16,17 * * *"
+  workflow_dispatch:
+    inputs:
+      force:
+        description: "Run these jobs now (comma list: myclub,outlook,wilma,digest,week-ahead). Empty = whatever is due."
+        required: false
+        default: ""
+
+concurrency:
+  group: family-agent-state
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  tick:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - name: Load state
+        run: bash scripts/state.sh load
+      - name: Tick
+        run: npm run --silent agent -- tick ${FORCE:+--force=$FORCE}
+        env:
+          FORCE: ${{ inputs.force }}
+          STATE_KEY: ${{ secrets.STATE_KEY }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_FAMILY_CHAT_ID: ${{ secrets.TELEGRAM_FAMILY_CHAT_ID }}
+          TELEGRAM_PRIVATE_CHAT_ID: ${{ secrets.TELEGRAM_PRIVATE_CHAT_ID }}
+          GOOGLE_SA_KEY: ${{ secrets.GOOGLE_SA_KEY }}
+          GOOGLE_FAMILY_CALENDAR_ID: ${{ secrets.GOOGLE_FAMILY_CALENDAR_ID }}
+          GOOGLE_SCHOOL_CALENDAR_ID: ${{ secrets.GOOGLE_SCHOOL_CALENDAR_ID }}
+          GOOGLE_HOBBIES_CALENDAR_ID: ${{ secrets.GOOGLE_HOBBIES_CALENDAR_ID }}
+          WILMA_TENANT: ${{ secrets.WILMA_TENANT }}
+          WILMA_USERNAME: ${{ secrets.WILMA_USERNAME }}
+          WILMA_PASSWORD: ${{ secrets.WILMA_PASSWORD }}
+          WILMA_TOTP_SECRET: ${{ secrets.WILMA_TOTP_SECRET }}
+          MYCLUB_ICS_URL: ${{ secrets.MYCLUB_ICS_URL }}
+          MYCLUB_USERNAME: ${{ secrets.MYCLUB_USERNAME }}
+          MYCLUB_PASSWORD: ${{ secrets.MYCLUB_PASSWORD }}
+          MYCLUB_LOGIN_URL: ${{ secrets.MYCLUB_LOGIN_URL }}
+          OUTLOOK_CLIENT_ID: ${{ secrets.OUTLOOK_CLIENT_ID }}
+      - name: Save state
+        if: always()
+        run: bash scripts/state.sh save
+        env:
+          GITHUB_TOKEN: ${{ github.token }}

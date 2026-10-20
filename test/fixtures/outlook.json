@@ -1,0 +1,30 @@
+[
+  {
+    "id": "m1",
+    "subject": "Sähkölasku lokakuu",
+    "from": { "emailAddress": { "name": "Helen", "address": "laskut@helen.fi" } },
+    "receivedDateTime": "2026-10-19T07:00:00Z",
+    "body": { "contentType": "html", "content": "<p>Hei,</p><p>Laskun summa: <b>64,20 €</b></p><p>Eräpäivä: 24.10.2026</p><p>Viitenumero: 12345 67890</p>" }
+  },
+  {
+    "id": "m2",
+    "subject": "Your invoice from Streamly",
+    "from": { "emailAddress": { "name": "Streamly", "address": "billing@streamly.example" } },
+    "receivedDateTime": "2026-10-20T07:00:00Z",
+    "body": { "contentType": "text", "content": "Amount due: 12.99 EUR\nDue date: 2026-11-15\nReference: RF71 4400 0011" }
+  },
+  {
+    "id": "m3",
+    "subject": "Viikon tarjoukset – lasku vasta kotiovella!",
+    "from": { "emailAddress": { "name": "Kauppa", "address": "uutiskirje@kauppa.example" } },
+    "receivedDateTime": "2026-10-20T08:00:00Z",
+    "body": { "contentType": "text", "content": "Uutuudet ja tarjoukset tällä viikolla." }
+  },
+  {
+    "id": "m4",
+    "subject": "Lunch on Saturday?",
+    "from": { "emailAddress": { "name": "Friend", "address": "friend@example.com" } },
+    "receivedDateTime": "2026-10-20T09:00:00Z",
+    "body": { "contentType": "text", "content": "Hey, are you free?" }
+  }
+]

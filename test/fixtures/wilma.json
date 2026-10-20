@@ -1,0 +1,45 @@
+{
+  "fetchedAt": "2026-10-21T03:45:00Z",
+  "baseUrl": "https://example.inschool.fi",
+  "students": [
+    {
+      "name": "Aino Esimerkki",
+      "number": "1001",
+      "lessons": [
+        { "date": "2026-10-21", "start": "08:15", "end": "09:00", "subject": "Matematiikka", "room": "204" },
+        { "date": "2026-10-21", "start": "12:30", "end": "14:00", "subject": "Liikunta", "room": "Sali" },
+        { "date": "2026-10-22", "start": "09:00", "end": "14:45", "subject": "Englanti", "room": "110" }
+      ],
+      "exams": [
+        { "id": 501, "date": "2026-10-23", "time": "08:15", "subject": "Matematiikka", "name": "Koe", "topic": "chapters 3-4" },
+        { "id": 502, "date": "2026-11-04", "time": null, "subject": "Biologia", "name": "Koe", "topic": null }
+      ],
+      "homework": [
+        { "date": "2026-10-22", "subject": "Englanti", "text": "Workbook p. 34-35" }
+      ],
+      "messages": [
+        { "id": 9001, "subject": "Syysretki", "sender": "Opettaja Virtanen", "sentAt": "2026-10-10T10:00:00Z", "content": "Tervetuloa retkelle." },
+        { "id": 9002, "subject": "Lupalappu palautettava perjantaihin mennessä", "sender": "Opettaja Virtanen", "sentAt": "2026-10-20T15:00:00Z", "content": "Palauttakaa allekirjoitettu lupalappu 24.10. mennessä." }
+      ],
+      "news": [
+        { "id": 7001, "title": "Kuvauspäivä", "published": "2026-10-01T08:00:00Z", "content": "Koulukuvaus on ti 28.10.2026.", "url": "https://example.inschool.fi/news/7001" },
+        { "id": 7002, "title": "Vanhempainilta", "published": "2026-10-20T08:00:00Z", "content": "Vanhempainilta to 6.11. klo 18-19.30 auditoriossa.", "url": "https://example.inschool.fi/news/7002" }
+      ],
+      "notes": []
+    },
+    {
+      "name": "Eero Esimerkki",
+      "number": "1002",
+      "lessons": [
+        { "date": "2026-10-21", "start": "09:00", "end": "13:15", "subject": "Äidinkieli", "room": "12" }
+      ],
+      "exams": [],
+      "homework": [],
+      "messages": [],
+      "news": [
+        { "id": 7002, "title": "Vanhempainilta", "published": "2026-10-20T08:00:00Z", "content": "Vanhempainilta to 6.11. klo 18-19.30 auditoriossa.", "url": "https://example.inschool.fi/news/7002" }
+      ],
+      "notes": [ { "date": "2026-10-20", "subject": "Liikunta", "type": "Unohtanut varusteet" } ]
+    }
+  ]
+}

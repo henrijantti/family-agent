@@ -1,0 +1,64 @@
+# Family agent settings. Nothing secret goes here: passwords, tokens and keys
+# are environment secrets (see .env.example and docs/SETUP.md).
+timezone: Europe/Helsinki
+
+# Children as they should appear in calendar titles and the digest.
+# `match` is matched (case-insensitive, start of name) against the names Wilma
+# and MyClub show. Leave empty to use the first name each source gives.
+children: []
+#  - name: Aino
+#    match: [Aino]
+#  - name: Eero
+#    match: [Eero]
+
+calendar:
+  # Google calendar ids (Settings > the calendar > "Integrate calendar").
+  # Ids are not secret, but they come from env vars so this file stays generic.
+  family_calendar_id_env: GOOGLE_FAMILY_CALENDAR_ID   # human-owned, agent reads only
+  school_calendar_id_env: GOOGLE_SCHOOL_CALENDAR_ID   # "Family: School (Wilma)", agent writes
+  hobbies_calendar_id_env: GOOGLE_HOBBIES_CALENDAR_ID # "Family: Hobbies (MyClub)", agent writes
+  missing_runs_before_delete: 2
+  max_deletes_per_run: 5
+
+digest:
+  language: en            # en | fi
+  weekday_time: "06:45"
+  weekend_time: "06:45"   # OPEN DECISION: same as weekdays, or later (e.g. "08:30")
+  week_ahead: { day: sun, time: "19:00" }
+  coming_up_days: 7
+
+alerts:
+  quiet_hours: { from: "21:00", to: "06:30" }
+  exam_soon_days: 3
+
+wilma:
+  enabled: true
+  include_grades: false   # OPEN DECISION: default off (most sensitive data, never sent to Telegram)
+  # 3-4 runs a day: every fresh login logs Henri out of Wilma in his browser.
+  # The saved session is reused between runs to soften this.
+  runs:
+    - { days: [mon, tue, wed, thu, fri], time: "06:30" }
+    - { days: [mon, tue, wed, thu, fri], time: "12:00", alerts: true }
+    - { days: [mon, tue, wed, thu, fri], time: "16:00", alerts: true }
+    - { days: [sun], time: "18:45" }
+  bulletin_events: true   # dated bulletin items go to the School calendar as tentative
+
+myclub:
+  enabled: true
+  runs:
+    - { days: [mon, tue, wed, thu, fri, sat, sun], time: "06:15" }
+  horizon_weeks: 6
+  # UNVERIFIED until the feasibility check with Henri. Either an ICS feed
+  # (secret MYCLUB_ICS_URL) or the member pages read as Henri.
+  mode: auto              # auto | ics | pages
+  base_url: https://myclub.fi
+
+outlook:
+  enabled: true
+  runs:
+    - { days: [mon, tue, wed, thu, fri, sat, sun], time: "06:20" }
+  remind_days_before: 3
+  # Bills from Henri's private mail. OPEN: post them to the family group, or
+  # only to Henri's private chat with the bot (set TELEGRAM_PRIVATE_CHAT_ID).
+  bills_to: private_if_set   # family | private_if_set
+  scan_lookback_days: 14

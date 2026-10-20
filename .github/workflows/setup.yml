@@ -1,0 +1,66 @@
+# One-off helpers for setup and troubleshooting. Run from the Actions tab:
+# "Setup helpers" > Run workflow > pick a command.
+name: Setup helpers
+
+on:
+  workflow_dispatch:
+    inputs:
+      command:
+        description: "What to run"
+        required: true
+        type: choice
+        options:
+          - check
+          - telegram-chats
+          - telegram-test
+          - calendar-smoke
+          - wilma-students
+          - outlook-login
+          - outlook-test
+          - demo
+
+concurrency:
+  group: family-agent-state
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - name: Load state
+        run: bash scripts/state.sh load
+      - name: ${{ inputs.command }}
+        run: npm run --silent agent -- ${{ inputs.command }}
+        env:
+          STATE_KEY: ${{ secrets.STATE_KEY }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_FAMILY_CHAT_ID: ${{ secrets.TELEGRAM_FAMILY_CHAT_ID }}
+          TELEGRAM_PRIVATE_CHAT_ID: ${{ secrets.TELEGRAM_PRIVATE_CHAT_ID }}
+          GOOGLE_SA_KEY: ${{ secrets.GOOGLE_SA_KEY }}
+          GOOGLE_FAMILY_CALENDAR_ID: ${{ secrets.GOOGLE_FAMILY_CALENDAR_ID }}
+          GOOGLE_SCHOOL_CALENDAR_ID: ${{ secrets.GOOGLE_SCHOOL_CALENDAR_ID }}
+          GOOGLE_HOBBIES_CALENDAR_ID: ${{ secrets.GOOGLE_HOBBIES_CALENDAR_ID }}
+          WILMA_TENANT: ${{ secrets.WILMA_TENANT }}
+          WILMA_USERNAME: ${{ secrets.WILMA_USERNAME }}
+          WILMA_PASSWORD: ${{ secrets.WILMA_PASSWORD }}
+          WILMA_TOTP_SECRET: ${{ secrets.WILMA_TOTP_SECRET }}
+          MYCLUB_ICS_URL: ${{ secrets.MYCLUB_ICS_URL }}
+          MYCLUB_USERNAME: ${{ secrets.MYCLUB_USERNAME }}
+          MYCLUB_PASSWORD: ${{ secrets.MYCLUB_PASSWORD }}
+          MYCLUB_LOGIN_URL: ${{ secrets.MYCLUB_LOGIN_URL }}
+          OUTLOOK_CLIENT_ID: ${{ secrets.OUTLOOK_CLIENT_ID }}
+      - name: Save state
+        if: always() && inputs.command != 'demo'
+        run: bash scripts/state.sh save
+        env:
+          GITHUB_TOKEN: ${{ github.token }}

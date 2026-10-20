@@ -1,0 +1,15 @@
+{
+  "fetchedAt": "2026-10-21T03:15:00Z",
+  "route": "fixture",
+  "events": [
+    { "id": "mc-100", "child": "Eero", "club": "FC Esimerkki", "title": "Jalkapallo harjoitus", "start": { "dateTime": "2026-10-21T14:00:00Z" }, "end": { "dateTime": "2026-10-21T15:30:00Z" }, "location": "Tekonurmi", "url": "https://fcesimerkki.myclub.fi/events/100" },
+    { "id": "mc-101", "child": "Aino", "club": "Uimaseura", "title": "Uintiharjoitus", "start": { "dateTime": "2026-10-21T14:30:00Z" }, "end": { "dateTime": "2026-10-21T15:30:00Z" }, "location": "Uimahalli", "url": "https://uimaseura.myclub.fi/events/101" },
+    { "id": "mc-102", "child": "Eero", "club": "FC Esimerkki", "title": "Football tournament", "start": { "date": "2026-10-25" }, "end": { "date": "2026-10-26" }, "location": "Kisapuisto", "signup": { "needed": true, "deadline": "2026-10-23" } },
+    { "id": "mc-103", "child": "Aino", "club": "Uimaseura", "title": "Uintiharjoitus", "start": { "dateTime": "2026-10-23T14:30:00Z" }, "end": { "dateTime": "2026-10-23T15:30:00Z" }, "location": "Uimahalli", "cancelled": true }
+  ],
+  "invoices": [
+    { "id": "inv-1", "club": "FC Esimerkki", "amount": "120,00 €", "dueDate": "2026-10-27", "reference": "RF18 1234 5678", "paid": false },
+    { "id": "inv-2", "club": "Uimaseura", "amount": "80,00 €", "dueDate": "2026-10-01", "paid": true }
+  ],
+  "warnings": []
+}

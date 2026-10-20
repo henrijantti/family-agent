@@ -1,0 +1,236 @@
+import { Config, RunSlot, env } from "./config.js";
+import type { CalendarApi } from "./calendar/types.js";
+import { syncSource } from "./calendar/sync.js";
+import { HubEvent, billsMessage, buildDigest, toHubEvent } from "./digest/build.js";
+import type { StateData } from "./lib/state.js";
+import { addDays, fromLocal, inRange, localParts, toMinutes } from "./lib/time.js";
+import { Notifier, esc } from "./notify/telegram.js";
+import { MyClubProvider, MyClubSnapshot, myclubEvents } from "./sources/myclub.js";
+import { MailApi, billsToRemind, scanInvoices } from "./sources/outlook.js";
+import { WilmaProvider, WilmaSnapshot, wilmaDiff, wilmaEvents } from "./sources/wilma.js";
+
+export interface Ctx {
+  cfg: Config;
+  state: StateData;
+  now: Date;
+  calendar?: CalendarApi; // undefined until the Google service account is set up
+  wilma?: WilmaProvider;
+  myclub?: MyClubProvider;
+  mail?: MailApi;
+  notifier?: Notifier;
+  log: (s: string) => void;
+}
+
+const familyChat = () => env("TELEGRAM_FAMILY_CHAT_ID");
+const privateChat = () => env("TELEGRAM_PRIVATE_CHAT_ID");
+
+function calId(cfg: Config, which: "family" | "school" | "hobbies") {
+  const name = which === "family" ? cfg.calendar.family_calendar_id_env : which === "school" ? cfg.calendar.school_calendar_id_env : cfg.calendar.hobbies_calendar_id_env;
+  return env(name);
+}
+
+function ok(ctx: Ctx, source: string, count?: number) {
+  ctx.state.health[source] = { ok: true, at: ctx.now.toISOString(), lastCount: count ?? ctx.state.health[source]?.lastCount };
+}
+
+function fail(ctx: Ctx, source: string, err: unknown) {
+  const msg = err instanceof Error ? err.message : String(err);
+  ctx.state.health[source] = { ...ctx.state.health[source], ok: false, at: ctx.now.toISOString(), error: msg };
+  ctx.log(`${source} failed: ${msg}`);
+}
+
+async function sendAlert(ctx: Ctx, lines: string[]) {
+  if (!lines.length || !ctx.notifier || !familyChat()) return;
+  const lp = localParts(ctx.now);
+  const q = ctx.cfg.alerts.quiet_hours;
+  if (inRange(lp.minutes, q.from, q.to)) {
+    ctx.log(`quiet hours: holding ${lines.length} alert(s) for the next digest`);
+    return;
+  }
+  await ctx.notifier.send(familyChat()!, `🔔 <b>Family agent</b>\n${lines.map((l) => `• ${esc(l)}`).join("\n")}`);
+}
+
+async function syncInto(ctx: Ctx, which: "school" | "hobbies", source: "wilma" | "myclub", desired: ReturnType<typeof wilmaEvents>, days: number) {
+  const id = calId(ctx.cfg, which);
+  if (!ctx.calendar || !id) {
+    ctx.log(`calendar not configured, skipping ${which} sync (${desired.length} items)`);
+    return [];
+  }
+  const today = localParts(ctx.now).date;
+  const r = await syncSource(ctx.calendar, desired, {
+    calendarId: id,
+    source,
+    windowStart: fromLocal(today).toISOString(),
+    windowEnd: fromLocal(addDays(today, days)).toISOString(),
+    missingRunsBeforeDelete: ctx.cfg.calendar.missing_runs_before_delete,
+    maxDeletes: ctx.cfg.calendar.max_deletes_per_run,
+    now: ctx.now,
+  });
+  ctx.state.changes.push(...r.changes);
+  ctx.log(`${which}: +${r.created} ~${r.updated} =${r.unchanged} -${r.deleted} (missing ${r.markedMissing})`);
+  return r.warnings;
+}
+
+export async function runWilma(ctx: Ctx, slot?: RunSlot) {
+  if (!ctx.wilma) return;
+  const today = localParts(ctx.now).date;
+  let snap: WilmaSnapshot;
+  try {
+    snap = await ctx.wilma.fetch(ctx.cfg, ctx.state);
+    if (!snap.students.length) throw new Error("no children found on the Wilma login");
+    ok(ctx, "Wilma", snap.students.length);
+  } catch (e) {
+    fail(ctx, "Wilma", e);
+    return;
+  }
+  const warnings = await syncInto(ctx, "school", "wilma", wilmaEvents(snap, ctx.cfg, today), 120);
+  const diff = wilmaDiff(snap, ctx.state, ctx.cfg, today);
+  ctx.state.digestQueue.push(...diff.fresh);
+  // Compact copy for the digest: no message bodies, no grades.
+  ctx.state.wilma.lastSnapshot = {
+    ...snap,
+    students: snap.students.map((s) => ({ ...s, messages: [], news: [], notes: [] })),
+  } satisfies WilmaSnapshot;
+  if (slot?.alerts) {
+    const urgent = [
+      ...diff.fresh.filter((f) => f.action).map((f) => `${f.child}: ${f.text} (Wilma, needs action)`),
+      ...diff.fresh.filter((f) => f.kind === "note").map((f) => `${f.child}: new lesson note: ${f.text}`),
+      ...diff.examAlerts,
+    ];
+    await sendAlert(ctx, [...urgent, ...warnings]);
+  } else if (warnings.length) await sendAlert(ctx, warnings);
+}
+
+export async function runMyClub(ctx: Ctx) {
+  if (!ctx.myclub) return;
+  let snap: MyClubSnapshot;
+  try {
+    snap = await ctx.myclub.fetch(ctx.cfg);
+    const prev = ctx.state.health.MyClub?.lastCount ?? 0;
+    if (snap.events.length === 0 && prev > 3) throw new Error("MyClub returned no events although it normally has some; the reader may be broken");
+    ok(ctx, "MyClub", snap.events.length);
+  } catch (e) {
+    fail(ctx, "MyClub", e);
+    return;
+  }
+  ctx.state.myclub.lastSnapshot = snap;
+  const before = ctx.state.changes.length;
+  const warnings = await syncInto(ctx, "hobbies", "myclub", myclubEvents(snap, ctx.cfg, ctx.now), ctx.cfg.myclub.horizon_weeks * 7);
+  // Same-day cancellations are urgent.
+  const today = localParts(ctx.now).date;
+  const urgent = ctx.state.changes
+    .slice(before)
+    .filter((c) => c.kind !== "new" && c.when.startsWith(today))
+    .map((c) => `${c.kind === "cancelled" ? "Cancelled" : "Changed"} today: ${c.title} (${c.when})`);
+  await sendAlert(ctx, [...urgent, ...warnings]);
+}
+
+export async function runOutlook(ctx: Ctx) {
+  if (!ctx.mail) return;
+  try {
+    const r = await scanInvoices(ctx.mail, ctx.state, ctx.cfg.outlook.scan_lookback_days, ctx.now);
+    ok(ctx, "Outlook", r.scanned);
+    ctx.log(`outlook: scanned ${r.scanned}, new bills ${r.newBills.length}`);
+  } catch (e) {
+    fail(ctx, "Outlook", e);
+  }
+}
+
+export async function collectHub(ctx: Ctx, days: number): Promise<HubEvent[]> {
+  if (!ctx.calendar) return [];
+  const today = localParts(ctx.now).date;
+  const out: HubEvent[] = [];
+  for (const which of ["family", "school", "hobbies"] as const) {
+    const id = calId(ctx.cfg, which);
+    if (!id) continue;
+    try {
+      const evs = await ctx.calendar.list(id, { timeMin: fromLocal(today).toISOString(), timeMax: fromLocal(addDays(today, days + 1)).toISOString() });
+      out.push(...evs.filter((e) => e.status !== "cancelled").map((e) => toHubEvent(e, which)));
+    } catch (e) {
+      fail(ctx, `Google calendar (${which})`, e);
+    }
+  }
+  return out;
+}
+
+export async function runDigest(ctx: Ctx, weekAhead = false): Promise<string> {
+  const cfg = ctx.cfg;
+  const today = localParts(ctx.now).date;
+  const events = await collectHub(ctx, weekAhead ? 8 : cfg.digest.coming_up_days);
+  const bills = cfg.outlook.enabled ? billsToRemind(ctx.state, today, cfg.outlook.remind_days_before) : [];
+  const billsPrivately = cfg.outlook.bills_to === "private_if_set" && !!privateChat();
+  const html = buildDigest({
+    now: ctx.now,
+    cfg,
+    events,
+    wilma: ctx.state.wilma.lastSnapshot as WilmaSnapshot | undefined,
+    myclub: ctx.state.myclub.lastSnapshot as MyClubSnapshot | undefined,
+    queue: ctx.state.digestQueue,
+    changes: ctx.state.changes,
+    bills: billsPrivately ? [] : bills,
+    health: ctx.state.health,
+    weekAhead,
+  });
+  if (ctx.notifier && familyChat()) await ctx.notifier.send(familyChat()!, html);
+  else ctx.log("TELEGRAM_FAMILY_CHAT_ID not set; digest not sent");
+  if (billsPrivately && bills.length && ctx.notifier) await ctx.notifier.send(privateChat()!, billsMessage(bills, cfg));
+  for (const b of ctx.state.outlook.bills) if (bills.some((x) => x.messageId === b.messageId)) (b.remindedOn ??= []).push(today);
+  ctx.state.digestQueue = [];
+  ctx.state.lastDigestAt = ctx.now.toISOString();
+  return html;
+}
+
+// ---------- scheduler ----------
+
+export type JobName = "myclub" | "outlook" | "wilma" | "digest" | "week-ahead";
+export interface DueJob {
+  job: JobName;
+  key: string;
+  slot?: RunSlot;
+}
+
+/** How late a slot may still run (GitHub's cron can be 10-30 min late). */
+const WINDOW_MIN = 75;
+
+export function dueJobs(cfg: Config, state: StateData, now: Date): DueJob[] {
+  const lp = localParts(now);
+  const due: DueJob[] = [];
+  const check = (job: JobName, slot: RunSlot) => {
+    if (!slot.days.includes(lp.day)) return;
+    const start = toMinutes(slot.time);
+    if (lp.minutes < start || lp.minutes >= start + WINDOW_MIN) return;
+    const key = `${lp.date} ${slot.time}`;
+    if (state.lastRun[`${job}@${slot.time}`] === key) return;
+    due.push({ job, key, slot });
+  };
+  if (cfg.myclub.enabled) cfg.myclub.runs.forEach((s) => check("myclub", s));
+  if (cfg.outlook.enabled) cfg.outlook.runs.forEach((s) => check("outlook", s));
+  if (cfg.wilma.enabled) cfg.wilma.runs.forEach((s) => check("wilma", s));
+  const weekend = lp.day === "sat" || lp.day === "sun";
+  check("digest", { days: [lp.day], time: weekend ? cfg.digest.weekend_time : cfg.digest.weekday_time });
+  check("week-ahead", { days: [cfg.digest.week_ahead.day], time: cfg.digest.week_ahead.time });
+  return due;
+}
+
+export async function tick(ctx: Ctx, force?: JobName[]) {
+  const jobs: DueJob[] = force
+    ? force.map((job) => ({ job, key: `forced ${ctx.now.toISOString()}` }))
+    : dueJobs(ctx.cfg, ctx.state, ctx.now);
+  if (!jobs.length) {
+    ctx.log(`nothing due at ${localParts(ctx.now).date} ${localParts(ctx.now).time} Helsinki`);
+    return [];
+  }
+  // Sources first so the digest sees fresh data.
+  const order: JobName[] = ["myclub", "outlook", "wilma", "digest", "week-ahead"];
+  jobs.sort((a, b) => order.indexOf(a.job) - order.indexOf(b.job));
+  for (const j of jobs) {
+    ctx.log(`running ${j.job} (${j.key})`);
+    if (j.job === "myclub") await runMyClub(ctx);
+    if (j.job === "outlook") await runOutlook(ctx);
+    if (j.job === "wilma") await runWilma(ctx, j.slot);
+    if (j.job === "digest") await runDigest(ctx);
+    if (j.job === "week-ahead") await runDigest(ctx, true);
+    if (j.slot) ctx.state.lastRun[`${j.job}@${j.slot.time}`] = j.key;
+  }
+  return jobs.map((j) => j.job);
+}
