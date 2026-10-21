@@ -33,6 +33,7 @@ export interface Config {
   alerts: { quiet_hours: { from: string; to: string }; exam_soon_days: number };
   wilma: { enabled: boolean; include_grades: boolean; runs: RunSlot[]; bulletin_events: boolean };
   myclub: { enabled: boolean; runs: RunSlot[]; horizon_weeks: number; mode: "auto" | "ics" | "pages"; base_url: string };
+  attendance?: { enabled: boolean; children: string[]; poll: RunSlot; apply: RunSlot; live: boolean };
   outlook: {
     enabled: boolean;
     runs: RunSlot[];

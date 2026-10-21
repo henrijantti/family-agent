@@ -1,3 +1,4 @@
+import { runAttendanceApply, runAttendancePoll, type AttendanceWriter } from "./attendance.js";
 import { Config, RunSlot, env } from "./config.js";
 import type { CalendarApi } from "./calendar/types.js";
 import { syncSource } from "./calendar/sync.js";
@@ -18,6 +19,8 @@ export interface Ctx {
   myclub?: MyClubProvider;
   mail?: MailApi;
   notifier?: Notifier;
+  /** MyClub sign-up writer; a dry run until verified (attendance.live). */
+  attendanceWriter?: AttendanceWriter;
   log: (s: string) => void;
 }
 
@@ -115,7 +118,10 @@ export async function runMyClub(ctx: Ctx) {
   }
   ctx.state.myclub.lastSnapshot = snap;
   const before = ctx.state.changes.length;
-  const warnings = await syncInto(ctx, "hobbies", "myclub", myclubEvents(snap, ctx.cfg, ctx.now), ctx.cfg.myclub.horizon_weeks * 7);
+  // Events the family said a child will skip stay on the calendar, marked.
+  const declined = new Set(ctx.state.myclub.declined ?? []);
+  const desired = myclubEvents(snap, ctx.cfg, ctx.now).map((e) => (declined.has(e.sourceId) ? { ...e, title: `${e.title} (not going)` } : e));
+  const warnings = await syncInto(ctx, "hobbies", "myclub", desired, ctx.cfg.myclub.horizon_weeks * 7);
   // Same-day cancellations are urgent.
   const today = localParts(ctx.now).date;
   const urgent = ctx.state.changes
@@ -182,7 +188,7 @@ export async function runDigest(ctx: Ctx, weekAhead = false): Promise<string> {
 
 // ---------- scheduler ----------
 
-export type JobName = "myclub" | "outlook" | "wilma" | "digest" | "week-ahead";
+export type JobName = "myclub" | "outlook" | "wilma" | "digest" | "week-ahead" | "attendance-poll" | "attendance-apply";
 export interface DueJob {
   job: JobName;
   key: string;
@@ -209,6 +215,10 @@ export function dueJobs(cfg: Config, state: StateData, now: Date): DueJob[] {
   const weekend = lp.day === "sat" || lp.day === "sun";
   check("digest", { days: [lp.day], time: weekend ? cfg.digest.weekend_time : cfg.digest.weekday_time });
   check("week-ahead", { days: [cfg.digest.week_ahead.day], time: cfg.digest.week_ahead.time });
+  if (cfg.attendance?.enabled) {
+    check("attendance-poll", cfg.attendance.poll);
+    check("attendance-apply", cfg.attendance.apply);
+  }
   return due;
 }
 
@@ -221,7 +231,7 @@ export async function tick(ctx: Ctx, force?: JobName[]) {
     return [];
   }
   // Sources first so the digest sees fresh data.
-  const order: JobName[] = ["myclub", "outlook", "wilma", "digest", "week-ahead"];
+  const order: JobName[] = ["myclub", "attendance-apply", "outlook", "wilma", "digest", "week-ahead", "attendance-poll"];
   jobs.sort((a, b) => order.indexOf(a.job) - order.indexOf(b.job));
   for (const j of jobs) {
     ctx.log(`running ${j.job} (${j.key})`);
@@ -230,6 +240,8 @@ export async function tick(ctx: Ctx, force?: JobName[]) {
     if (j.job === "wilma") await runWilma(ctx, j.slot);
     if (j.job === "digest") await runDigest(ctx);
     if (j.job === "week-ahead") await runDigest(ctx, true);
+    if (j.job === "attendance-poll") await runAttendancePoll(ctx);
+    if (j.job === "attendance-apply") await runAttendanceApply(ctx, ctx.attendanceWriter);
     if (j.slot) ctx.state.lastRun[`${j.job}@${j.slot.time}`] = j.key;
   }
   return jobs.map((j) => j.job);

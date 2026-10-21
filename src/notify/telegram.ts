@@ -1,10 +1,15 @@
 import { requireEnv } from "../config.js";
 
-// Send-only Telegram bot. It posts the digest and alerts and never acts on
-// messages in the group.
+// Telegram bot. It posts the digest and alerts, and the weekly practice
+// polls; it never acts on chat messages. Poll answers are read by closing the
+// poll, so the bot never has to read the group's conversation.
 
 export interface Notifier {
   send(chatId: string, html: string): Promise<void>;
+  /** Multiple-choice, non-anonymous poll. */
+  poll?(chatId: string, question: string, options: string[]): Promise<{ messageId: number }>;
+  /** Closes the poll and returns the voter count per option. */
+  stopPoll?(chatId: string, messageId: number): Promise<number[]>;
 }
 
 const LIMIT = 4000; // Telegram's hard limit is 4096
@@ -47,6 +52,22 @@ export class TelegramBot implements Notifier {
     }
   }
 
+  async poll(chatId: string, question: string, options: string[]) {
+    const m = await this.api<{ message_id: number }>("sendPoll", {
+      chat_id: chatId,
+      question: question.slice(0, 300),
+      options: options.map((text) => ({ text: text.slice(0, 100) })),
+      is_anonymous: false,
+      allows_multiple_answers: true,
+    });
+    return { messageId: m.message_id };
+  }
+
+  async stopPoll(chatId: string, messageId: number) {
+    const p = await this.api<{ options: { voter_count: number }[] }>("stopPoll", { chat_id: chatId, message_id: messageId });
+    return p.options.map((o) => o.voter_count);
+  }
+
   /** Lists chats the bot has seen, to find the family group's chat id during setup. */
   async chats(): Promise<{ id: number; title: string; type: string }[]> {
     const updates = await this.api<{ message?: { chat: { id: number; title?: string; first_name?: string; type: string } }; my_chat_member?: { chat: { id: number; title?: string; type: string } } }[]>("getUpdates");
@@ -61,7 +82,18 @@ export class TelegramBot implements Notifier {
 
 export class ConsoleNotifier implements Notifier {
   sent: { chatId: string; html: string }[] = [];
+  polls: { chatId: string; question: string; options: string[]; votes: number[]; closed: boolean }[] = [];
   constructor(private print = true) {}
+  async poll(chatId: string, question: string, options: string[]) {
+    this.polls.push({ chatId, question, options, votes: options.map(() => 0), closed: false });
+    if (this.print) console.log(`\n--- Telegram poll to ${chatId} ---\n${question}\n${options.map((o) => `  [ ] ${o}`).join("\n")}\n`);
+    return { messageId: this.polls.length };
+  }
+  async stopPoll(_chatId: string, messageId: number) {
+    const p = this.polls[messageId - 1];
+    p.closed = true;
+    return p.votes;
+  }
   async send(chatId: string, html: string) {
     this.sent.push({ chatId, html });
     if (this.print) console.log(`\n--- Telegram to ${chatId} ---\n${html.replace(/<\/?[bi]>/g, "").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">")}\n`);

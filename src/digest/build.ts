@@ -119,7 +119,7 @@ function who(title: string): string | undefined {
 
 /** Two timed events for different people overlapping: someone has to drive two places. */
 export function conflicts(events: HubEvent[]): [HubEvent, HubEvent][] {
-  const timed = events.filter((e) => e.start && !/^CANCELLED/.test(e.title));
+  const timed = events.filter((e) => e.start && !/^CANCELLED/.test(e.title) && !/\(not going\)$/.test(e.title));
   const out: [HubEvent, HubEvent][] = [];
   for (let i = 0; i < timed.length; i++)
     for (let j = i + 1; j < timed.length; j++) {

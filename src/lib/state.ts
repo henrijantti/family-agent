@@ -1,3 +1,4 @@
+import type { AttendancePoll } from "../attendance.js";
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
@@ -41,7 +42,14 @@ export interface StateData {
     exams: Record<string, string>; // examId -> date
     lastSnapshot?: unknown;
   };
-  myclub: { lastSnapshot?: unknown; session?: string };
+  myclub: {
+    lastSnapshot?: unknown;
+    session?: string;
+    /** Weekly practice polls (see attendance.ts). */
+    polls?: AttendancePoll[];
+    /** MyClub event ids the family said a child will skip. */
+    declined?: string[];
+  };
   outlook: { refreshToken?: string; lastScan?: string; bills: Bill[]; knownBillers: string[] };
   /** Wilma items found since the last digest, consumed by the next digest. */
   digestQueue: { child: string; kind: "message" | "bulletin" | "note"; text: string; action: boolean }[];

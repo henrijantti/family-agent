@@ -16,6 +16,7 @@ on:
           - calendar-smoke
           - wilma-students
           - myclub-check
+          - attendance-preview
           - outlook-login
           - outlook-test
           - demo

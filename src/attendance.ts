@@ -1,0 +1,139 @@
+import type { Config } from "./config.js";
+import { childName, env } from "./config.js";
+import type { Ctx } from "./jobs.js";
+import { addDays, dayOf, localParts } from "./lib/time.js";
+import { esc } from "./notify/telegram.js";
+import type { MyClubEvent, MyClubSnapshot } from "./sources/myclub.js";
+
+// Weekly practice question: on Sunday the bot posts one Telegram poll per
+// child with next week's MyClub events; on Monday morning the agent closes the
+// polls, signs the ticked events up in MyClub and declines the rest, then
+// posts what it did. No answers on a poll: nothing is changed for that child.
+
+export interface PollOption {
+  eventId: string;
+  label: string;
+  date: string;
+}
+
+export interface AttendancePoll {
+  child: string;
+  chatId: string;
+  messageId: number;
+  postedAt: string;
+  options: PollOption[];
+  status: "open" | "applied" | "no-answer" | "superseded";
+}
+
+/** Signs a child up for, or out of, one MyClub event. Returns a short result. */
+export interface AttendanceWriter {
+  readonly live: boolean;
+  set(eventId: string, attend: boolean): Promise<string>;
+}
+
+/** Used until the MyClub sign-up step is verified against the real pages. */
+export class DryRunWriter implements AttendanceWriter {
+  readonly live = false;
+  async set(_eventId: string, attend: boolean) {
+    return attend ? "would sign up" : "would decline";
+  }
+}
+
+const MAX_EVENTS = 9; // Telegram allows 10 poll options; one is "none of these"
+
+const T = {
+  en: {
+    question: (c: string) => `Which practices will ${c} attend next week?`,
+    none: "None of these",
+    noAnswer: (c: string) => `Nobody answered ${c}'s practice poll, so nothing was changed in MyClub.`,
+    title: (c: string) => `MyClub sign-ups for ${c}`,
+    dry: "Not sent to MyClub yet: the sign-up step is still being set up.",
+    more: (n: number) => `${n} more events didn't fit in the poll; answer those in MyClub.`,
+  },
+  fi: {
+    question: (c: string) => `Mihin harjoituksiin ${c} osallistuu ensi viikolla?`,
+    none: "Ei mihinkään näistä",
+    noAnswer: (c: string) => `Kukaan ei vastannut ${c}n kyselyyn, joten MyClubiin ei tehty muutoksia.`,
+    title: (c: string) => `MyClub-ilmoittautumiset: ${c}`,
+    dry: "Ei vielä lähetetty MyClubiin: ilmoittautumisvaihe on vielä asennuksessa.",
+    more: (n: number) => `${n} tapahtumaa ei mahtunut kyselyyn; vastaa niihin MyClubissa.`,
+  },
+};
+
+function eventDate(e: MyClubEvent) {
+  return "date" in e.start ? e.start.date : localParts(new Date(e.start.dateTime)).date;
+}
+
+function eventTime(e: MyClubEvent) {
+  return "date" in e.start ? "" : ` ${localParts(new Date(e.start.dateTime)).time}`;
+}
+
+/** Next week's (tomorrow + 7 days) non-cancelled events for one child. */
+export function weekEvents(snap: MyClubSnapshot, cfg: Config, child: string, now: Date): MyClubEvent[] {
+  const from = addDays(localParts(now).date, 1);
+  const to = addDays(from, 6);
+  return snap.events
+    .filter((e) => e.child && childName(cfg, e.child) === child && !e.cancelled)
+    .filter((e) => eventDate(e) >= from && eventDate(e) <= to)
+    .sort((a, b) => (eventDate(a) + eventTime(a)).localeCompare(eventDate(b) + eventTime(b)));
+}
+
+export function optionLabel(e: MyClubEvent): string {
+  const d = eventDate(e);
+  const [, m, day] = d.split("-");
+  return `${dayOf(d)} ${Number(day)}.${Number(m)}.${eventTime(e)} ${e.title}`.slice(0, 100);
+}
+
+export async function runAttendancePoll(ctx: Ctx) {
+  const cfg = ctx.cfg.attendance;
+  const chat = env("TELEGRAM_FAMILY_CHAT_ID");
+  const snap = ctx.state.myclub.lastSnapshot as MyClubSnapshot | undefined;
+  if (!cfg?.enabled || !snap || !chat || !ctx.notifier?.poll) {
+    ctx.log("attendance poll: skipped (needs attendance config, a MyClub snapshot, the family chat and Telegram)");
+    return;
+  }
+  const t = T[ctx.cfg.digest.language] ?? T.en;
+  const polls = (ctx.state.myclub.polls ??= []);
+  for (const child of cfg.children) {
+    const events = weekEvents(snap, ctx.cfg, child, ctx.now);
+    if (!events.length) continue;
+    for (const p of polls) if (p.child === child && p.status === "open") p.status = "superseded";
+    const shown = events.slice(0, MAX_EVENTS);
+    const options = shown.map((e) => ({ eventId: e.id, label: optionLabel(e), date: eventDate(e) }));
+    const { messageId } = await ctx.notifier.poll(chat, t.question(child), [...options.map((o) => o.label), t.none]);
+    polls.push({ child, chatId: chat, messageId, postedAt: ctx.now.toISOString(), options, status: "open" });
+    if (events.length > shown.length) await ctx.notifier.send(chat, esc(t.more(events.length - shown.length)));
+  }
+  ctx.state.myclub.polls = polls.filter((p) => Date.parse(p.postedAt) > ctx.now.getTime() - 35 * 86400000);
+}
+
+export async function runAttendanceApply(ctx: Ctx, writer: AttendanceWriter = new DryRunWriter()) {
+  if (!ctx.notifier?.stopPoll) return;
+  const t = T[ctx.cfg.digest.language] ?? T.en;
+  for (const p of ctx.state.myclub.polls ?? []) {
+    if (p.status !== "open") continue;
+    const votes = await ctx.notifier.stopPoll(p.chatId, p.messageId);
+    if (!votes.some((v) => v > 0)) {
+      p.status = "no-answer";
+      await ctx.notifier.send(p.chatId, esc(t.noAnswer(p.child)));
+      continue;
+    }
+    const lines: string[] = [];
+    const declined = new Set(ctx.state.myclub.declined ?? []);
+    for (const [i, o] of p.options.entries()) {
+      const attend = (votes[i] ?? 0) > 0;
+      let result: string;
+      try {
+        result = await writer.set(o.eventId, attend);
+      } catch (e) {
+        result = `failed: ${(e as Error).message}`;
+      }
+      if (attend) declined.delete(o.eventId);
+      else declined.add(o.eventId);
+      lines.push(`${attend ? "✅" : "➖"} ${esc(o.label)} <i>(${esc(result)})</i>`);
+    }
+    ctx.state.myclub.declined = [...declined].slice(-200);
+    p.status = "applied";
+    await ctx.notifier.send(p.chatId, `<b>${esc(t.title(p.child))}</b>\n${lines.join("\n")}${writer.live ? "" : `\n<i>${esc(t.dry)}</i>`}`);
+  }
+}

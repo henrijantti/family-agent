@@ -109,6 +109,7 @@ function cronCoverage(cfg: Config): string[] {
     ["digest", cfg.digest.weekday_time],
     ["digest (weekend)", cfg.digest.weekend_time],
     ["week-ahead", cfg.digest.week_ahead.time],
+    ...(cfg.attendance?.enabled ? [["attendance-poll", cfg.attendance.poll.time], ["attendance-apply", cfg.attendance.apply.time]] : []),
   ];
   for (const [name, time] of slots) {
     for (const offset of [2, 3]) {
@@ -274,6 +275,17 @@ async function main() {
       }
       for (const w of snap.warnings.slice(0, 5)) console.log(`  note: ${w}`);
       if (snap.route === "ics") console.log("  note: calendar feeds carry events only, not sign-up deadlines or fees");
+      break;
+    }
+    case "attendance-preview": {
+      // Shows what Sunday's practice polls would ask, from a fresh MyClub read. Posts nothing.
+      const { weekEvents, optionLabel } = await import("./attendance.js");
+      const snap = await myclubProvider(cfg).fetch(cfg);
+      for (const child of cfg.attendance?.children ?? []) {
+        const evs = weekEvents(snap, cfg, child, now);
+        console.log(`${child}: ${evs.length ? "" : "no events in the next 7 days"}`);
+        for (const e of evs) console.log(`  [ ] ${optionLabel(e)}`);
+      }
       break;
     }
     case "wilma-check": {

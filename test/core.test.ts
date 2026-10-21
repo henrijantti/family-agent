@@ -76,7 +76,7 @@ test("scheduler: digest due at 06:45 Helsinki in summer and winter time, only on
   const sunday = dueJobs(cfg, st, new Date("2026-11-08T16:45:00Z"));
   assert.deepEqual(sunday.map((j) => j.job), ["wilma"]);
   for (const j of sunday) st.lastRun[`${j.job}@${j.slot!.time}`] = j.key;
-  assert.deepEqual(dueJobs(cfg, st, new Date("2026-11-08T17:15:00Z")).map((j) => j.job), ["week-ahead"]);
+  assert.deepEqual(dueJobs(cfg, st, new Date("2026-11-08T17:15:00Z")).map((j) => j.job), ["week-ahead", "attendance-poll"]);
   // Wilma never runs on Saturday.
   assert.ok(!dueJobs(cfg, st, new Date("2026-11-07T04:45:00Z")).some((j) => j.job === "wilma"));
 });
