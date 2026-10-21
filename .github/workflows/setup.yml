@@ -15,6 +15,7 @@ on:
           - telegram-test
           - calendar-smoke
           - wilma-students
+          - wilma-check
           - outlook-login
           - outlook-test
           - demo

@@ -213,6 +213,23 @@ async function main() {
       st.save();
       break;
     }
+    case "wilma-check": {
+      // Diagnoses a refused Wilma login without sending credentials.
+      const { normaliseTenant } = await import("./sources/wilma.js");
+      const base = normaliseTenant(env("WILMA_TENANT") ?? "");
+      const u = new URL(base);
+      console.log(`Tenant host ends with: …${u.hostname.slice(-14)}  path: "${u.pathname}"`);
+      if (u.pathname !== "/") console.log("  ! The address has a path after the host; it should be just https://<city>.inschool.fi");
+      const ip = await fetch("https://api.ipify.org").then((r) => r.text()).catch(() => "?");
+      console.log(`Runner public IP: ${ip}`);
+      for (const path of ["/", "/token"]) {
+        const r = await fetch(`${u.origin}${path}`, { redirect: "manual", headers: { "user-agent": "Mozilla/5.0" } });
+        const body = (await r.text()).replace(/\s+/g, " ").slice(0, 300);
+        console.log(`GET ${path}: ${r.status} server=${r.headers.get("server")} cf-ray=${r.headers.get("cf-ray") ?? "-"}`);
+        console.log(`  body: ${body}`);
+      }
+      break;
+    }
     case "digest": {
       const ctx = buildCtx(cfg, st, now);
       await runDigest(ctx, args.includes("--week"));
