@@ -32,6 +32,27 @@ export interface MailApi {
   createFolder(name: string, parentId?: string): Promise<{ id: string }>;
   move(messageId: string, folderId: string): Promise<void>;
   createRule(rule: unknown): Promise<void>;
+  listRules(): Promise<{ id: string; displayName: string }[]>;
+}
+
+export const WILMA_RULE = "Family agent: Wilma";
+
+/**
+ * Wilma's notification emails skip the inbox: an Outlook rule moves them,
+ * read, into their own folder. Creates the folder and rule once; later calls
+ * find them and do nothing.
+ */
+export async function ensureWilmaRule(mail: MailApi, folderName: string, senders: string[]): Promise<"created" | "exists"> {
+  if ((await mail.listRules()).some((r) => r.displayName === WILMA_RULE)) return "exists";
+  const folder = (await mail.listFolders()).find((f) => f.displayName === folderName) ?? (await mail.createFolder(folderName));
+  await mail.createRule({
+    displayName: WILMA_RULE,
+    sequence: 1,
+    isEnabled: true,
+    conditions: { senderContains: senders },
+    actions: { moveToFolder: folder.id, markAsRead: true, stopProcessingRules: true },
+  });
+  return "created";
 }
 
 /** Refuses anything that could send mail, whatever calls it. */
@@ -123,6 +144,10 @@ export class GraphMail implements MailApi {
   async createRule(rule: unknown) {
     await this.call("POST", "/me/mailFolders/inbox/messageRules", rule);
   }
+
+  async listRules() {
+    return (await this.call<{ value: { id: string; displayName: string }[] }>("GET", "/me/mailFolders/inbox/messageRules")).value;
+  }
 }
 
 /** Device-code sign-in: prints a short code for microsoft.com/devicelogin; the refresh token goes to state only. */
@@ -175,7 +200,13 @@ export class FixtureMail implements MailApi {
     return { id: name };
   }
   async move() {}
-  async createRule() {}
+  rules: { id: string; displayName: string }[] = [];
+  async createRule(rule: unknown) {
+    this.rules.push({ id: String(this.rules.length + 1), displayName: (rule as { displayName: string }).displayName });
+  }
+  async listRules() {
+    return this.rules;
+  }
 }
 
 // ---------- invoice detection (pure, tested) ----------

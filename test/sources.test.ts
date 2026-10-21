@@ -108,3 +108,16 @@ test("Outlook: nothing can be sent", () => {
   assert.doesNotThrow(() => assertNoSend("POST", "/me/messages/abc/createReply"));
   assert.doesNotThrow(() => assertNoSend("GET", "/me/mailFolders/inbox/messages?$top=50"));
 });
+
+test("Wilma mail rule is created once, with move + mark read, never forward", async () => {
+  const { FixtureMail, ensureWilmaRule } = await import("../src/sources/outlook.js");
+  const mail = new FixtureMail("test/fixtures/outlook.json");
+  const created: unknown[] = [];
+  const orig = mail.createRule.bind(mail);
+  mail.createRule = async (r: unknown) => (created.push(r), orig(r));
+  assert.equal(await ensureWilmaRule(mail, "Wilma", ["inschool.fi"]), "created");
+  assert.equal(await ensureWilmaRule(mail, "Wilma", ["inschool.fi"]), "exists");
+  assert.equal(created.length, 1);
+  const actions = (created[0] as { actions: Record<string, unknown> }).actions;
+  assert.deepEqual(Object.keys(actions).sort(), ["markAsRead", "moveToFolder", "stopProcessingRules"]);
+});

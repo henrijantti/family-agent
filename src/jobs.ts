@@ -7,7 +7,7 @@ import type { StateData } from "./lib/state.js";
 import { addDays, fromLocal, inRange, localParts, toMinutes } from "./lib/time.js";
 import { Notifier, esc } from "./notify/telegram.js";
 import { MyClubProvider, MyClubSnapshot, myclubEvents } from "./sources/myclub.js";
-import { MailApi, billsToRemind, scanInvoices } from "./sources/outlook.js";
+import { MailApi, billsToRemind, ensureWilmaRule, scanInvoices } from "./sources/outlook.js";
 import { WilmaProvider, WilmaSnapshot, wilmaDiff, wilmaEvents } from "./sources/wilma.js";
 
 export interface Ctx {
@@ -134,6 +134,8 @@ export async function runMyClub(ctx: Ctx) {
 export async function runOutlook(ctx: Ctx) {
   if (!ctx.mail) return;
   try {
+    const wf = ctx.cfg.outlook.wilma_folder;
+    if (wf && (await ensureWilmaRule(ctx.mail, wf.name, wf.senders)) === "created") ctx.log(`outlook: created rule filing Wilma mail into "${wf.name}"`);
     const r = await scanInvoices(ctx.mail, ctx.state, ctx.cfg.outlook.scan_lookback_days, ctx.now);
     ok(ctx, "Outlook", r.scanned);
     ctx.log(`outlook: scanned ${r.scanned}, new bills ${r.newBills.length}`);

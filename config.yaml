@@ -74,3 +74,6 @@ outlook:
   # only to Henri's private chat with the bot (set TELEGRAM_PRIVATE_CHAT_ID).
   bills_to: private_if_set   # family | private_if_set
   scan_lookback_days: 14
+  # Wilma's notification emails skip the inbox (Henri: too much noise); the
+  # agent keeps an Outlook rule that files them, read, in this folder.
+  wilma_folder: { name: Wilma, senders: [inschool.fi] }
