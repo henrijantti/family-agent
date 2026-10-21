@@ -156,8 +156,15 @@ async function main() {
           console.log(`  · ${which} not set`);
           continue;
         }
-        const evs = await cal.list(id, { timeMin: new Date(`${today}T00:00:00Z`).toISOString(), timeMax: new Date(`${addDays(today, 7)}T00:00:00Z`).toISOString() });
-        console.log(`  ✓ ${which}: can read (${evs.length} events in the next 7 days)`);
+        try {
+          const evs = await cal.list(id, { timeMin: new Date(`${today}T00:00:00Z`).toISOString(), timeMax: new Date(`${addDays(today, 7)}T00:00:00Z`).toISOString() });
+          console.log(`  ✓ ${which}: can read (${evs.length} events in the next 7 days)`);
+        } catch (e) {
+          const status = (e as { status?: number }).status;
+          const hint = status === 404 ? "not found: check the id, and that the calendar is shared with the service account" : status === 403 ? "no access: share the calendar with the service account" : String(e);
+          console.log(`  ✗ ${which}: ${hint}`);
+          process.exitCode = 1;
+        }
       }
       const school = env("GOOGLE_SCHOOL_CALENDAR_ID");
       if (school) {
