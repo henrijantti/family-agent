@@ -81,7 +81,6 @@ export class IcsMyClub implements MyClubProvider {
         });
       }
     }
-    warnings.push("Calendar feed has no sign-ups or invoices; those need the page reader");
     return { fetchedAt: new Date().toISOString(), route: "ics", events, invoices: [], warnings };
   }
 }

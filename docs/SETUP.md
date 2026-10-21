@@ -26,15 +26,18 @@ Helpers: https://github.com/henrijantti/family-agent/actions/workflows/setup.yml
 6. For each calendar, Settings > Integrate calendar > Calendar ID. Add as `GOOGLE_SCHOOL_CALENDAR_ID`, `GOOGLE_HOBBIES_CALENDAR_ID` and `GOOGLE_FAMILY_CALENDAR_ID` (the main calendar's id is usually the Gmail address).
 7. Run helper **calendar-smoke**: it reads all three and writes + removes a test event.
 
-## 4. Wilma (10 min)
-1. Secrets: `WILMA_TENANT` (the address you log in at, e.g. `https://<city>.inschool.fi`), `WILMA_USERNAME`, `WILMA_PASSWORD`.
-2. If Wilma asks for an authenticator code: add the authenticator setup key as `WILMA_TOTP_SECRET`. Wilma only shows that key while turning two-step verification on, so you may need to turn it off and on again and save the key (also into your phone app).
-3. Run helper **wilma-students** (this logs you out of Wilma in your browser, as every agent login will). Tell Claude the children's names as you want them shown, or edit `children:` in `config.yaml`.
+## 4. Wilma (20 min, runs from your laptop)
+Wilma's Cloudflare protection refuses GitHub's servers, so a small GitHub runner on your Windows laptop does only the Wilma fetch (06:10, 11:40, 15:40 weekdays, 18:25 Sunday). It saves an encrypted snapshot; everything else still runs in GitHub. If the laptop is off, the digest says Wilma is unavailable that day.
+1. Secrets: `WILMA_TENANT` (e.g. `https://<city>.inschool.fi`), `WILMA_USERNAME`, `WILMA_PASSWORD`, and `WILMA_TOTP_SECRET` if Wilma asks for an authenticator code.
+2. Install Git for Windows if you don't have it: https://git-scm.com/download/win (defaults are fine; it provides the `bash` the runner uses).
+3. https://github.com/henrijantti/family-agent/settings/actions/runners/new > **Windows**, x64. In PowerShell, run the commands shown under *Download* and *Configure*. When `config.cmd` asks: runner group Enter, name Enter, **labels: `wilma`**, work folder Enter, **run as service: Y** (account: Enter for the default).
+4. The runner shows as *Idle* on https://github.com/henrijantti/family-agent/settings/actions/runners.
+5. Actions > **Wilma fetch (laptop)** > Run workflow. Then Setup helpers > **wilma-students** and tell Claude the children's names as you want them shown.
 
-## 5. MyClub (15 min, still unverified)
-1. Log in to MyClub in a browser. Check: is it email + password, or an emailed code? Is there a calendar feed link (iCal / "Lisää kalenteriin" / webcal)?
-2. If there is a feed: add it as `MYCLUB_ICS_URL` (one per child as lines `Name|https://…`). Otherwise add `MYCLUB_USERNAME` and `MYCLUB_PASSWORD`.
-3. Allow `myclub.fi` in the Claude cloud environment so Claude can check the reader and write the page parsers: Project settings > Cloud environment > gear > Network access > add `myclub.fi` under Allowed domains (steps: https://code.claude.com/docs/en/cloud-environments#network-access). The scheduled runs in GitHub don't need this.
+## 5. MyClub (5 min)
+1. In MyClub > Kalenteritilaukset, click **Kopioi linkki** on each subscription.
+2. Add secret `MYCLUB_ICS_URL`, one line per child: `Name|https://…`.
+3. Run helper **myclub-check**: it lists each child's next events.
 
 ## 6. Outlook (15 min)
 1. Sign in at https://entra.microsoft.com with your Outlook.com account > App registrations > New registration. Name "Henri mail assistant", **Personal Microsoft accounts only**, no redirect URI. (If it asks for a free Azure sign-up first, do it or tell Claude.)

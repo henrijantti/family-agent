@@ -1,7 +1,7 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { Config, childName, env, requireEnv } from "../config.js";
 import type { DesiredEvent } from "../calendar/types.js";
-import type { StateData } from "../lib/state.js";
+import { decrypt, type StateData } from "../lib/state.js";
 import { addDays, daysBetween, localIso, localParts } from "../lib/time.js";
 import { totp } from "../lib/totp.js";
 
@@ -41,6 +41,30 @@ export class FixtureWilma implements WilmaProvider {
   constructor(private path: string) {}
   async fetch(cfg: Config): Promise<WilmaSnapshot> {
     const s = JSON.parse(readFileSync(this.path, "utf8")) as WilmaSnapshot;
+    s.students = s.students.map((st) => ({ ...st, name: childName(cfg, st.name) }));
+    return s;
+  }
+}
+
+/**
+ * Wilma's Cloudflare turns away cloud servers, so a runner on Henri's laptop
+ * (home connection) fetches the snapshot and the GitHub-hosted tick reads it
+ * here. A snapshot older than `maxAgeHours` counts as a failed read.
+ */
+export class SnapshotWilma implements WilmaProvider {
+  constructor(
+    private path: string,
+    private secret: string | undefined,
+    private now: Date,
+    private maxAgeHours = 3,
+  ) {}
+  async fetch(cfg: Config): Promise<WilmaSnapshot> {
+    if (!existsSync(this.path)) throw new Error("no Wilma update from the laptop yet (is the home runner set up and on?)");
+    let text = readFileSync(this.path, "utf8");
+    if (text.startsWith("FAENC1:")) text = decrypt(text, this.secret ?? "");
+    const s = JSON.parse(text) as WilmaSnapshot;
+    const ageH = (this.now.getTime() - Date.parse(s.fetchedAt)) / 3600000;
+    if (ageH > this.maxAgeHours) throw new Error(`last Wilma update from the laptop is ${Math.round(ageH)} h old (laptop off or asleep?)`);
     s.students = s.students.map((st) => ({ ...st, name: childName(cfg, st.name) }));
     return s;
   }

@@ -234,3 +234,19 @@ export async function tick(ctx: Ctx, force?: JobName[]) {
   }
   return jobs.map((j) => j.job);
 }
+
+/**
+ * The laptop fetches Wilma shortly before each Wilma slot, so the GitHub tick
+ * at the slot finds a fresh snapshot. Returns the slot key when a fetch is due.
+ */
+export function wilmaFetchDue(cfg: Config, lastRun: Record<string, string>, now: Date, leadMin = 20): string | undefined {
+  const lp = localParts(now);
+  for (const slot of cfg.wilma.runs) {
+    if (!slot.days.includes(lp.day)) continue;
+    const start = toMinutes(slot.time) - leadMin;
+    if (lp.minutes < start || lp.minutes >= start + 60) continue;
+    const key = `${lp.date} ${slot.time}`;
+    if (lastRun[`wilma-fetch@${slot.time}`] === key) continue;
+    return key;
+  }
+}

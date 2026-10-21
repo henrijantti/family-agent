@@ -48,10 +48,7 @@ jobs:
           GOOGLE_FAMILY_CALENDAR_ID: ${{ secrets.GOOGLE_FAMILY_CALENDAR_ID }}
           GOOGLE_SCHOOL_CALENDAR_ID: ${{ secrets.GOOGLE_SCHOOL_CALENDAR_ID }}
           GOOGLE_HOBBIES_CALENDAR_ID: ${{ secrets.GOOGLE_HOBBIES_CALENDAR_ID }}
-          WILMA_TENANT: ${{ secrets.WILMA_TENANT }}
-          WILMA_USERNAME: ${{ secrets.WILMA_USERNAME }}
-          WILMA_PASSWORD: ${{ secrets.WILMA_PASSWORD }}
-          WILMA_TOTP_SECRET: ${{ secrets.WILMA_TOTP_SECRET }}
+          WILMA_MODE: snapshot
           MYCLUB_ICS_URL: ${{ secrets.MYCLUB_ICS_URL }}
           MYCLUB_USERNAME: ${{ secrets.MYCLUB_USERNAME }}
           MYCLUB_PASSWORD: ${{ secrets.MYCLUB_PASSWORD }}

@@ -3,13 +3,15 @@ import { Config, env, isMock, loadConfig } from "./config.js";
 import { FakeCalendar } from "./calendar/fake.js";
 import { GoogleCalendar } from "./calendar/google.js";
 import { eventId } from "./calendar/sync.js";
-import { Ctx, JobName, runDigest, tick } from "./jobs.js";
+import { Ctx, JobName, runDigest, tick, wilmaFetchDue } from "./jobs.js";
 import { StateStore } from "./lib/state.js";
 import { addDays, localIso, localParts, toMinutes } from "./lib/time.js";
 import { ConsoleNotifier, TelegramBot } from "./notify/telegram.js";
 import { FixtureMyClub, myclubProvider } from "./sources/myclub.js";
 import { FixtureMail, GraphMail, deviceSignIn } from "./sources/outlook.js";
-import { FixtureWilma, LiveWilma } from "./sources/wilma.js";
+import { FixtureWilma, LiveWilma, SnapshotWilma } from "./sources/wilma.js";
+import { encrypt } from "./lib/state.js";
+import { mkdirSync, writeFileSync } from "node:fs";
 
 const log = (s: string) => console.log(`[${new Date().toISOString()}] ${s}`);
 const FIX = new URL("../test/fixtures/", import.meta.url).pathname;
@@ -45,7 +47,13 @@ function buildCtx(cfg: Config, state: StateStore, now: Date): Ctx {
     state: state.data,
     now,
     calendar: has("GOOGLE_SA_KEY") ? GoogleCalendar.fromEnv() : undefined,
-    wilma: cfg.wilma.enabled && has("WILMA_TENANT", "WILMA_USERNAME", "WILMA_PASSWORD") ? new LiveWilma() : undefined,
+    wilma: !cfg.wilma.enabled
+      ? undefined
+      : env("WILMA_MODE") === "snapshot"
+        ? new SnapshotWilma(env("WILMA_SNAPSHOT_FILE") ?? "state/wilma-snapshot.json", env("STATE_KEY"), now)
+        : has("WILMA_TENANT", "WILMA_USERNAME", "WILMA_PASSWORD")
+          ? new LiveWilma()
+          : undefined,
     myclub: cfg.myclub.enabled && (has("MYCLUB_ICS_URL") || has("MYCLUB_USERNAME", "MYCLUB_PASSWORD")) ? myclubProvider(cfg) : undefined,
     mail: cfg.outlook.enabled && has("OUTLOOK_CLIENT_ID") ? GraphMail.fromEnv(state.data) : undefined,
     notifier: has("TELEGRAM_BOT_TOKEN") ? TelegramBot.fromEnv() : new ConsoleNotifier(),
@@ -141,7 +149,19 @@ async function main() {
     }
     case "check": {
       console.log("Secrets and ids (values never printed):");
-      for (const [k, why] of SECRETS) console.log(`  ${env(k) ? "✓" : "·"} ${k.padEnd(27)} ${why}`);
+      const snapshotMode = env("WILMA_MODE") === "snapshot";
+      for (const [k, why] of SECRETS) {
+        if (snapshotMode && k.startsWith("WILMA_")) continue; // only the laptop runner gets these
+        console.log(`  ${env(k) ? "✓" : "·"} ${k.padEnd(27)} ${why}`);
+      }
+      if (snapshotMode) {
+        try {
+          const snap = await new SnapshotWilma(env("WILMA_SNAPSHOT_FILE") ?? "state/wilma-snapshot.json", env("STATE_KEY"), now, 24 * 14).fetch(cfg);
+          console.log(`  ✓ Wilma snapshot from the laptop: ${snap.students.length} children, fetched ${snap.fetchedAt}`);
+        } catch (e) {
+          console.log(`  · Wilma snapshot: ${(e as Error).message}`);
+        }
+      }
       const cov = cronCoverage(cfg);
       console.log(cov.length ? `Schedule problems:\n  ${cov.join("\n  ")}` : "Schedule: every configured time has a tick.");
       break;
@@ -213,6 +233,49 @@ async function main() {
       st.save();
       break;
     }
+    case "wilma-fetch": {
+      // Runs on the home runner: log in to Wilma from the home connection and
+      // save an encrypted snapshot for the GitHub-hosted tick to read.
+      const session = new StateStore(env("WILMA_SESSION_FILE") ?? "state/wilma-session.json", env("STATE_KEY"));
+      const key = args.includes("--force") ? `forced ${now.toISOString()}` : wilmaFetchDue(cfg, session.data.lastRun, now);
+      if (!key) {
+        console.log(`no Wilma fetch due at ${localParts(now).date} ${localParts(now).time} Helsinki`);
+        break;
+      }
+      const snap = await new LiveWilma().fetch(cfg, session.data);
+      // Remember what was fetched in full, so the next fetch only opens new items.
+      const w = session.data.wilma;
+      for (const st of snap.students) {
+        w.seenMessages = [...new Set([...w.seenMessages, ...st.messages.map((m) => m.id)])].slice(-500);
+        w.seenNews = [...new Set([...w.seenNews, ...st.news.map((n) => n.id)])].slice(-500);
+      }
+      const slot = key.startsWith("forced") ? undefined : key.split(" ")[1];
+      if (slot) session.data.lastRun[`wilma-fetch@${slot}`] = key;
+      const out = env("WILMA_SNAPSHOT_FILE") ?? "state/wilma-snapshot.json";
+      mkdirSync("state", { recursive: true });
+      const json = JSON.stringify(snap);
+      writeFileSync(out, env("STATE_KEY") ? encrypt(json, env("STATE_KEY")!) : json);
+      session.save();
+      console.log(`Wilma fetched: ${snap.students.length} children`);
+      break;
+    }
+    case "myclub-check": {
+      // Reads the MyClub feeds and prints a summary; writes nothing.
+      const snap = await myclubProvider(cfg).fetch(cfg);
+      console.log(`MyClub (${snap.route}): ${snap.events.length} events`);
+      const today = localParts(now).date;
+      const when = (e: (typeof snap.events)[number]) => ("date" in e.start ? e.start.date : (() => { const lp = localParts(new Date(e.start.dateTime)); return `${lp.date} ${lp.time}`; })());
+      const byChild = new Map<string, typeof snap.events>();
+      for (const e of snap.events) byChild.set(e.child ?? "?", [...(byChild.get(e.child ?? "?") ?? []), e]);
+      for (const [child, evs] of byChild) {
+        const next = evs.filter((e) => when(e).slice(0, 10) >= today).sort((a, b) => when(a).localeCompare(when(b)));
+        console.log(`  ${child}: ${evs.length} events, ${next.length} upcoming`);
+        for (const e of next.slice(0, 5)) console.log(`    ${when(e)} ${e.title}${e.cancelled ? " (cancelled)" : ""}`);
+      }
+      for (const w of snap.warnings.slice(0, 5)) console.log(`  note: ${w}`);
+      if (snap.route === "ics") console.log("  note: calendar feeds carry events only, not sign-up deadlines or fees");
+      break;
+    }
     case "wilma-check": {
       // Diagnoses a refused Wilma login without sending credentials.
       const { normaliseTenant } = await import("./sources/wilma.js");
@@ -248,6 +311,7 @@ async function main() {
   outlook-test             read the last 3 days of inbox
   outlook-draft <id> <file> save a reply draft (never sends)
   wilma-students           list the children on the Wilma login
+  wilma-fetch [--force]    (home runner) fetch Wilma if a slot is near, save the snapshot
   digest [--week]          build and send the digest now`);
   }
 }

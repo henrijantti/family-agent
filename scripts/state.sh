@@ -1,28 +1,50 @@
 #!/usr/bin/env bash
-# Keeps the agent's encrypted state on an orphan `state` branch, one commit,
-# force-pushed after every run. The file is AES-encrypted with STATE_KEY.
+# Keeps the agent's encrypted state on orphan branches, one commit each,
+# force-pushed after every run. Files are AES-encrypted with STATE_KEY.
+#   state        state.json (written by the GitHub-hosted runs)
+#   state-wilma  wilma-session.json + wilma-snapshot.json (written by the home runner)
 set -euo pipefail
+
+fetch_files() { # branch file...
+  local branch=$1; shift
+  mkdir -p state
+  if git fetch -q --depth=1 origin "$branch" 2>/dev/null; then
+    for f in "$@"; do git show "FETCH_HEAD:$f" > "state/$f" 2>/dev/null || rm -f "state/$f"; done
+    echo "$branch loaded"
+  else
+    echo "no $branch branch yet (first run)"
+  fi
+}
+
+push_files() { # branch file...
+  local branch=$1; shift
+  local files=()
+  for f in "$@"; do
+    [ -f "state/$f" ] || continue
+    head -c 7 "state/$f" | grep -q '^FAENC1:' || { echo "refusing to save unencrypted state/$f (set STATE_KEY)"; exit 1; }
+    files+=("$f")
+  done
+  [ ${#files[@]} -gt 0 ] || { echo "nothing to save"; return 0; }
+  local tmp; tmp=$(mktemp -d)
+  for f in "${files[@]}"; do cp "state/$f" "$tmp/"; done
+  (
+    cd "$tmp"
+    git init -q -b "$branch"
+    git -c user.name=family-agent -c user.email=family-agent@users.noreply.github.com add .
+    git -c user.name=family-agent -c user.email=family-agent@users.noreply.github.com commit -qm "$branch $(date -u +%FT%TZ)"
+    git push -qf "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "$branch"
+  )
+  rm -rf "$tmp"
+  echo "$branch saved"
+}
+
 case "${1:-}" in
   load)
-    mkdir -p state
-    if git fetch -q --depth=1 origin state 2>/dev/null; then
-      git show FETCH_HEAD:state.json > state/state.json
-      echo "state loaded"
-    else
-      echo "no state branch yet (first run)"
-    fi
+    fetch_files state state.json
+    fetch_files state-wilma wilma-snapshot.json
     ;;
-  save)
-    [ -f state/state.json ] || { echo "no state to save"; exit 0; }
-    head -c 7 state/state.json | grep -q '^FAENC1:' || { echo "refusing to save unencrypted state (set STATE_KEY)"; exit 1; }
-    tmp=$(mktemp -d)
-    cp state/state.json "$tmp/"
-    cd "$tmp"
-    git init -q -b state
-    git -c user.name=family-agent -c user.email=family-agent@users.noreply.github.com add state.json
-    git -c user.name=family-agent -c user.email=family-agent@users.noreply.github.com commit -qm "state $(date -u +%FT%TZ)"
-    git push -qf "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" state
-    echo "state saved"
-    ;;
-  *) echo "usage: state.sh load|save"; exit 2 ;;
+  save) push_files state state.json ;;
+  load-wilma) fetch_files state-wilma wilma-session.json wilma-snapshot.json ;;
+  save-wilma) push_files state-wilma wilma-session.json wilma-snapshot.json ;;
+  *) echo "usage: state.sh load|save|load-wilma|save-wilma"; exit 2 ;;
 esac
