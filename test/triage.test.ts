@@ -36,7 +36,10 @@ test("triage labels once and only flags invoices and important mail", async () =
   ];
   const api: TriageApi = {
     listInbox: async () => msgs,
-    label: async (id, cats, flag) => void labels.push({ id, cats, flag }),
+    labelMany: async (ops) => {
+      for (const o of ops) labels.push({ id: o.id, cats: o.categories, flag: o.flag });
+      return 0;
+    },
     ensureCategories: async () => {},
     unflag: async () => {},
   };
@@ -48,7 +51,7 @@ test("triage labels once and only flags invoices and important mail", async () =
   ]);
   assert.match(triageReport(r), /2\tnews\tnews@shop\.fi/);
   const dry: string[] = [];
-  await triage({ ...api, label: async (id) => void dry.push(id) }, "x", { max: 100, apply: false });
+  await triage({ ...api, labelMany: async (ops) => (dry.push(...ops.map((o) => o.id)), 0) }, "x", { max: 100, apply: false });
   assert.deepEqual(dry, []);
 });
 

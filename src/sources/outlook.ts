@@ -139,9 +139,39 @@ export class GraphMail implements MailApi {
     return out.slice(0, max);
   }
 
-  /** Adds categories and optionally a follow-up flag. Only labels; nothing is moved or deleted. */
-  async label(messageId: string, categories: string[], flag: boolean) {
-    await this.call("PATCH", `/me/messages/${messageId}`, { categories, ...(flag ? { flag: { flagStatus: "flagged" } } : {}) });
+  /**
+   * Labels in Graph JSON batches of 20 (one request per batch instead of per
+   * message); throttled ones are retried after the wait Graph asks for.
+   */
+  async labelMany(ops: { id: string; categories: string[]; flag: boolean }[]) {
+    let pending = ops;
+    let failed = 0;
+    for (let attempt = 0; attempt < 4 && pending.length; attempt++) {
+      const retry: typeof ops = [];
+      let wait = 0;
+      for (let i = 0; i < pending.length; i += 20) {
+        const chunk = pending.slice(i, i + 20);
+        const res = await this.call<{ responses: { id: string; status: number; headers?: Record<string, string> }[] }>("POST", "/$batch", {
+          requests: chunk.map((o, n) => ({
+            id: String(n),
+            method: "PATCH",
+            url: `/me/messages/${o.id}`,
+            headers: { "content-type": "application/json" },
+            body: { categories: o.categories, ...(o.flag ? { flag: { flagStatus: "flagged" } } : {}) },
+          })),
+        });
+        for (const r of res.responses) {
+          if (r.status < 300) continue;
+          if (r.status === 429 || r.status >= 500) {
+            retry.push(chunk[Number(r.id)]);
+            wait = Math.max(wait, Number(r.headers?.["Retry-After"] ?? r.headers?.["retry-after"] ?? 5));
+          } else failed++;
+        }
+      }
+      pending = retry;
+      if (pending.length) await new Promise((ok) => setTimeout(ok, Math.min(wait, 60) * 1000));
+    }
+    return failed + pending.length;
   }
 
   async unflag(messageId: string) {

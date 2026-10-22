@@ -49,9 +49,16 @@ export function classify(m: MailMessage, opts: { skipDomains?: string[]; self?: 
   return null;
 }
 
+export interface LabelOp {
+  id: string;
+  categories: string[];
+  flag: boolean;
+}
+
 export interface TriageApi {
   listInbox(sinceIso: string, max: number): Promise<MailMessage[]>;
-  label(id: string, categories: string[], flag: boolean): Promise<void>;
+  /** Labels many messages at once; returns how many failed. */
+  labelMany(ops: LabelOp[]): Promise<number>;
   unflag(id: string): Promise<void>;
   ensureCategories(cats: { name: string; color: string }[]): Promise<void>;
 }
@@ -99,6 +106,7 @@ export async function triage(
   const labelled: Record<Kind, MailMessage[]> = { invoice: [], newsletter: [], important: [] };
   let skipped = 0;
   if (opts.apply) await api.ensureCategories(Object.values(CATEGORIES));
+  const ops: LabelOp[] = [];
   for (const m of msgs) {
     const kind = classify(m, opts);
     if (!kind) continue;
@@ -108,11 +116,10 @@ export async function triage(
       skipped++;
       continue;
     }
-    if (opts.apply) {
-      const flag = wantsFlag(kind, m, now) && m.flag?.flagStatus !== "complete";
-      await api.label(m.id, [...(m.categories ?? []), cat.name], flag).catch((e) => console.warn(`could not label a message: ${(e as Error).message}`));
-    }
+    ops.push({ id: m.id, categories: [...(m.categories ?? []), cat.name], flag: wantsFlag(kind, m, now) && m.flag?.flagStatus !== "complete" });
   }
+  const failed = opts.apply && ops.length ? await api.labelMany(ops) : 0;
+  if (failed) console.warn(`${failed} messages could not be labelled; run again to retry them`);
   return { scanned: msgs.length, unflagged, labelled, skipped };
 }
 
