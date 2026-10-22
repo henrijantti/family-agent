@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { loadConfig } from "../src/config.js";
+import { testConfig } from "./config.js";
 import { FakeCalendar } from "../src/calendar/fake.js";
 import { Ctx, tick } from "../src/jobs.js";
 import { StateStore } from "../src/lib/state.js";
@@ -27,7 +27,7 @@ function ctx(now: string, wilma: WilmaProvider = new FixtureWilma(`${FIX}wilma.j
   ]);
   const notifier = new ConsoleNotifier(false);
   const c: Ctx = {
-    cfg: loadConfig(),
+    cfg: testConfig(),
     state: new StateStore("/nonexistent/state.json").data,
     now: new Date(now),
     calendar: cal,

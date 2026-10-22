@@ -5,11 +5,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { encrypt } from "../src/lib/state.js";
 import { wilmaFetchDue } from "../src/jobs.js";
-import { loadConfig } from "../src/config.js";
+import { testConfig } from "./config.js";
 import { SnapshotWilma } from "../src/sources/wilma.js";
 
 test("laptop fetch is due ~20 min before each Wilma slot, once, in both DST offsets", () => {
-  const cfg = loadConfig();
+  const cfg = testConfig();
   const lastRun: Record<string, string> = {};
   // Wed 06:10 Helsinki in summer (UTC+3) and winter (UTC+2)
   assert.equal(wilmaFetchDue(cfg, lastRun, new Date("2026-10-21T03:10:00Z")), "2026-10-21 06:30");
@@ -24,7 +24,7 @@ test("laptop fetch is due ~20 min before each Wilma slot, once, in both DST offs
 });
 
 test("snapshot reader decrypts, and refuses a missing or stale snapshot", async () => {
-  const cfg = loadConfig();
+  const cfg = testConfig();
   const dir = mkdtempSync(join(tmpdir(), "fa-"));
   const path = join(dir, "snap.json");
   const now = new Date("2026-11-04T05:00:00Z");

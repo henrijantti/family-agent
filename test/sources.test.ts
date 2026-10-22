@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { loadConfig } from "../src/config.js";
+import { testConfig } from "./config.js";
 import { emptyState } from "../src/lib/state.js";
 import { FixtureMyClub, feesDue, myclubEvents, openSignups, parseFeeds } from "../src/sources/myclub.js";
 import { FixtureMail, assertNoSend, billsToRemind, detectInvoice, scanInvoices } from "../src/sources/outlook.js";
 import { FixtureWilma, datesInText, needsAction, wilmaDiff, wilmaEvents } from "../src/sources/wilma.js";
 
-const cfg = loadConfig();
+const cfg = testConfig();
 const FIX = new URL("./fixtures/", import.meta.url).pathname;
 const today = "2026-10-21";
 

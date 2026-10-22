@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { loadConfig } from "../src/config.js";
+import { testConfig } from "./config.js";
 import { emptyState } from "../src/lib/state.js";
 import { ConsoleNotifier } from "../src/notify/telegram.js";
 import { runAttendanceApply, runAttendancePoll, weekEvents, type AttendanceWriter } from "../src/attendance.js";
@@ -25,11 +25,11 @@ function ctx(now: Date, notifier: ConsoleNotifier): Ctx {
   const state = emptyState();
   state.myclub.lastSnapshot = snap;
   process.env.TELEGRAM_FAMILY_CHAT_ID = "-1";
-  return { cfg: loadConfig(), state, now, notifier, log: () => {} };
+  return { cfg: testConfig(), state, now, notifier, log: () => {} };
 }
 
 test("next week's events per child: mapped names, no cancelled, 7-day window", () => {
-  const ids = weekEvents(snap, loadConfig(), "Oliver", new Date("2026-10-25T16:00:00Z")).map((e) => e.id);
+  const ids = weekEvents(snap, testConfig(), "Oliver", new Date("2026-10-25T16:00:00Z")).map((e) => e.id);
   assert.deepEqual(ids, ["a1", "a2"]);
 });
 

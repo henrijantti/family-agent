@@ -8,8 +8,9 @@
 name: Wilma fetch (laptop)
 
 on:
-  schedule:
-    - cron: "10,40 3,4,8,9,12,13,15,16 * * *"
+  # ON HOLD (2026-10-22) until the laptop runner is installed; uncomment to resume.
+  # schedule:
+  #   - cron: "10,40 3,4,8,9,12,13,15,16 * * *"
   workflow_dispatch:
     inputs:
       force:

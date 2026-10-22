@@ -5,7 +5,7 @@ import { addDays, fromLocal, localIso, localParts } from "../src/lib/time.js";
 import { totp } from "../src/lib/totp.js";
 import { parseIcs } from "../src/lib/ics.js";
 import { dueJobs } from "../src/jobs.js";
-import { loadConfig } from "../src/config.js";
+import { testConfig } from "./config.js";
 
 test("Helsinki times carry the right offset across the DST change (25 Oct 2026)", () => {
   assert.equal(localIso("2026-10-24", "08:00"), "2026-10-24T08:00:00+03:00");
@@ -62,7 +62,7 @@ test("ICS feed: TZID, UTC, all-day, cancelled, folded lines", () => {
 });
 
 test("scheduler: digest due at 06:45 Helsinki in summer and winter time, only once", () => {
-  const cfg = loadConfig();
+  const cfg = testConfig();
   const st = emptyState();
   const winter = dueJobs(cfg, st, new Date("2026-11-04T04:45:00Z")).map((j) => j.job); // Wed 06:45 UTC+2
   assert.deepEqual(winter.sort(), ["digest", "myclub", "outlook", "wilma"]);
