@@ -286,8 +286,10 @@ async function main() {
       const snap = await (env("MYCLUB_POLL_ICS_URL") ? new IcsMyClub("MYCLUB_POLL_ICS_URL") : myclubProvider(cfg)).fetch(cfg);
       for (const child of cfg.attendance?.children ?? []) {
         const evs = weekEvents(snap, cfg, child, now);
-        console.log(`${child}: ${evs.length ? "" : "no events in the next 7 days"}`);
+        const all = snap.events.filter((e) => e.child === child && !e.cancelled);
+        console.log(`${child}: ${all.length} unanswered in the feed, ${evs.length} in the next 7 days`);
         for (const e of evs) console.log(`  [ ] ${optionLabel(e)}`);
+        if (!evs.length) for (const e of all.slice(0, 3)) console.log(`  later: ${optionLabel(e)}`);
       }
       break;
     }
