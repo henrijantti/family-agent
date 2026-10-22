@@ -264,6 +264,7 @@ async function main() {
     }
     case "myclub-check": {
       // Reads the MyClub feeds and prints a summary; writes nothing.
+      if (!env("MYCLUB_ICS_URL") && !env("MYCLUB_USERNAME")) throw new Error("MYCLUB_ICS_URL is not set: add the MyClub calendar links as a repository secret");
       const snap = await myclubProvider(cfg).fetch(cfg);
       console.log(`MyClub (${snap.route}): ${snap.events.length} events`);
       const today = localParts(now).date;
