@@ -20,7 +20,7 @@ const text = (m: MailMessage) => (m.body ? (m.body.contentType === "html" ? html
 const BULK_SENDER = /(no-?reply|noreply|newsletter|uutiskirje|news@|info@|marketing|mailer|campaign|offers|tarjous|hello@|notifications?@|updates?@)/i;
 const UNSUB_TEXT = /(unsubscribe|peruuta tilaus|peru tilaus|tilauksen peruminen|lopeta tilaus|en halua vastaanottaa|manage (your )?(email )?preferences|uutiskirjeen tilaus|opt[- ]out)/i;
 // Marketing says "tärkeä" and "kutsu" too, so only words that ask Henri to act.
-const IMPORTANT_WORDS = /\b(maksumuistutus|perintä|karhu\w*|määräaika|deadline|urgent|kiireellinen|action required|toimenpiteitä|sopimus\w*|irtisano\w*|veropäätös|vakuutuskausi|ajanvaraus|varaus\w*)\b/i;
+const IMPORTANT_WORDS = /\b(maksumuistutus|perintä|karhu\w*|määräaika|deadline|urgent|kiireellinen|action required|toimenpiteitä|sopimus\w*|irtisano\w*|veropäätös|vakuutuskausi|ajanvaraus)\b/i;
 // Club messages from MyClub and account security mail are not newsletters to drop.
 const NEVER_NEWSLETTER = /(myclub\.fi|accountprotection\.microsoft\.com)$/i;
 const PERSONAL_DOMAINS = /^(gmail\.com|googlemail\.com|outlook\.com|hotmail\.\w+|live\.\w+|msn\.com|icloud\.com|me\.com|yahoo\.\w+|luukku\.com|kolumbus\.fi|elisanet\.fi|welho\.com|pp\.inet\.fi|saunalahti\.fi)$/i;
