@@ -17,6 +17,7 @@ on:
           - wilma-students
           - myclub-check
           - attendance-preview
+          - attendance-poll-next
           - myclub-discover
           - myclub-open
           - myclub-signup-test

@@ -70,9 +70,9 @@ function eventTime(e: MyClubEvent) {
   return "date" in e.start ? "" : ` ${localParts(new Date(e.start.dateTime)).time}`;
 }
 
-/** Next week's (tomorrow + 7 days) non-cancelled events for one child. */
-export function weekEvents(snap: MyClubSnapshot, cfg: Config, child: string, now: Date): MyClubEvent[] {
-  const from = addDays(localParts(now).date, 1);
+/** Seven days of non-cancelled events for one child, from `start` (default tomorrow). */
+export function weekEvents(snap: MyClubSnapshot, cfg: Config, child: string, now: Date, start?: string): MyClubEvent[] {
+  const from = start ?? addDays(localParts(now).date, 1);
   const to = addDays(from, 6);
   return snap.events
     .filter((e) => e.child && childName(cfg, e.child) === child && !e.cancelled)
@@ -86,7 +86,7 @@ export function optionLabel(e: MyClubEvent): string {
   return `${dayOf(d)} ${Number(day)}.${Number(m)}.${eventTime(e)} ${e.title}`.slice(0, 100);
 }
 
-export async function runAttendancePoll(ctx: Ctx) {
+export async function runAttendancePoll(ctx: Ctx, start?: string) {
   const cfg = ctx.cfg.attendance;
   const chat = env("TELEGRAM_FAMILY_CHAT_ID");
   let snap = ctx.state.myclub.lastSnapshot as MyClubSnapshot | undefined;
@@ -106,8 +106,8 @@ export async function runAttendancePoll(ctx: Ctx) {
   const t = T[ctx.cfg.digest.language] ?? T.en;
   const polls = (ctx.state.myclub.polls ??= []);
   for (const child of cfg.children) {
-    const events = weekEvents(snap, ctx.cfg, child, ctx.now);
-    ctx.log(`attendance poll: ${child}: ${events.length} unanswered events in the next 7 days`);
+    const events = weekEvents(snap, ctx.cfg, child, ctx.now, start);
+    ctx.log(`attendance poll: ${child}: ${events.length} unanswered events in the 7 days from ${start ?? "tomorrow"}`);
     if (!events.length) continue;
     for (const p of polls) if (p.child === child && p.status === "open") p.status = "superseded";
     const shown = events.slice(0, MAX_EVENTS);

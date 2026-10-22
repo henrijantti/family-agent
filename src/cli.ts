@@ -8,7 +8,7 @@ import { StateStore } from "./lib/state.js";
 import { addDays, localIso, localParts, toMinutes } from "./lib/time.js";
 import { ConsoleNotifier, TelegramBot } from "./notify/telegram.js";
 import { FixtureMyClub, IcsMyClub, myclubProvider } from "./sources/myclub.js";
-import { MyClubWriter } from "./sources/myclub-signup.js";
+import { MyClubInvites, MyClubWriter } from "./sources/myclub-signup.js";
 import { FixtureMail, GraphMail, deviceSignIn } from "./sources/outlook.js";
 import { FixtureWilma, LiveWilma, SnapshotWilma } from "./sources/wilma.js";
 import { encrypt } from "./lib/state.js";
@@ -58,7 +58,13 @@ function buildCtx(cfg: Config, state: StateStore, now: Date): Ctx {
           : undefined,
     myclub: cfg.myclub.enabled && (has("MYCLUB_ICS_URL") || has("MYCLUB_USERNAME", "MYCLUB_PASSWORD")) ? myclubProvider(cfg) : undefined,
     attendanceWriter: cfg.attendance?.live && has("MYCLUB_USERNAME", "MYCLUB_PASSWORD") ? new MyClubWriter() : undefined,
-    myclubInvites: cfg.myclub.enabled && has("MYCLUB_POLL_ICS_URL") ? new IcsMyClub("MYCLUB_POLL_ICS_URL") : undefined,
+    myclubInvites: !cfg.myclub.enabled
+      ? undefined
+      : cfg.attendance?.clubs?.length && has("MYCLUB_USERNAME", "MYCLUB_PASSWORD")
+        ? new MyClubInvites(cfg.attendance.clubs)
+        : has("MYCLUB_POLL_ICS_URL")
+          ? new IcsMyClub("MYCLUB_POLL_ICS_URL")
+          : undefined,
     mail: cfg.outlook.enabled && has("OUTLOOK_CLIENT_ID") ? GraphMail.fromEnv(state.data) : undefined,
     notifier: has("TELEGRAM_BOT_TOKEN") ? TelegramBot.fromEnv() : new ConsoleNotifier(),
     log,
@@ -350,16 +356,27 @@ async function main() {
       await discoverMyClub(cfg);
       break;
     }
-    case "attendance-preview": {
-      // Shows what Sunday's practice polls would ask, from a fresh MyClub read. Posts nothing.
-      const { weekEvents, optionLabel } = await import("./attendance.js");
-      const snap = await (env("MYCLUB_POLL_ICS_URL") ? new IcsMyClub("MYCLUB_POLL_ICS_URL") : myclubProvider(cfg)).fetch(cfg);
+    case "attendance-preview":
+    case "attendance-poll-next": {
+      // preview: what the practice polls would ask, posts nothing. poll-next: sends
+      // the polls now for next Monday-Sunday (or the date given).
+      const { weekEvents, optionLabel, runAttendancePoll } = await import("./attendance.js");
+      const today = localParts(now).date;
+      const nextMon = addDays(today, ((8 - new Date(`${today}T12:00:00Z`).getUTCDay()) % 7) || 7);
+      const start = args[0] ?? (cmd === "attendance-poll-next" ? nextMon : undefined);
+      const ctx = buildCtx(cfg, st, now);
+      if (cmd === "attendance-poll-next") {
+        await runAttendancePoll(ctx, start);
+        st.save();
+        break;
+      }
+      const snap = await (ctx.myclubInvites ?? myclubProvider(cfg)).fetch(cfg);
+      for (const w of snap.warnings.slice(0, 5)) console.log(`note: ${w}`);
       for (const child of cfg.attendance?.children ?? []) {
-        const evs = weekEvents(snap, cfg, child, now);
+        const evs = weekEvents(snap, cfg, child, now, start);
         const all = snap.events.filter((e) => e.child === child && !e.cancelled);
-        console.log(`${child}: ${all.length} unanswered in the feed, ${evs.length} in the next 7 days`);
-        for (const e of evs) console.log(`  [ ] ${optionLabel(e)}`);
-        if (!evs.length) for (const e of all) console.log(`  in feed: ${optionLabel(e)}`);
+        console.log(`${child}: ${all.length} unanswered found, ${evs.length} in the 7 days from ${start ?? "tomorrow"}`);
+        for (const e of all) console.log(`  ${evs.includes(e) ? "[ ]" : "   "} ${optionLabel(e)}`);
       }
       break;
     }

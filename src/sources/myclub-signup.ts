@@ -1,5 +1,7 @@
-import { requireEnv } from "../config.js";
+import { requireEnv, type Config } from "../config.js";
 import type { AttendanceWriter, PollOption } from "../attendance.js";
+import { addDays, fromLocal, localParts } from "../lib/time.js";
+import type { MyClubEvent, MyClubProvider, MyClubSnapshot } from "./myclub.js";
 
 // Signs a child in or out of one MyClub event, the way MyClub's own web page
 // does: log in at id.myclub.fi, pick the child's member account in that club
@@ -115,5 +117,58 @@ export class MyClubWriter implements AttendanceWriter {
     }
     if (own !== want) throw new Error(`MyClub didn't record it (status ${String(own)}); answer in MyClub`);
     return attend ? "signed up" : "declined";
+  }
+}
+
+/**
+ * Unanswered invitations read from the logged-in event pages, read-only.
+ * MyClub's "Ei vastausta" calendar feed misses many open events, so the poll
+ * uses this: every club event in the date window whose page shows the child's
+ * Osallistun / En osallistu buttons with neither one chosen.
+ */
+export class MyClubInvites implements MyClubProvider {
+  constructor(
+    private clubs: { host: string; child: string }[],
+    private days = 16,
+    private reader = new MyClubWriter(),
+  ) {}
+
+  async fetch(cfg: Config): Promise<MyClubSnapshot> {
+    const { load } = await import("cheerio");
+    const from = localParts(new Date()).date;
+    const to = addDays(from, this.days);
+    const months = new Set([from.slice(0, 7), to.slice(0, 7)]);
+    const events: MyClubEvent[] = [];
+    const warnings: string[] = [];
+    for (const { host, child } of this.clubs) {
+      const list = (await this.reader.listEvents(host, child)).filter((e) => months.has(String(e.month).slice(0, 7)));
+      for (const item of list) {
+        const page = await this.reader.peek(host, `/flow/events/${item.id}`);
+        const $ = load(page.body);
+        const buttons = $(".event-indication-buttons a[data-indication]").first().parent().find("a[data-indication]");
+        if (!buttons.length) continue; // not invited
+        if (buttons.is(".btn-success, .btn-danger, .btn-warning")) continue; // already answered
+        const when = $("body").text().match(/(\d{1,2})\.(\d{1,2})\.(\d{4})(?:\s+(\d{1,2}):(\d{2})(?:\s*-\s*(\d{1,2}):(\d{2}))?)?/);
+        if (!when) {
+          warnings.push(`no date on ${host} event ${item.id}`);
+          continue;
+        }
+        const [, d, m, y, h1, m1, h2, m2] = when;
+        const date = `${y}-${m.padStart(2, "0")}-${d.padStart(2, "0")}`;
+        if (date < from || date > to) continue;
+        const at = (h?: string, mm?: string) => ({ dateTime: fromLocal(date, `${h!.padStart(2, "0")}:${mm}`).toISOString() });
+        events.push({
+          id: `myclub-${host.split(".")[0]}-${item.id}`,
+          child,
+          club: host.split(".")[0],
+          title: String(item.name).trim(),
+          start: h1 ? at(h1, m1) : { date },
+          end: h2 ? at(h2, m2) : h1 ? at(h1, m1) : { date: addDays(date, 1) },
+          location: String(item.venue ?? "").trim() || undefined,
+          url: `https://${host}/flow/events/${item.id}`,
+        });
+      }
+    }
+    return { fetchedAt: new Date().toISOString(), route: "pages", events, invoices: [], warnings };
   }
 }
