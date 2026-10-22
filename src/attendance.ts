@@ -87,7 +87,16 @@ export function optionLabel(e: MyClubEvent): string {
 export async function runAttendancePoll(ctx: Ctx) {
   const cfg = ctx.cfg.attendance;
   const chat = env("TELEGRAM_FAMILY_CHAT_ID");
-  const snap = ctx.state.myclub.lastSnapshot as MyClubSnapshot | undefined;
+  let snap = ctx.state.myclub.lastSnapshot as MyClubSnapshot | undefined;
+  if (ctx.myclubInvites) {
+    try {
+      snap = await ctx.myclubInvites.fetch(ctx.cfg);
+    } catch (e) {
+      ctx.log(`attendance poll: MyClub invitations unavailable: ${(e as Error).message}`);
+      if (chat) await ctx.notifier?.send(chat, esc("Couldn't read MyClub invitations, so no practice polls this week. Answer in MyClub directly."));
+      return;
+    }
+  }
   if (!cfg?.enabled || !snap || !chat || !ctx.notifier?.poll) {
     ctx.log("attendance poll: skipped (needs attendance config, a MyClub snapshot, the family chat and Telegram)");
     return;

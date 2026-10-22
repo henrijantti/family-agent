@@ -7,7 +7,7 @@ import { Ctx, JobName, runDigest, tick, wilmaFetchDue } from "./jobs.js";
 import { StateStore } from "./lib/state.js";
 import { addDays, localIso, localParts, toMinutes } from "./lib/time.js";
 import { ConsoleNotifier, TelegramBot } from "./notify/telegram.js";
-import { FixtureMyClub, myclubProvider } from "./sources/myclub.js";
+import { FixtureMyClub, IcsMyClub, myclubProvider } from "./sources/myclub.js";
 import { FixtureMail, GraphMail, deviceSignIn } from "./sources/outlook.js";
 import { FixtureWilma, LiveWilma, SnapshotWilma } from "./sources/wilma.js";
 import { encrypt } from "./lib/state.js";
@@ -55,6 +55,7 @@ function buildCtx(cfg: Config, state: StateStore, now: Date): Ctx {
           ? new LiveWilma()
           : undefined,
     myclub: cfg.myclub.enabled && (has("MYCLUB_ICS_URL") || has("MYCLUB_USERNAME", "MYCLUB_PASSWORD")) ? myclubProvider(cfg) : undefined,
+    myclubInvites: cfg.myclub.enabled && has("MYCLUB_POLL_ICS_URL") ? new IcsMyClub("MYCLUB_POLL_ICS_URL") : undefined,
     mail: cfg.outlook.enabled && has("OUTLOOK_CLIENT_ID") ? GraphMail.fromEnv(state.data) : undefined,
     notifier: has("TELEGRAM_BOT_TOKEN") ? TelegramBot.fromEnv() : new ConsoleNotifier(),
     log,
@@ -83,7 +84,8 @@ const SECRETS: [string, string][] = [
   ["WILMA_USERNAME", "Wilma guardian username"],
   ["WILMA_PASSWORD", "Wilma password"],
   ["WILMA_TOTP_SECRET", "optional: Wilma two-step setup key"],
-  ["MYCLUB_ICS_URL", "MyClub calendar feed, if the account has one"],
+  ["MYCLUB_ICS_URL", "MyClub feeds, 'Osallistun' (Name|link per line): calendar"],
+  ["MYCLUB_POLL_ICS_URL", "MyClub feeds, 'Ei vastausta' (Name|link per line): weekly poll"],
   ["MYCLUB_USERNAME", "MyClub login email (if no feed)"],
   ["MYCLUB_PASSWORD", "MyClub password (if no feed)"],
   ["OUTLOOK_CLIENT_ID", "Entra app (client) id"],
@@ -280,7 +282,7 @@ async function main() {
     case "attendance-preview": {
       // Shows what Sunday's practice polls would ask, from a fresh MyClub read. Posts nothing.
       const { weekEvents, optionLabel } = await import("./attendance.js");
-      const snap = await myclubProvider(cfg).fetch(cfg);
+      const snap = await (env("MYCLUB_POLL_ICS_URL") ? new IcsMyClub("MYCLUB_POLL_ICS_URL") : myclubProvider(cfg)).fetch(cfg);
       for (const child of cfg.attendance?.children ?? []) {
         const evs = weekEvents(snap, cfg, child, now);
         console.log(`${child}: ${evs.length ? "" : "no events in the next 7 days"}`);

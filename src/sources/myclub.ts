@@ -60,8 +60,10 @@ export class FixtureMyClub implements MyClubProvider {
  * MYCLUB_ICS_URL holds one feed, or several as lines "Child|https://...".
  */
 export class IcsMyClub implements MyClubProvider {
+  /** MYCLUB_ICS_URL: events signed up for (calendar). MYCLUB_POLL_ICS_URL: invited, not answered (weekly poll). */
+  constructor(private envName = "MYCLUB_ICS_URL") {}
   async fetch(cfg: Config): Promise<MyClubSnapshot> {
-    const feeds = parseFeeds(requireEnv("MYCLUB_ICS_URL"));
+    const feeds = parseFeeds(requireEnv(this.envName));
     const events: MyClubEvent[] = [];
     const warnings: string[] = [];
     for (const f of feeds) {

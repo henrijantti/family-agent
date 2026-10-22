@@ -17,6 +17,8 @@ export interface Ctx {
   calendar?: CalendarApi; // undefined until the Google service account is set up
   wilma?: WilmaProvider;
   myclub?: MyClubProvider;
+  /** Events each child is invited to but hasn't answered: the weekly poll's source. */
+  myclubInvites?: MyClubProvider;
   mail?: MailApi;
   notifier?: Notifier;
   /** MyClub sign-up writer; a dry run until verified (attendance.live). */

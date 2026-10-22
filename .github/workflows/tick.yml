@@ -50,6 +50,7 @@ jobs:
           GOOGLE_HOBBIES_CALENDAR_ID: ${{ secrets.GOOGLE_HOBBIES_CALENDAR_ID }}
           WILMA_MODE: snapshot
           MYCLUB_ICS_URL: ${{ secrets.MYCLUB_ICS_URL }}
+          MYCLUB_POLL_ICS_URL: ${{ secrets.MYCLUB_POLL_ICS_URL }}
           MYCLUB_USERNAME: ${{ secrets.MYCLUB_USERNAME }}
           MYCLUB_PASSWORD: ${{ secrets.MYCLUB_PASSWORD }}
           MYCLUB_LOGIN_URL: ${{ secrets.MYCLUB_LOGIN_URL }}

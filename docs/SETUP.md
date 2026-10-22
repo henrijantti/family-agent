@@ -36,8 +36,9 @@ Wilma's Cloudflare protection refuses GitHub's servers, so a small GitHub runner
 
 ## 5. MyClub (5 min)
 1. In MyClub > Kalenteritilaukset, click **Kopioi linkki** on each subscription.
-2. Add secret `MYCLUB_ICS_URL`, one line per child: `Name|https://…`.
-3. Run helper **myclub-check**: it lists each child's next events.
+2. Per child, two subscriptions: one set to *Osallistun* (calendar) and one to *Ei vastausta* (weekly poll). Add secrets `MYCLUB_ICS_URL` (Osallistun links) and `MYCLUB_POLL_ICS_URL` (Ei vastausta links), one line per child: `Name|https://…`.
+3. For the Monday sign-ups: `MYCLUB_USERNAME` and `MYCLUB_PASSWORD`.
+4. Run helpers **myclub-check** and **attendance-preview**: it lists each child's next events.
 
 ## 6. Outlook (15 min)
 1. Sign in at https://entra.microsoft.com with your Outlook.com account > App registrations > New registration. Name "Henri mail assistant", **Personal Microsoft accounts only**, no redirect URI. (If it asks for a free Azure sign-up first, do it or tell Claude.)

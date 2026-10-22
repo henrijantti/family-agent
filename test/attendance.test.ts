@@ -64,3 +64,12 @@ test("'None of these' alone declines everything; dry run says nothing was sent",
   assert.match(out, /would decline/);
   assert.match(out, /Not sent to MyClub yet/);
 });
+
+test("poll uses the 'not answered' feed when set, not the calendar snapshot", async () => {
+  const n = new ConsoleNotifier(false);
+  const c = ctx(new Date("2026-10-25T17:00:00Z"), n);
+  c.myclubInvites = { fetch: async () => ({ ...snap, events: snap.events.filter((e) => e.id === "a2") }) };
+  await runAttendancePoll(c);
+  assert.equal(n.polls.length, 1);
+  assert.equal(n.polls[0].options.length, 2); // a2 + "None of these"
+});
