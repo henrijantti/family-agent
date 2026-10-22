@@ -120,19 +120,44 @@ export async function discoverMyClub(cfg: Config, log = console.log) {
   describe(refused ? "after login (STILL SHOWS A PASSWORD FIELD: login refused?)" : "after login", home);
   if (refused) return;
 
-  // 3. Event pages: unanswered invitations from the poll feed, else the calendar feed.
+  // 3. Club context: each club keeps one active member account (child) per session.
+  describe("ppj select_account", await get("https://ppj.myclub.fi/flow/select_account"));
+
+  // 4. Events list: how the page loads event details.
+  const list = await get("https://ppj.myclub.fi/flow/events");
+  describe("ppj events list", list);
+  const $l = load(list.html);
+  const sample = $l("[data-url], [data-id], [data-event-id], [data-href]").slice(0, 4);
+  sample.each((_, el) => {
+    const a = Object.entries(el.attribs).map(([k, v]) => `${k}=${mask(v).slice(0, 60)}`);
+    log(`  element <${el.tagName}> ${a.join(" ")}`);
+  });
+  const classes = new Set<string>();
+  $l("[class]").each((_, el) => $l(el).attr("class")!.split(/\s+/).forEach((c) => /event|enroll|attend|osall|ilmo|signup|registr/i.test(c) && classes.add(c)));
+  log(`  event-ish classes: ${[...classes].slice(0, 30).join(" ")}`);
+  const inline = $l("script:not([src])").map((_, el) => $l(el).text()).get().join("\n");
+  const urls = new Set(inline.match(/["'](\/flow\/[^"'\s]+)["']/g) ?? []);
+  log(`  urls in inline scripts: ${[...urls].map(mask).slice(0, 20).join("  ")}`);
+
+  // 5. Upcoming event pages from both feeds.
+  const now = Date.now();
   for (const envName of ["MYCLUB_POLL_ICS_URL", "MYCLUB_ICS_URL"]) {
     if (!env(envName)) continue;
     const snap = await new IcsMyClub(envName).fetch(cfg);
-    const withUrl = snap.events.filter((e) => e.url);
-    log(`\n== ${envName}: ${snap.events.length} events, ${withUrl.length} with a URL; url patterns: ${[...new Set(withUrl.map((e) => mask(e.url!)))].slice(0, 5).join("  ")}`);
-    for (const e of withUrl.slice(0, 2)) {
+    const upcoming = snap.events.filter((e) => e.url && Date.parse("dateTime" in e.start ? e.start.dateTime : e.start.date) > now);
+    log(`\n== ${envName}: ${snap.events.length} events, ${upcoming.length} upcoming with a URL; hosts: ${[...new Set(upcoming.map((e) => new URL(e.url!).hostname))].join(" ")}`);
+    for (const e of upcoming.slice(0, 2)) {
       try {
-        describe(`event page (${envName})`, await get(e.url!));
+        const p = await get(e.url!);
+        describe(`upcoming event page (${envName})`, p);
+        const id = e.url!.match(/events\/(\d+)/)?.[1];
+        if (id) {
+          const d = await get(`https://${new URL(e.url!).hostname}/flow/events/details?id=${id}`);
+          describe(`events/details?id=N (${envName})`, d);
+        }
       } catch (err) {
         log(`  event page: ${(err as Error).message}`);
       }
     }
-    if (withUrl.length) break;
   }
 }
