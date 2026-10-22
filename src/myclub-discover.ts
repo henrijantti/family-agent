@@ -174,6 +174,15 @@ export async function discoverMyClub(cfg: Config, log = console.log) {
     }
   }
 
+  // 6a. Account switching inside a club: link shapes, and which child each one names.
+  log(`\n== html data-root-path: ${$l("html").attr("data-root-path")}`);
+  const kids = [...cfg.children.map((c) => c.name), "Ida"];
+  $l('a[href*="select_account"], [data-member-id], [data-account-id]').each((_, el) => {
+    const t = $l(el).text().replace(/\s+/g, " ").trim();
+    const names = kids.filter((k) => t.includes(k));
+    const attrs = Object.entries(el.attribs).filter(([k]) => k !== "class").map(([k, v]) => `${k}=${mask(v).slice(0, 80)}`);
+    log(`  <${el.tagName}> ${attrs.join(" ")} names=${names.join("/") || "-"}`);
+  });
   // 6b. JSON endpoints the calendar view may use: keys only.
   const csrf = $l('meta[name="csrf-token"]').attr("content");
   log(`\n== csrf meta present: ${!!csrf}`);
