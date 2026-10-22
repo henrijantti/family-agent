@@ -68,6 +68,7 @@ jobs:
           MYCLUB_PASSWORD: ${{ secrets.MYCLUB_PASSWORD }}
           MYCLUB_LOGIN_URL: ${{ secrets.MYCLUB_LOGIN_URL }}
           OUTLOOK_CLIENT_ID: ${{ secrets.OUTLOOK_CLIENT_ID }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
       - name: Save state
         if: always() && inputs.command != 'demo'
         run: bash scripts/state.sh save

@@ -6,12 +6,15 @@ import { addDays, daysBetween } from "../lib/time.js";
 // Henri's personal Outlook.com mailbox through Microsoft Graph, with his own
 // app registration (personal accounts only, public client, device-code
 // sign-in). Delegated scopes: Mail.ReadWrite, MailboxSettings.ReadWrite,
-// offline_access. There is no Mail.Send scope and the client below refuses
-// any send endpoint, so nothing can ever be sent: replies are drafts only.
+// offline_access. The client refuses every send endpoint except one:
+// sendDraft(), which the email assistant calls only after Henri pressed Send
+// on that draft in Telegram, and only when outlook.assistant.send is on (then
+// Mail.Send is requested too, and the sign-in must be redone once).
 
 const AUTHORITY = "https://login.microsoftonline.com/consumers/oauth2/v2.0";
 const GRAPH = "https://graph.microsoft.com/v1.0";
 export const SCOPES = "https://graph.microsoft.com/Mail.ReadWrite https://graph.microsoft.com/MailboxSettings.ReadWrite offline_access";
+export const scopes = (send: boolean) => (send ? `${SCOPES} https://graph.microsoft.com/Mail.Send` : SCOPES);
 
 export interface MailMessage {
   id: string;
@@ -70,10 +73,11 @@ export class GraphMail implements MailApi {
   constructor(
     private clientId: string,
     private state: StateData,
+    private canSend = false,
   ) {}
 
-  static fromEnv(state: StateData) {
-    return new GraphMail(requireEnv("OUTLOOK_CLIENT_ID"), state);
+  static fromEnv(state: StateData, canSend = false) {
+    return new GraphMail(requireEnv("OUTLOOK_CLIENT_ID"), state, canSend);
   }
 
   private async token(): Promise<string> {
@@ -83,7 +87,7 @@ export class GraphMail implements MailApi {
     const res = await fetch(`${AUTHORITY}/token`, {
       method: "POST",
       headers: { "content-type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({ client_id: this.clientId, grant_type: "refresh_token", refresh_token: refresh, scope: SCOPES }),
+      body: new URLSearchParams({ client_id: this.clientId, grant_type: "refresh_token", refresh_token: refresh, scope: scopes(this.canSend) }),
     });
     const j = (await res.json()) as { access_token?: string; refresh_token?: string; expires_in?: number; error?: string; error_description?: string };
     if (!res.ok || !j.access_token) throw new Error(`Outlook sign-in expired or revoked (${j.error}); run the 'Outlook sign-in' workflow again`);
@@ -93,8 +97,8 @@ export class GraphMail implements MailApi {
     return j.access_token;
   }
 
-  private async call<T>(method: string, path: string, body?: unknown): Promise<T> {
-    assertNoSend(method, path);
+  private async call<T>(method: string, path: string, body?: unknown, allowSend = false): Promise<T> {
+    if (!allowSend) assertNoSend(method, path);
     const res = await fetch(path.startsWith("http") ? path : `${GRAPH}${path}`, {
       method,
       headers: { authorization: `Bearer ${await this.token()}`, "content-type": "application/json" },
@@ -197,6 +201,15 @@ export class GraphMail implements MailApi {
     return this.call<{ id: string }>("POST", `/me/messages/${messageId}/createReply`, { comment: text });
   }
 
+  /**
+   * Sends one existing draft, as it now stands in Drafts (Henri may have edited
+   * it). Only the email assistant calls this, after Henri approved that draft.
+   */
+  async sendDraft(draftId: string) {
+    if (!this.canSend) throw new Error("Sending is off (outlook.assistant.send)");
+    await this.call("POST", `/me/messages/${encodeURIComponent(draftId)}/send`, undefined, true);
+  }
+
   async listFolders() {
     return (await this.call<{ value: { id: string; displayName: string }[] }>("GET", "/me/mailFolders?$top=100")).value;
   }
@@ -219,11 +232,11 @@ export class GraphMail implements MailApi {
 }
 
 /** Device-code sign-in: prints a short code for microsoft.com/devicelogin; the refresh token goes to state only. */
-export async function deviceSignIn(clientId: string, state: StateData, log: (s: string) => void) {
+export async function deviceSignIn(clientId: string, state: StateData, log: (s: string) => void, scope = SCOPES) {
   const start = await fetch(`${AUTHORITY}/devicecode`, {
     method: "POST",
     headers: { "content-type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({ client_id: clientId, scope: SCOPES }),
+    body: new URLSearchParams({ client_id: clientId, scope }),
   });
   const dc = (await start.json()) as { device_code: string; user_code: string; verification_uri: string; interval: number; expires_in: number; error_description?: string };
   if (!start.ok) throw new Error(`Device code request failed: ${dc.error_description}`);

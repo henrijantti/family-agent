@@ -29,6 +29,17 @@ export interface Bill {
   remindedOn?: string[];
 }
 
+export interface ReplyItem {
+  n: number; // short id for Telegram buttons (Graph ids are too long)
+  messageId: string;
+  draftId?: string;
+  from: string;
+  subject: string;
+  status: "awaiting_text" | "pending" | "sent" | "skipped" | "ignored";
+  at: string;
+  chatMessageId?: number;
+}
+
 export interface StateData {
   version: 1;
   lastRun: Record<string, string>; // job -> local date+slot key
@@ -50,7 +61,17 @@ export interface StateData {
     /** MyClub event ids the family said a child will skip. */
     declined?: string[];
   };
-  outlook: { refreshToken?: string; lastScan?: string; bills: Bill[]; knownBillers: string[] };
+  outlook: {
+    refreshToken?: string;
+    lastScan?: string;
+    bills: Bill[];
+    knownBillers: string[];
+    /** Email assistant: mail it offered to answer (see mail-assistant.ts). */
+    replies?: ReplyItem[];
+    assistLastScan?: string;
+  };
+  /** Telegram getUpdates offset: button presses and replies already handled. */
+  telegramOffset?: number;
   /** Wilma items found since the last digest, consumed by the next digest. */
   digestQueue: { child: string; kind: "message" | "bulletin" | "note"; text: string; action: boolean }[];
   lastDigestAt?: string;

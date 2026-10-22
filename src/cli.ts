@@ -9,7 +9,8 @@ import { addDays, fromLocal, localIso, localParts, toMinutes } from "./lib/time.
 import { ConsoleNotifier, TelegramBot } from "./notify/telegram.js";
 import { FixtureMyClub, IcsMyClub, myclubProvider } from "./sources/myclub.js";
 import { MyClubInvites, MyClubWriter } from "./sources/myclub-signup.js";
-import { FixtureMail, GraphMail, deviceSignIn } from "./sources/outlook.js";
+import { FixtureMail, GraphMail, deviceSignIn, scopes } from "./sources/outlook.js";
+import { ClaudeWriter } from "./mail-assistant.js";
 import { FixtureWilma, LiveWilma, SnapshotWilma } from "./sources/wilma.js";
 import { encrypt } from "./lib/state.js";
 import { triage, triageReport } from "./outlook-triage.js";
@@ -65,7 +66,8 @@ function buildCtx(cfg: Config, state: StateStore, now: Date): Ctx {
         : has("MYCLUB_POLL_ICS_URL")
           ? new IcsMyClub("MYCLUB_POLL_ICS_URL")
           : undefined,
-    mail: cfg.outlook.enabled && has("OUTLOOK_CLIENT_ID") ? GraphMail.fromEnv(state.data) : undefined,
+    mail: cfg.outlook.enabled && has("OUTLOOK_CLIENT_ID") ? GraphMail.fromEnv(state.data, !!cfg.outlook.assistant?.send) : undefined,
+    replyWriter: has("ANTHROPIC_API_KEY") ? new ClaudeWriter() : undefined,
     notifier: has("TELEGRAM_BOT_TOKEN") ? TelegramBot.fromEnv() : new ConsoleNotifier(),
     log,
   };
@@ -98,6 +100,7 @@ const SECRETS: [string, string][] = [
   ["MYCLUB_USERNAME", "MyClub login email (if no feed)"],
   ["MYCLUB_PASSWORD", "MyClub password (if no feed)"],
   ["OUTLOOK_CLIENT_ID", "Entra app (client) id"],
+  ["ANTHROPIC_API_KEY", "optional: Claude API key, writes email reply drafts"],
 ];
 
 /** UTC cron hours/minutes from the tick workflow, to check every slot gets a tick. */
@@ -219,7 +222,7 @@ async function main() {
       break;
     }
     case "outlook-login": {
-      await deviceSignIn(env("OUTLOOK_CLIENT_ID")!, st.data, (s) => console.log(s));
+      await deviceSignIn(env("OUTLOOK_CLIENT_ID")!, st.data, (s) => console.log(s), scopes(!!cfg.outlook.assistant?.send));
       st.save();
       break;
     }

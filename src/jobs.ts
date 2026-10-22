@@ -8,6 +8,7 @@ import { addDays, fromLocal, inRange, localParts, toMinutes } from "./lib/time.j
 import { Notifier, esc } from "./notify/telegram.js";
 import { MyClubProvider, MyClubSnapshot, myclubEvents } from "./sources/myclub.js";
 import { MailApi, billsToRemind, ensureWilmaRule, scanInvoices } from "./sources/outlook.js";
+import { type AssistantMail, type ReplyWriter, handleUpdates, offerReplies, type AssistantCtx } from "./mail-assistant.js";
 import { WilmaProvider, WilmaSnapshot, wilmaDiff, wilmaEvents } from "./sources/wilma.js";
 
 export interface Ctx {
@@ -19,8 +20,10 @@ export interface Ctx {
   myclub?: MyClubProvider;
   /** Events each child is invited to but hasn't answered: the weekly poll's source. */
   myclubInvites?: MyClubProvider;
-  mail?: MailApi;
+  mail?: MailApi & Partial<AssistantMail>;
   notifier?: Notifier;
+  /** Writes email reply drafts; undefined = Henri types them (writer: manual). */
+  replyWriter?: ReplyWriter;
   /** MyClub sign-up writer; a dry run until verified (attendance.live). */
   attendanceWriter?: AttendanceWriter;
   log: (s: string) => void;
@@ -144,6 +147,20 @@ export async function runOutlook(ctx: Ctx) {
   } catch (e) {
     fail(ctx, "Outlook", e);
   }
+  const a = assistantCtx(ctx);
+  if (a) await offerReplies(a).catch((e) => fail(ctx, "Email assistant", e));
+}
+
+function assistantCtx(ctx: Ctx): AssistantCtx | undefined {
+  const cfg = ctx.cfg.outlook.assistant;
+  if (!cfg?.enabled || !ctx.mail?.listInbox || !ctx.notifier?.sendButtons || !privateChat()) return;
+  return { cfg: ctx.cfg, state: ctx.state, now: ctx.now, mail: ctx.mail as AssistantMail, notifier: ctx.notifier, writer: cfg.writer === "claude" ? ctx.replyWriter : undefined, chat: privateChat()!, log: ctx.log };
+}
+
+/** Henri's Send / Skip presses; read on every tick, whatever else is due. */
+export async function runAssistantInbox(ctx: Ctx) {
+  const a = assistantCtx(ctx);
+  if (a) await handleUpdates(a).catch((e) => fail(ctx, "Email assistant", e));
 }
 
 export async function collectHub(ctx: Ctx, days: number): Promise<HubEvent[]> {
@@ -227,6 +244,7 @@ export function dueJobs(cfg: Config, state: StateData, now: Date): DueJob[] {
 }
 
 export async function tick(ctx: Ctx, force?: JobName[]) {
+  await runAssistantInbox(ctx);
   const jobs: DueJob[] = force
     ? force.map((job) => ({ job, key: `forced ${ctx.now.toISOString()}` }))
     : dueJobs(ctx.cfg, ctx.state, ctx.now);

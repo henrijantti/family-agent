@@ -83,3 +83,18 @@ outlook:
   # Wilma's notification emails skip the inbox (Henri: too much noise); the
   # agent keeps an Outlook rule that files them, read, in this folder.
   wilma_folder: { name: Wilma, senders: [inschool.fi] }
+  # Email assistant (Henri, 2026-10-22: send on approval). On each Outlook run
+  # it finds new mail that asks Henri something, saves a reply draft in Drafts
+  # and posts it to his private Telegram chat with Send / Skip buttons. Button
+  # presses are read on every tick. Needs TELEGRAM_PRIVATE_CHAT_ID.
+  assistant:
+    enabled: false
+    # Send stays off until Mail.Send is added to the Entra app and the
+    # "outlook-login" helper is run again; until then Send only confirms.
+    send: false
+    writer: claude          # claude (needs ANTHROPIC_API_KEY) | manual (Henri types the reply in Telegram)
+    model: claude-opus-5-5
+    max_per_run: 5
+    lookback_days: 3
+    self: [henri.jantti@outlook.com]
+    signature: "Terveisin, Henri"

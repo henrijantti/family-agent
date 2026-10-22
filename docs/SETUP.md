@@ -59,3 +59,13 @@ Wilma's Cloudflare protection refuses GitHub's servers, so a small GitHub runner
 - Grades in the digest? Default **no**; they are never sent to Telegram either way.
 - Bills: shown in the family digest, or only in your private chat with the bot? Default: private chat if you set `TELEGRAM_PRIVATE_CHAT_ID` in step 2, otherwise the family digest.
 - Digest language: English or Finnish (`digest.language` in config).
+
+## Email assistant (optional)
+
+Reply drafts for mail that asks Henri something, approved in his private Telegram chat. Off until `outlook.assistant.enabled: true` in config.yaml.
+
+1. `TELEGRAM_PRIVATE_CHAT_ID` secret: send the bot any message in a private chat, run "Setup helpers" > `telegram-chats`, copy the `private` id.
+2. Reply writer: either an `ANTHROPIC_API_KEY` secret (console.anthropic.com, prepaid; set a monthly limit) with `writer: claude`, or `writer: manual` (Henri replies to the bot with the text).
+3. Sending: in entra.microsoft.com > App registrations > the mail app > API permissions > Add a permission > Microsoft Graph > Delegated, tick **Mail.Send**. Then set `send: true` and run "Setup helpers" > `outlook-login` once to approve it. Until then Send only confirms that the draft is waiting in Drafts.
+
+The agent sends one specific draft only after Henri presses Send on it in his private chat; presses from anyone else are ignored, and every other send, reply or forward call stays blocked in code.
