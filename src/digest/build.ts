@@ -194,8 +194,8 @@ export function buildDigest(inp: DigestInput): string {
   const events = mergeCrossCalendar(inp.events);
   const out: string[] = [];
   const icons: Record<string, string> = { [t.needs]: "✅", [t.today]: "📅", [t.conflicts]: "🚗", [t.changed]: "🔄", [t.coming]: "🔜", [t.school]: "🏫", [t.status]: "🔧" };
-  const section = (title: string, lines: string[]) => {
-    if (lines.length) out.push(`${icons[title] ?? "▫️"} <b>${esc(title)}</b>\n${lines.join("\n")}`);
+  const section = (title: string, lines: string[], sep = "\n") => {
+    if (lines.length) out.push(`${icons[title] ?? "▫️"} <b>${esc(title)}</b>\n${lines.join(sep)}`);
   };
 
   out.push(inp.weekAhead ? `🗓 <b>${t.week}</b>` : `☀️ <b>${t.title}</b> · ${niceDate(today, t, true)}`);
@@ -222,8 +222,9 @@ export function buildDigest(inp: DigestInput): string {
         for (const h of hw) lines.push(`• ${esc(st.name)}: ${t.homework} ${esc(h.subject)}: ${esc(h.text.slice(0, 120))}`);
       }
     }
-    if (inp.weekAhead) section(niceDate(day, t, true), lines);
-    else section(t.today, lines.length ? lines : [t.nothing]);
+    // Events take two lines (time, then place): an empty line keeps them apart.
+    if (inp.weekAhead) section(niceDate(day, t, true), lines, "\n\n");
+    else section(t.today, lines.length ? lines : [t.nothing], "\n\n");
   }
   if (inp.weekAhead && !events.some((e) => days.includes(e.date))) out.push(t.nothing);
 
