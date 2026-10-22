@@ -376,7 +376,7 @@ async function main() {
         const evs = weekEvents(snap, cfg, child, now, start);
         const all = snap.events.filter((e) => e.child === child && !e.cancelled);
         console.log(`${child}: ${all.length} unanswered found, ${evs.length} in the 7 days from ${start ?? "tomorrow"}`);
-        for (const e of all) console.log(`  ${evs.includes(e) ? "[ ]" : "   "} ${optionLabel(e)}`);
+        for (const e of all) console.log(`  ${evs.includes(e) ? "[ ]" : "   "} ${e.club ? `${e.club}: ` : ""}${optionLabel(e)}`);
       }
       break;
     }

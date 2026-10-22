@@ -65,10 +65,11 @@ attendance:
   apply: { days: [mon], time: "06:15" }
   live: true    # verified 2026-10-22 with myclub-signup-test (no-op re-confirm)
   # Where the poll looks for unanswered events (logged-in MyClub pages; the
-  # "Ei vastausta" feed misses most of them). Hockey clubs left out for now.
+  # "Ei vastausta" feed misses most of them). Viima Hockey left out: hundreds of open sessions.
   clubs:
     - { host: ppj.myclub.fi, child: Oskar }
     - { host: ppj.myclub.fi, child: Oliver }
+    - { host: kiekko-espoo.myclub.fi, child: Oliver }
 
 outlook:
   enabled: true
