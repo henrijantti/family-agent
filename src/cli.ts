@@ -8,6 +8,7 @@ import { StateStore } from "./lib/state.js";
 import { addDays, localIso, localParts, toMinutes } from "./lib/time.js";
 import { ConsoleNotifier, TelegramBot } from "./notify/telegram.js";
 import { FixtureMyClub, IcsMyClub, myclubProvider } from "./sources/myclub.js";
+import { MyClubWriter } from "./sources/myclub-signup.js";
 import { FixtureMail, GraphMail, deviceSignIn } from "./sources/outlook.js";
 import { FixtureWilma, LiveWilma, SnapshotWilma } from "./sources/wilma.js";
 import { encrypt } from "./lib/state.js";
@@ -55,6 +56,7 @@ function buildCtx(cfg: Config, state: StateStore, now: Date): Ctx {
           ? new LiveWilma()
           : undefined,
     myclub: cfg.myclub.enabled && (has("MYCLUB_ICS_URL") || has("MYCLUB_USERNAME", "MYCLUB_PASSWORD")) ? myclubProvider(cfg) : undefined,
+    attendanceWriter: cfg.attendance?.live && has("MYCLUB_USERNAME", "MYCLUB_PASSWORD") ? new MyClubWriter() : undefined,
     myclubInvites: cfg.myclub.enabled && has("MYCLUB_POLL_ICS_URL") ? new IcsMyClub("MYCLUB_POLL_ICS_URL") : undefined,
     mail: cfg.outlook.enabled && has("OUTLOOK_CLIENT_ID") ? GraphMail.fromEnv(state.data) : undefined,
     notifier: has("TELEGRAM_BOT_TOKEN") ? TelegramBot.fromEnv() : new ConsoleNotifier(),
@@ -278,6 +280,29 @@ async function main() {
       }
       for (const w of snap.warnings.slice(0, 5)) console.log(`  note: ${w}`);
       if (snap.route === "ics") console.log("  note: calendar feeds carry events only, not sign-up deadlines or fees");
+      break;
+    }
+    case "myclub-signup-test": {
+      // Safe end-to-end check: re-confirms "attending" on each boy's next event
+      // that is already marked attending in MyClub, so nothing changes.
+      const snap = await new IcsMyClub("MYCLUB_ICS_URL").fetch(cfg);
+      const writer = new MyClubWriter();
+      for (const child of cfg.attendance?.children ?? []) {
+        const next = snap.events
+          .filter((e) => e.child === child && e.url && !e.cancelled && Date.parse("dateTime" in e.start ? e.start.dateTime : e.start.date) > Date.now())
+          .sort((a, b) => JSON.stringify(a.start).localeCompare(JSON.stringify(b.start)))[0];
+        if (!next) {
+          console.log(`${child}: no upcoming signed-up event to test with`);
+          continue;
+        }
+        const { optionLabel } = await import("./attendance.js");
+        try {
+          const r = await writer.set({ eventId: next.id, url: next.url, label: optionLabel(next), date: "" }, child, true);
+          console.log(`${child}: ${optionLabel(next)}: ${r} (it was already signed up, so nothing changed)`);
+        } catch (e) {
+          console.log(`${child}: ${optionLabel(next)}: FAILED ${(e as Error).message}`);
+        }
+      }
       break;
     }
     case "myclub-discover": {

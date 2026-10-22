@@ -18,6 +18,7 @@ on:
           - myclub-check
           - attendance-preview
           - myclub-discover
+          - myclub-signup-test
           - outlook-login
           - outlook-test
           - demo

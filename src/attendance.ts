@@ -12,6 +12,8 @@ import type { MyClubEvent, MyClubSnapshot } from "./sources/myclub.js";
 
 export interface PollOption {
   eventId: string;
+  /** MyClub event page, e.g. https://ppj.myclub.fi/flow/events/123 (from the feed). */
+  url?: string;
   label: string;
   date: string;
 }
@@ -28,13 +30,13 @@ export interface AttendancePoll {
 /** Signs a child up for, or out of, one MyClub event. Returns a short result. */
 export interface AttendanceWriter {
   readonly live: boolean;
-  set(eventId: string, attend: boolean): Promise<string>;
+  set(option: PollOption, child: string, attend: boolean): Promise<string>;
 }
 
 /** Used until the MyClub sign-up step is verified against the real pages. */
 export class DryRunWriter implements AttendanceWriter {
   readonly live = false;
-  async set(_eventId: string, attend: boolean) {
+  async set(_option: PollOption, _child: string, attend: boolean) {
     return attend ? "would sign up" : "would decline";
   }
 }
@@ -108,7 +110,7 @@ export async function runAttendancePoll(ctx: Ctx) {
     if (!events.length) continue;
     for (const p of polls) if (p.child === child && p.status === "open") p.status = "superseded";
     const shown = events.slice(0, MAX_EVENTS);
-    const options = shown.map((e) => ({ eventId: e.id, label: optionLabel(e), date: eventDate(e) }));
+    const options = shown.map((e) => ({ eventId: e.id, url: e.url, label: optionLabel(e), date: eventDate(e) }));
     const { messageId } = await ctx.notifier.poll(chat, t.question(child), [...options.map((o) => o.label), t.none]);
     polls.push({ child, chatId: chat, messageId, postedAt: ctx.now.toISOString(), options, status: "open" });
     if (events.length > shown.length) await ctx.notifier.send(chat, esc(t.more(events.length - shown.length)));
@@ -133,7 +135,7 @@ export async function runAttendanceApply(ctx: Ctx, writer: AttendanceWriter = ne
       const attend = (votes[i] ?? 0) > 0;
       let result: string;
       try {
-        result = await writer.set(o.eventId, attend);
+        result = await writer.set(o, p.child, attend);
       } catch (e) {
         result = `failed: ${(e as Error).message}`;
       }

@@ -42,7 +42,7 @@ test("Sunday poll per child, Monday apply signs up ticked and declines the rest"
   assert.equal(n.polls[0].options.at(-1), "None of these");
   n.polls[0].votes = [1, 0, 0]; // Oliver: first practice only; Oskar: nobody answered
   const calls: [string, boolean][] = [];
-  const writer: AttendanceWriter = { live: true, set: async (id, attend) => (calls.push([id, attend]), attend ? "signed up" : "declined") };
+  const writer: AttendanceWriter = { live: true, set: async (o, _child, attend) => (calls.push([o.eventId, attend]), attend ? "signed up" : "declined") };
   c.now = new Date("2026-10-26T04:15:00Z");
   await runAttendanceApply(c, writer);
   assert.deepEqual(calls, [["a1", true], ["a2", false]]);
