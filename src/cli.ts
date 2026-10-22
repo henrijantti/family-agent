@@ -229,8 +229,8 @@ async function main() {
       const days = Number(args.find((a) => /^\d+$/.test(a)) ?? 180);
       const apply = !args.includes("--dry");
       const since = new Date(now.getTime() - days * 86400000).toISOString().replace(/\.\d{3}Z$/, "Z");
-      const r = await triage(GraphMail.fromEnv(st.data), since, { max: 3000, apply, skipDomains: cfg.outlook.wilma_folder?.senders ?? [] });
-      console.log(triageReport(r));
+      const r = await triage(GraphMail.fromEnv(st.data), since, { max: 3000, apply, now, skipDomains: cfg.outlook.wilma_folder?.senders ?? [], self: ["henri.jantti@outlook.com"], state: st.data });
+      console.log(triageReport(r, now));
       console.log(apply ? `\nLabelled in Outlook (${r.skipped} already had the label). Nothing was moved, deleted or sent.` : "\nDry run: nothing was changed.");
       st.save();
       break;

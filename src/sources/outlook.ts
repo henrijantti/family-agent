@@ -144,6 +144,10 @@ export class GraphMail implements MailApi {
     await this.call("PATCH", `/me/messages/${messageId}`, { categories, ...(flag ? { flag: { flagStatus: "flagged" } } : {}) });
   }
 
+  async unflag(messageId: string) {
+    await this.call("PATCH", `/me/messages/${messageId}`, { flag: { flagStatus: "notFlagged" } });
+  }
+
   /** Creates the coloured category labels if they don't exist yet. */
   async ensureCategories(cats: { name: string; color: string }[]) {
     const have = (await this.call<{ value: { displayName: string }[] }>("GET", "/me/outlook/masterCategories")).value.map((c) => c.displayName);
@@ -272,6 +276,9 @@ export function detectInvoice(msg: MailMessage): Omit<Bill, "newBiller" | "found
   const amount = text.match(/(?:yhteensä|summa|maksettava|loppusumma|määrä|amount|total|due)[^\d]{0,30}(\d{1,3}(?:[ .]\d{3})*(?:[.,]\d{2})?)\s*(€|eur|euroa)/i) ?? text.match(/(\d{1,3}(?:[ .]\d{3})*[.,]\d{2})\s*(€|eur)\b/i);
   const ref = text.match(/(?:viitenumero|viite|reference number|reference|ref\.?)\s*:?\s*(RF\d{2}[\d ]{4,25}\d|\d[\d ]{3,25}\d)/i);
   if (!due && !amount) return null;
+  // Receipts and payment confirmations quote an amount too, but are already paid:
+  // without a due date, only a payment request or reminder counts as a bill.
+  if (!due && !/(maksumuistutus|maksettava|erääntyy|amount due|payment due|please pay|maksa viimeistään)/i.test(text)) return null;
   const dueDate = due ? toIsoDate(due) : undefined;
   const sender = msg.from?.emailAddress.address ?? "unknown";
   return {
