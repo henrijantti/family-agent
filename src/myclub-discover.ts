@@ -85,7 +85,7 @@ export async function discoverMyClub(cfg: Config, log = console.log) {
   };
 
   // 1. Login page candidates.
-  const candidates = [env("MYCLUB_LOGIN_URL"), "https://id.myclub.fi/", "https://id.myclub.fi/users/sign_in", "https://myclub.fi/login"].filter(Boolean) as string[];
+  const candidates = [env("MYCLUB_LOGIN_URL"), "https://id.myclub.fi/flow/login"].filter(Boolean) as string[];
   let login: { status: number; url: string; html: string } | undefined;
   for (const c of candidates) {
     try {
