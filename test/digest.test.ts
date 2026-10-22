@@ -49,7 +49,7 @@ test("morning tick: sources then one combined digest to the family group", async
   assert.equal(notifier.sent[0].chatId, "fam");
   for (const s of ["Needs action", "Today", "Conflicts", "Coming up"]) assert.ok(d.includes(`<b>${s}</b>`), s);
   assert.match(d, /sign-up closes 2026-10-23/);
-  assert.match(d, /💶 <b>Helen<\/b> 64,20 € · due Sat 24\.10\. \(in 3 d\)/);
+  assert.match(d, /• <b>Helen<\/b> 64,20 € · due Sat 24\.10\. \(in 3 d\)/);
   assert.match(d, /Aino: lessons 08:15–14:00/);
   // The tournament is on both the family and the hobbies calendar: listed once.
   const coming = d.split("<b>Coming up</b>")[1];
@@ -94,7 +94,7 @@ test("Sunday week-ahead lists each day", async () => {
   await tick(c, ["myclub", "wilma", "week-ahead"]);
   const d = notifier.sent.at(-1)!.html;
   assert.match(d, /Week ahead/);
-  assert.match(d, /<b>Wednesday 28\.10\.<\/b>\n🏫 <b>all day<\/b> <b>Aino<\/b> · Kuvauspäivä \(from bulletin\)/);
+  assert.match(d, /<b>Wednesday 28\.10\.<\/b>\n• <b>all day<\/b> <b>Aino<\/b> · Kuvauspäivä \(from bulletin\)/);
 });
 
 test("event titles are shortened and conflicts say who overlaps when", async () => {

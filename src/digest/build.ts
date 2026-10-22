@@ -59,7 +59,7 @@ const L = {
     unavailable: (s: string) => `${s} ei vastannut, kooste voi olla vajaa`, nothing: "Ei kalenterimerkintöjä.",
     cancelled: "peruttu", changedW: "muuttunut", newW: "uusi",
     days: ["Sunnuntai", "Maanantai", "Tiistai", "Keskiviikko", "Torstai", "Perjantai", "Lauantai"], short: ["su", "ma", "ti", "ke", "to", "pe", "la"],
-    overlap: (from: string, to: string) => `päällekkäin ${from}–${to}`, and: "ja", who: "kuka vie?",
+    overlap: (from: string, to: string) => `Päällekkäin ${from}–${to}`, and: "ja", who: "kuka vie?",
     bringWhat: { swim: "uimakamat", exam: "kokeeseen valmistautuminen", trip: "eväät ja ulkovaatteet" } as Record<string, string>,
   },
 };
@@ -76,17 +76,6 @@ function bring(title: string, t: Labels): string | undefined {
   return k && t.bringWhat[k];
 }
 
-const ICONS: [RegExp, string][] = [
-  [/jää|kiekko|hockey|luistel|skating/i, "🏒"],
-  [/jalkapallo|football|soccer|futis|ppj|talviliiga|fudis/i, "⚽"],
-  [/ui(nti|mahalli)|swim/i, "🏊"],
-  [/salibandy|floorball/i, "🏑"],
-  [/koripallo|basket/i, "🏀"],
-  [/exam|koe\b|kokeet/i, "📝"],
-  [/syntymäpäiv|synttär|birthday/i, "🎂"],
-  [/lääkär|hammas|dentist|doctor/i, "🩺"],
-];
-const icon = (e: HubEvent) => ICONS.find(([re]) => re.test(`${e.title} ${e.location ?? ""}`))?.[1] ?? (e.calendar === "school" ? "🏫" : "📌");
 
 type Labels = (typeof L)["en"];
 
@@ -182,10 +171,10 @@ function line(e: HubEvent, t: Labels): string {
   const time = e.start ? `${e.start}${e.end ? `–${e.end}` : ""}` : t.allDay;
   const cancelled = /^CANCELLED: /.test(e.title);
   const { who, what } = splitTitle(e.title.replace(/^CANCELLED: /, ""));
-  const head = `${icon(e)} <b>${time}</b> ${who ? `<b>${esc(who)}</b> · ` : ""}${esc(what)}`;
+  const head = `• <b>${time}</b> ${who ? `<b>${esc(who)}</b> · ` : ""}${esc(what)}`;
   const b = bring(e.title, t);
   const extras = [e.location ? `📍 ${place(e.location)}` : "", b ? `🎒 ${esc(b)}` : "", e.alsoOnFamily ? `<i>${t.alsoFamily}</i>` : ""].filter(Boolean);
-  return `${cancelled ? `<s>${head}</s> <i>${t.cancelled}</i>` : head}${extras.length ? `\n      ${extras.join("  ")}` : ""}`;
+  return `${cancelled ? `<s>${head}</s> <i>${t.cancelled}</i>` : head}${extras.length ? `\n ${extras.join("  ")}` : ""}`;
 }
 
 function conflictLine([a, b]: [HubEvent, HubEvent], t: Labels): string {
@@ -196,7 +185,7 @@ function conflictLine([a, b]: [HubEvent, HubEvent], t: Labels): string {
     const { who, what } = splitTitle(e.title);
     return `${esc(who ?? what)}${e.location ? ` (${esc(e.location.split(",")[0].trim())})` : ""}`;
   };
-  return `⚠️ ${t.overlap(from, to)}: ${side(a)} ${t.and} ${side(b)}, ${t.who}`;
+  return `• ${t.overlap(from, to)}: ${side(a)} ${t.and} ${side(b)}, ${t.who}`;
 }
 
 export function buildDigest(inp: DigestInput): string {
@@ -253,7 +242,7 @@ export function buildDigest(inp: DigestInput): string {
     const coming = events.filter((e) => e.date > today && e.date <= horizon && /exam|koe\b|turnaus|tournament|cup|ottelu|match/i.test(e.title));
     section(t.coming, coming.map((e) => {
       const { who, what } = splitTitle(e.title);
-      return `${icon(e)} <b>${niceDate(e.date, t)}</b>${e.start ? ` ${e.start}` : ""} ${who ? `<b>${esc(who)}</b> · ` : ""}${esc(what)}${e.alsoOnFamily ? ` <i>(${t.alsoFamily})</i>` : ""}`;
+      return `• <b>${niceDate(e.date, t)}</b>${e.start ? ` ${e.start}` : ""} ${who ? `<b>${esc(who)}</b> · ` : ""}${esc(what)}${e.alsoOnFamily ? ` <i>(${t.alsoFamily})</i>` : ""}`;
     }));
   }
 
@@ -271,7 +260,7 @@ export function buildDigest(inp: DigestInput): string {
 
 export function billLine(b: Bill & { inDays: number }, t: Labels = L.en): string {
   const due = b.dueDate ? `${t.due} ${niceDate(b.dueDate, t)} (${t.inDays(b.inDays)})` : "";
-  return `💶 <b>${esc(b.biller)}</b>${b.amount ? ` ${esc(b.amount)}` : ""}${due ? ` · ${due}` : ""}${b.reference ? ` · ref ${esc(b.reference)}` : ""}${b.newBiller ? `\n      ⚠️ <i>${t.newBiller}: ${esc(b.sender)}</i>` : ""}`;
+  return `• <b>${esc(b.biller)}</b>${b.amount ? ` ${esc(b.amount)}` : ""}${due ? ` · ${due}` : ""}${b.reference ? ` · ref ${esc(b.reference)}` : ""}${b.newBiller ? `\n ⚠️ <i>${t.newBiller}: ${esc(b.sender)}</i>` : ""}`;
 }
 
 export function billsMessage(bills: (Bill & { inDays: number })[], cfg: Config): string {
