@@ -148,7 +148,12 @@ export class MyClubInvites implements MyClubProvider {
         const buttons = $(".event-indication-buttons a[data-indication]").first().parent().find("a[data-indication]");
         if (!buttons.length) continue; // not invited
         if (buttons.is(".btn-success, .btn-danger, .btn-warning")) continue; // already answered
-        const when = $("body").text().match(/(\d{1,2})\.(\d{1,2})\.(\d{4})(?:\s+(\d{1,2}):(\d{2})(?:\s*-\s*(\d{1,2}):(\d{2}))?)?/);
+        // The details block reads "25.10.2026 15:30 - 17:00"; other dates on the page (published, comments) have no range.
+        const text = $("body").text().replace(/\s+/g, " ");
+        const when =
+          text.match(/(\d{1,2})\.(\d{1,2})\.(\d{4}) (\d{1,2}):(\d{2}) ?- ?(?:\d{1,2}\.\d{1,2}\.\d{4} )?(\d{1,2}):(\d{2})/) ??
+          text.match(/(\d{1,2})\.(\d{1,2})\.(\d{4}) ?- ?\d{1,2}\.\d{1,2}\.\d{4}/) ??
+          text.match(/Näytä kartalla (\d{1,2})\.(\d{1,2})\.(\d{4})/);
         if (!when) {
           warnings.push(`no date on ${host} event ${item.id}`);
           continue;
