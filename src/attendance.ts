@@ -107,6 +107,7 @@ export async function runAttendancePoll(ctx: Ctx) {
   const polls = (ctx.state.myclub.polls ??= []);
   for (const child of cfg.children) {
     const events = weekEvents(snap, ctx.cfg, child, ctx.now);
+    ctx.log(`attendance poll: ${child}: ${events.length} unanswered events in the next 7 days`);
     if (!events.length) continue;
     for (const p of polls) if (p.child === child && p.status === "open") p.status = "superseded";
     const shown = events.slice(0, MAX_EVENTS);
