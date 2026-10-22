@@ -158,13 +158,14 @@ export async function discoverMyClub(cfg: Config, log = console.log) {
   // 6. The app script: how details are fetched and answers are sent.
   for (const src of $l("script[src]").map((_, el) => $l(el).attr("src")).get()) {
     const url = new URL(src, list.url).toString();
-    if (!new URL(url).hostname.endsWith("myclub.fi")) continue;
-    const js = (await get(url)).html;
+    log(`\n== script host ${new URL(url).hostname} ${mask(new URL(url).pathname)}`);
+    // Public app code: fetched without cookies, wherever it is hosted.
+    const js = await (await fetch(url)).text();
     const hits = new Set<string>();
-    for (const m of js.matchAll(/.{0,60}(\/flow\/[a-z_\/]*(event|enroll|particip|attend|regist|answer|details)[a-z_\/]*).{0,80}/gi)) hits.add(m[0].replace(/\s+/g, " "));
+    for (const m of js.matchAll(/.{0,100}(events\/details|\/flow\/events|participat|enroll|attend|registration)[^"'\s]{0,60}.{0,140}/gi)) if (hits.size < 80) hits.add(m[0].replace(/\s+/g, " "));
     for (const m of js.matchAll(/.{0,80}(participation|enrollment|registration|attendance)[A-Za-z_]*.{0,80}/g)) if (hits.size < 60) hits.add(m[0].replace(/\s+/g, " "));
     log(`\n== script ${mask(new URL(url).pathname)} (${js.length} bytes): ${hits.size} relevant snippets`);
-    for (const h of [...hits].slice(0, 60)) log(`  ${h.slice(0, 220)}`);
+    for (const h of [...hits].slice(0, 80)) log(`  ${h.slice(0, 300)}`);
   }
 
   // 7. Details request variants for one upcoming event.
