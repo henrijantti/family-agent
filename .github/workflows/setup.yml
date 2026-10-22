@@ -18,6 +18,7 @@ on:
           - myclub-check
           - attendance-preview
           - attendance-poll-next
+          - attendance-poll-next kiekko-espoo
           - myclub-discover
           - myclub-open
           - myclub-signup-test

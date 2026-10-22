@@ -363,10 +363,12 @@ async function main() {
       const { weekEvents, optionLabel, runAttendancePoll } = await import("./attendance.js");
       const today = localParts(now).date;
       const nextMon = addDays(today, ((8 - new Date(`${today}T12:00:00Z`).getUTCDay()) % 7) || 7);
-      const start = args[0] ?? (cmd === "attendance-poll-next" ? nextMon : undefined);
+      const dateArg = args.find((a) => /^\d{4}-\d{2}-\d{2}$/.test(a));
+      const club = args.find((a) => !/^\d{4}-/.test(a));
+      const start = dateArg ?? (cmd === "attendance-poll-next" ? nextMon : undefined);
       const ctx = buildCtx(cfg, st, now);
       if (cmd === "attendance-poll-next") {
-        await runAttendancePoll(ctx, start);
+        await runAttendancePoll(ctx, start, club);
         st.save();
         break;
       }

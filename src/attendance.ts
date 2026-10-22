@@ -86,7 +86,13 @@ export function optionLabel(e: MyClubEvent): string {
   return `${dayOf(d)} ${Number(day)}.${Number(m)}.${eventTime(e)} ${e.title}`.slice(0, 100);
 }
 
-export async function runAttendancePoll(ctx: Ctx, start?: string) {
+const CLUB_NAMES: Record<string, string> = { ppj: "PPJ", "kiekko-espoo": "Kiekko-Espoo", viimahockey: "Viima" };
+
+/**
+ * Posts one poll per child and club. `start`: first day (default tomorrow).
+ * `onlyClub`: add polls for that club alone, leaving the child's open polls as they are.
+ */
+export async function runAttendancePoll(ctx: Ctx, start?: string, onlyClub?: string) {
   const cfg = ctx.cfg.attendance;
   const chat = env("TELEGRAM_FAMILY_CHAT_ID");
   let snap = ctx.state.myclub.lastSnapshot as MyClubSnapshot | undefined;
@@ -106,15 +112,20 @@ export async function runAttendancePoll(ctx: Ctx, start?: string) {
   const t = T[ctx.cfg.digest.language] ?? T.en;
   const polls = (ctx.state.myclub.polls ??= []);
   for (const child of cfg.children) {
-    const events = weekEvents(snap, ctx.cfg, child, ctx.now, start);
-    ctx.log(`attendance poll: ${child}: ${events.length} unanswered events in the 7 days from ${start ?? "tomorrow"}`);
+    const events = weekEvents(snap, ctx.cfg, child, ctx.now, start).filter((e) => !onlyClub || e.club === onlyClub);
+    ctx.log(`attendance poll: ${child}: ${events.length} unanswered events in the 7 days from ${start ?? "tomorrow"}${onlyClub ? ` (${onlyClub})` : ""}`);
     if (!events.length) continue;
-    for (const p of polls) if (p.child === child && p.status === "open") p.status = "superseded";
-    const shown = events.slice(0, MAX_EVENTS);
-    const options = shown.map((e) => ({ eventId: e.id, url: e.url, label: optionLabel(e), date: eventDate(e) }));
-    const { messageId } = await ctx.notifier.poll(chat, t.question(child), [...options.map((o) => o.label), t.none]);
-    polls.push({ child, chatId: chat, messageId, postedAt: ctx.now.toISOString(), options, status: "open" });
-    if (events.length > shown.length) await ctx.notifier.send(chat, esc(t.more(events.length - shown.length)));
+    if (!onlyClub) for (const p of polls) if (p.child === child && p.status === "open") p.status = "superseded";
+    const byClub = new Map<string, MyClubEvent[]>();
+    for (const e of events) byClub.set(e.club ?? "", [...(byClub.get(e.club ?? "") ?? []), e]);
+    for (const [club, evs] of byClub) {
+      const label = club && (byClub.size > 1 || onlyClub) ? ` (${CLUB_NAMES[club] ?? club})` : "";
+      const shown = evs.slice(0, MAX_EVENTS);
+      const options = shown.map((e) => ({ eventId: e.id, url: e.url, label: optionLabel(e), date: eventDate(e) }));
+      const { messageId } = await ctx.notifier.poll(chat, `${t.question(child)}${label}`, [...options.map((o) => o.label), t.none]);
+      polls.push({ child, chatId: chat, messageId, postedAt: ctx.now.toISOString(), options, status: "open" });
+      if (evs.length > shown.length) await ctx.notifier.send(chat, esc(t.more(evs.length - shown.length)));
+    }
   }
   ctx.state.myclub.polls = polls.filter((p) => Date.parse(p.postedAt) > ctx.now.getTime() - 35 * 86400000);
 }
