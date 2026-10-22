@@ -6,5 +6,6 @@ export function testConfig() {
   cfg.wilma.enabled = true;
   cfg.myclub.enabled = true;
   cfg.outlook.enabled = true;
+  cfg.digest.language = "en"; // assertions are written against the English labels
   return cfg;
 }

@@ -21,7 +21,7 @@ calendar:
   max_deletes_per_run: 5
 
 digest:
-  language: en            # en | fi
+  language: fi            # en | fi (Henri, 2026-10-22)
   weekday_time: "06:45"
   weekend_time: "06:45"   # every day incl. weekends (Henri, 2026-10-22)
   week_ahead: { day: sun, time: "19:00" }

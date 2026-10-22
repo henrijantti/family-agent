@@ -49,7 +49,7 @@ test("morning tick: sources then one combined digest to the family group", async
   assert.equal(notifier.sent[0].chatId, "fam");
   for (const s of ["Needs action", "Today", "Conflicts", "Coming up"]) assert.ok(d.includes(`<b>${s}</b>`), s);
   assert.match(d, /sign-up closes 2026-10-23/);
-  assert.match(d, /bill: Helen, 64,20 €, due 2026-10-24 \(in 3 d\)/);
+  assert.match(d, /💶 <b>Helen<\/b> 64,20 € · due Sat 24\.10\. \(in 3 d\)/);
   assert.match(d, /Aino: lessons 08:15–14:00/);
   // The tournament is on both the family and the hobbies calendar: listed once.
   const coming = d.split("<b>Coming up</b>")[1];
@@ -94,5 +94,16 @@ test("Sunday week-ahead lists each day", async () => {
   await tick(c, ["myclub", "wilma", "week-ahead"]);
   const d = notifier.sent.at(-1)!.html;
   assert.match(d, /Week ahead/);
-  assert.match(d, /<b>2026-10-28 \(wed\)<\/b>\n• all day Aino: Kuvauspäivä \(from bulletin\)/);
+  assert.match(d, /<b>Wednesday 28\.10\.<\/b>\n🏫 <b>all day<\/b> <b>Aino<\/b> · Kuvauspäivä \(from bulletin\)/);
+});
+
+test("event titles are shortened and conflicts say who overlaps when", async () => {
+  const { splitTitle, conflicts, toHubEvent } = await import("../src/digest/build.js");
+  assert.deepEqual(splitTitle("Oskar: Taitokoulut: Taitokoulu 2017 -syntyneet Hallikausi 2026-2027"), { who: "Oskar", what: "Taitokoulu 2017 -syntyneet" });
+  assert.deepEqual(splitTitle("Oliver: K-E Blues 15: Jäävuoro"), { who: "Oliver", what: "K-E Blues 15: Jäävuoro" });
+  assert.deepEqual(splitTitle("Henri: dentist"), { who: "Henri", what: "dentist" });
+  const ev = (summary: string, from: string, to: string, location: string) =>
+    toHubEvent({ id: summary, summary, location, start: { dateTime: localIso("2026-10-22", from) }, end: { dateTime: localIso("2026-10-22", to) } }, "hobbies");
+  const c = conflicts([ev("Oskar: A", "14:15", "16:00", "Areena, Helsinki"), ev("Oliver: B", "15:45", "18:15", "Matinkylä 5, Espoo")]);
+  assert.equal(c.length, 1);
 });

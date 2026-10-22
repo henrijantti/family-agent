@@ -46,6 +46,9 @@ const L = {
     fee: "fee due", bill: "bill", newBiller: "new biller, check sender", reply: "needs reply/form/payment",
     unavailable: (s: string) => `${s} unavailable, this digest may be missing items`, nothing: "Nothing on the calendar.",
     cancelled: "cancelled", changedW: "changed", newW: "new",
+    days: ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"], short: ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"],
+    overlap: (from: string, to: string) => `${from}–${to} overlap`, and: "and", who: "who drives?",
+    bringWhat: { swim: "swimming gear", exam: "exam prep", trip: "packed lunch, outdoor clothes" } as Record<string, string>,
   },
   fi: {
     title: "Perheen päivä", week: "Tuleva viikko", needs: "Vaatii toimia", today: "Tänään", conflicts: "Päällekkäisyydet",
@@ -55,18 +58,63 @@ const L = {
     fee: "maksu erääntyy", bill: "lasku", newBiller: "uusi laskuttaja, tarkista lähettäjä", reply: "vaatii vastauksen/lomakkeen/maksun",
     unavailable: (s: string) => `${s} ei vastannut, kooste voi olla vajaa`, nothing: "Ei kalenterimerkintöjä.",
     cancelled: "peruttu", changedW: "muuttunut", newW: "uusi",
+    days: ["Sunnuntai", "Maanantai", "Tiistai", "Keskiviikko", "Torstai", "Perjantai", "Lauantai"], short: ["su", "ma", "ti", "ke", "to", "pe", "la"],
+    overlap: (from: string, to: string) => `päällekkäin ${from}–${to}`, and: "ja", who: "kuka vie?",
+    bringWhat: { swim: "uimakamat", exam: "kokeeseen valmistautuminen", trip: "eväät ja ulkovaatteet" } as Record<string, string>,
   },
 };
 
+// Only reminders that aren't obvious: every practice needs its kit.
 const BRING: [RegExp, string][] = [
-  [/ui(nti|mahalli)|swim/i, "swimming gear"],
-  [/jalkapallo|football|soccer|futis|salibandy|floorball|jääkiekko|hockey|koripallo|basket|harjoitus|harkat|treeni|training|practice|ottelu|match|game|turnaus|tournament/i, "sports kit"],
-  [/exam|koe\b|kokeet/i, "exam prep"],
-  [/retki|trip|excursion/i, "packed lunch, outdoor clothes"],
+  [/ui(nti|mahalli)|swim/i, "swim"],
+  [/exam|koe\b|kokeet/i, "exam"],
+  [/retki|trip|excursion/i, "trip"],
 ];
 
-function bring(title: string): string | undefined {
-  return BRING.find(([re]) => re.test(title))?.[1];
+function bring(title: string, t: Labels): string | undefined {
+  const k = BRING.find(([re]) => re.test(title))?.[1];
+  return k && t.bringWhat[k];
+}
+
+const ICONS: [RegExp, string][] = [
+  [/jää|kiekko|hockey|luistel|skating/i, "🏒"],
+  [/jalkapallo|football|soccer|futis|ppj|talviliiga|fudis/i, "⚽"],
+  [/ui(nti|mahalli)|swim/i, "🏊"],
+  [/salibandy|floorball/i, "🏑"],
+  [/koripallo|basket/i, "🏀"],
+  [/exam|koe\b|kokeet/i, "📝"],
+  [/syntymäpäiv|synttär|birthday/i, "🎂"],
+  [/lääkär|hammas|dentist|doctor/i, "🩺"],
+];
+const icon = (e: HubEvent) => ICONS.find(([re]) => re.test(`${e.title} ${e.location ?? ""}`))?.[1] ?? (e.calendar === "school" ? "🏫" : "📌");
+
+type Labels = (typeof L)["en"];
+
+/** "torstai 22.10." style dates. */
+export function niceDate(date: string, t: Labels, long = false): string {
+  const [, m, d] = date.split("-").map(Number);
+  const wd = new Date(`${date}T12:00:00Z`).getUTCDay();
+  return `${long ? t.days[wd] : t.short[wd]} ${d}.${m}.`;
+}
+
+/**
+ * "Oskar: Taitokoulut: Taitokoulu 2017 -syntyneet Hallikausi 2026-2027" ->
+ * who "Oskar", what "Taitokoulu 2017 -syntyneet". Short event names keep
+ * their team: "K-E Blues 15: Jäävuoro".
+ */
+export function splitTitle(title: string): { who?: string; what: string } {
+  const parts = title.split(/:\s+/);
+  const who = parts.length > 1 && parts[0].length <= 30 && !/\s/.test(parts[0].trim()) ? parts.shift()!.trim() : undefined;
+  const clean = (x: string) => x.replace(/\s*\b(hallikausi|kausi|season)\s*\d{4}(\s*[-–\/]\s*\d{2,4})?/gi, "").replace(/\s{2,}/g, " ").trim();
+  let what = clean(parts[parts.length - 1] ?? title);
+  if (parts.length > 1 && what.length < 20) what = `${clean(parts[parts.length - 2])}: ${what}`;
+  return { who, what: what || title };
+}
+
+/** First part of the address, linked to a map search of the full one. */
+function place(location: string): string {
+  const short = location.split(",")[0].trim();
+  return `<a href="https://maps.google.com/?q=${encodeURIComponent(location)}">${esc(short)}</a>`;
 }
 
 export function toHubEvent(e: CalendarEvent, calendar: HubEvent["calendar"]): HubEvent {
@@ -130,10 +178,25 @@ export function conflicts(events: HubEvent[]): [HubEvent, HubEvent][] {
   return out;
 }
 
-function line(e: HubEvent, t: (typeof L)["en"]): string {
+function line(e: HubEvent, t: Labels): string {
   const time = e.start ? `${e.start}${e.end ? `–${e.end}` : ""}` : t.allDay;
-  const extras = [e.location, bring(e.title) ? `${t.bring}: ${bring(e.title)}` : "", e.alsoOnFamily ? t.alsoFamily : ""].filter(Boolean);
-  return `• ${time} ${esc(e.title)}${extras.length ? ` <i>(${esc(extras.join(", "))})</i>` : ""}`;
+  const cancelled = /^CANCELLED: /.test(e.title);
+  const { who, what } = splitTitle(e.title.replace(/^CANCELLED: /, ""));
+  const head = `${icon(e)} <b>${time}</b> ${who ? `<b>${esc(who)}</b> · ` : ""}${esc(what)}`;
+  const b = bring(e.title, t);
+  const extras = [e.location ? `📍 ${place(e.location)}` : "", b ? `🎒 ${esc(b)}` : "", e.alsoOnFamily ? `<i>${t.alsoFamily}</i>` : ""].filter(Boolean);
+  return `${cancelled ? `<s>${head}</s> <i>${t.cancelled}</i>` : head}${extras.length ? `\n      ${extras.join("  ")}` : ""}`;
+}
+
+function conflictLine([a, b]: [HubEvent, HubEvent], t: Labels): string {
+  const hm = (ms: number) => localParts(new Date(ms)).time;
+  const from = hm(Math.max(a.startMs, b.startMs));
+  const to = hm(Math.min(a.endMs, b.endMs));
+  const side = (e: HubEvent) => {
+    const { who, what } = splitTitle(e.title);
+    return `${esc(who ?? what)}${e.location ? ` (${esc(e.location.split(",")[0].trim())})` : ""}`;
+  };
+  return `⚠️ ${t.overlap(from, to)}: ${side(a)} ${t.and} ${side(b)}, ${t.who}`;
 }
 
 export function buildDigest(inp: DigestInput): string {
@@ -141,11 +204,12 @@ export function buildDigest(inp: DigestInput): string {
   const today = localParts(inp.now).date;
   const events = mergeCrossCalendar(inp.events);
   const out: string[] = [];
+  const icons: Record<string, string> = { [t.needs]: "✅", [t.today]: "📅", [t.conflicts]: "🚗", [t.changed]: "🔄", [t.coming]: "🔜", [t.school]: "🏫", [t.status]: "🔧" };
   const section = (title: string, lines: string[]) => {
-    if (lines.length) out.push(`<b>${esc(title)}</b>\n${lines.join("\n")}`);
+    if (lines.length) out.push(`${icons[title] ?? "▫️"} <b>${esc(title)}</b>\n${lines.join("\n")}`);
   };
 
-  out.push(`<b>${inp.weekAhead ? t.week : t.title} · ${today} (${dayOf(today)})</b>`);
+  out.push(inp.weekAhead ? `🗓 <b>${t.week}</b>` : `☀️ <b>${t.title}</b> · ${niceDate(today, t, true)}`);
 
   // 1. Needs action
   const needs: string[] = [];
@@ -169,14 +233,14 @@ export function buildDigest(inp: DigestInput): string {
         for (const h of hw) lines.push(`• ${esc(st.name)}: ${t.homework} ${esc(h.subject)}: ${esc(h.text.slice(0, 120))}`);
       }
     }
-    if (inp.weekAhead) section(`${day} (${dayOf(day)})`, lines);
+    if (inp.weekAhead) section(niceDate(day, t, true), lines);
     else section(t.today, lines.length ? lines : [t.nothing]);
   }
   if (inp.weekAhead && !events.some((e) => days.includes(e.date))) out.push(t.nothing);
 
   // 3. Conflicts
   const conf = days.flatMap((d) => conflicts(events.filter((e) => e.date === d)));
-  section(t.conflicts, conf.map(([a, b]) => `• ${a.date} ${a.start} ${esc(a.title)} ↔ ${b.start} ${esc(b.title)}`));
+  section(t.conflicts, conf.map((c) => conflictLine(c, t)));
 
   // 4. Changed or cancelled since yesterday
   const since = inp.now.getTime() - 26 * 3600000;
@@ -187,7 +251,10 @@ export function buildDigest(inp: DigestInput): string {
   if (!inp.weekAhead) {
     const horizon = addDays(today, inp.cfg.digest.coming_up_days);
     const coming = events.filter((e) => e.date > today && e.date <= horizon && /exam|koe\b|turnaus|tournament|cup|ottelu|match/i.test(e.title));
-    section(t.coming, coming.map((e) => `• ${e.date} ${esc(e.title)}${e.alsoOnFamily ? ` <i>(${t.alsoFamily})</i>` : ""}`));
+    section(t.coming, coming.map((e) => {
+      const { who, what } = splitTitle(e.title);
+      return `${icon(e)} <b>${niceDate(e.date, t)}</b>${e.start ? ` ${e.start}` : ""} ${who ? `<b>${esc(who)}</b> · ` : ""}${esc(what)}${e.alsoOnFamily ? ` <i>(${t.alsoFamily})</i>` : ""}`;
+    }));
   }
 
   // School news that needs no action
@@ -202,8 +269,9 @@ export function buildDigest(inp: DigestInput): string {
   return out.join("\n\n");
 }
 
-export function billLine(b: Bill & { inDays: number }, t: (typeof L)["en"] = L.en): string {
-  return `• ${t.bill}: ${esc(b.biller)}${b.amount ? `, ${esc(b.amount)}` : ""}, ${t.due} ${b.dueDate} (${t.inDays(b.inDays)})${b.reference ? `, ref ${esc(b.reference)}` : ""}${b.newBiller ? ` ⚠️ <i>${t.newBiller}: ${esc(b.sender)}</i>` : ""}`;
+export function billLine(b: Bill & { inDays: number }, t: Labels = L.en): string {
+  const due = b.dueDate ? `${t.due} ${niceDate(b.dueDate, t)} (${t.inDays(b.inDays)})` : "";
+  return `💶 <b>${esc(b.biller)}</b>${b.amount ? ` ${esc(b.amount)}` : ""}${due ? ` · ${due}` : ""}${b.reference ? ` · ref ${esc(b.reference)}` : ""}${b.newBiller ? `\n      ⚠️ <i>${t.newBiller}: ${esc(b.sender)}</i>` : ""}`;
 }
 
 export function billsMessage(bills: (Bill & { inDays: number })[], cfg: Config): string {
