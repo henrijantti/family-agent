@@ -21,6 +21,8 @@ on:
           - myclub-signup-test
           - outlook-login
           - outlook-test
+          - outlook-triage --dry
+          - outlook-triage
           - demo
 
 concurrency:

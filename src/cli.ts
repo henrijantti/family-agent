@@ -12,6 +12,7 @@ import { MyClubWriter } from "./sources/myclub-signup.js";
 import { FixtureMail, GraphMail, deviceSignIn } from "./sources/outlook.js";
 import { FixtureWilma, LiveWilma, SnapshotWilma } from "./sources/wilma.js";
 import { encrypt } from "./lib/state.js";
+import { triage, triageReport } from "./outlook-triage.js";
 import { mkdirSync, writeFileSync } from "node:fs";
 
 const log = (s: string) => console.log(`[${new Date().toISOString()}] ${s}`);
@@ -223,6 +224,17 @@ async function main() {
       st.save();
       break;
     }
+    case "outlook-triage": {
+      // npm run agent -- outlook-triage [days=180] [--dry]
+      const days = Number(args.find((a) => /^\d+$/.test(a)) ?? 180);
+      const apply = !args.includes("--dry");
+      const since = new Date(now.getTime() - days * 86400000).toISOString().replace(/\.\d{3}Z$/, "Z");
+      const r = await triage(GraphMail.fromEnv(st.data), since, { max: 3000, apply, skipDomains: cfg.outlook.wilma_folder?.senders ?? [] });
+      console.log(triageReport(r));
+      console.log(apply ? `\nLabelled in Outlook (${r.skipped} already had the label). Nothing was moved, deleted or sent.` : "\nDry run: nothing was changed.");
+      st.save();
+      break;
+    }
     case "outlook-draft": {
       // npm run agent -- outlook-draft <messageId> <file with reply text>
       const [messageId, file] = args;
@@ -356,6 +368,7 @@ async function main() {
   telegram-test            send a hello to the family group
   outlook-login            device-code sign-in; token stored encrypted in state
   outlook-test             read the last 3 days of inbox
+  outlook-triage [days] [--dry]  label invoices, unsubscribe candidates, important mail
   outlook-draft <id> <file> save a reply draft (never sends)
   wilma-students           list the children on the Wilma login
   wilma-fetch [--force]    (home runner) fetch Wilma if a slot is near, save the snapshot

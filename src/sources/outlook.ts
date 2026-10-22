@@ -22,6 +22,9 @@ export interface MailMessage {
   body?: { contentType: "text" | "html"; content: string };
   hasAttachments?: boolean;
   flag?: { flagStatus: string };
+  categories?: string[];
+  importance?: "low" | "normal" | "high";
+  internetMessageHeaders?: { name: string; value: string }[];
 }
 
 export interface MailApi {
@@ -116,6 +119,35 @@ export class GraphMail implements MailApi {
       next = page["@odata.nextLink"];
     }
     return out;
+  }
+
+  /** Inbox messages since a date, with headers (for List-Unsubscribe). Read-only. */
+  async listInbox(sinceIso: string, max: number) {
+    const q = new URLSearchParams({
+      $filter: `receivedDateTime ge ${sinceIso}`,
+      $select: "id,subject,from,receivedDateTime,bodyPreview,body,flag,categories,importance,internetMessageHeaders",
+      $orderby: "receivedDateTime desc",
+      $top: "50",
+    });
+    const out: MailMessage[] = [];
+    let next: string | undefined = `/me/mailFolders/inbox/messages?${q}`;
+    while (next && out.length < max) {
+      const page: { value: MailMessage[]; "@odata.nextLink"?: string } = await this.call("GET", next);
+      out.push(...page.value);
+      next = page["@odata.nextLink"];
+    }
+    return out.slice(0, max);
+  }
+
+  /** Adds categories and optionally a follow-up flag. Only labels; nothing is moved or deleted. */
+  async label(messageId: string, categories: string[], flag: boolean) {
+    await this.call("PATCH", `/me/messages/${messageId}`, { categories, ...(flag ? { flag: { flagStatus: "flagged" } } : {}) });
+  }
+
+  /** Creates the coloured category labels if they don't exist yet. */
+  async ensureCategories(cats: { name: string; color: string }[]) {
+    const have = (await this.call<{ value: { displayName: string }[] }>("GET", "/me/outlook/masterCategories")).value.map((c) => c.displayName);
+    for (const c of cats) if (!have.includes(c.name)) await this.call("POST", "/me/outlook/masterCategories", { displayName: c.name, color: c.color });
   }
 
   async flag(messageId: string, dueDate?: string) {
