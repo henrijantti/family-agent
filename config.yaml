@@ -23,7 +23,7 @@ calendar:
 digest:
   language: en            # en | fi
   weekday_time: "06:45"
-  weekend_time: "06:45"   # OPEN DECISION: same as weekdays, or later (e.g. "08:30")
+  weekend_time: "06:45"   # every day incl. weekends (Henri, 2026-10-22)
   week_ahead: { day: sun, time: "19:00" }
   coming_up_days: 7
 
