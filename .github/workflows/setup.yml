@@ -17,6 +17,7 @@ on:
           - wilma-students
           - myclub-check
           - attendance-preview
+          - week-preview
           - attendance-poll-next
           - attendance-poll-next kiekko-espoo
           - myclub-discover

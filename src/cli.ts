@@ -5,7 +5,7 @@ import { GoogleCalendar } from "./calendar/google.js";
 import { eventId } from "./calendar/sync.js";
 import { Ctx, JobName, runDigest, tick, wilmaFetchDue } from "./jobs.js";
 import { StateStore } from "./lib/state.js";
-import { addDays, localIso, localParts, toMinutes } from "./lib/time.js";
+import { addDays, fromLocal, localIso, localParts, toMinutes } from "./lib/time.js";
 import { ConsoleNotifier, TelegramBot } from "./notify/telegram.js";
 import { FixtureMyClub, IcsMyClub, myclubProvider } from "./sources/myclub.js";
 import { MyClubInvites, MyClubWriter } from "./sources/myclub-signup.js";
@@ -397,6 +397,17 @@ async function main() {
         console.log(`GET ${path}: ${r.status} server=${r.headers.get("server")} cf-ray=${r.headers.get("cf-ray") ?? "-"}`);
         console.log(`  body: ${body}`);
       }
+      break;
+    }
+    case "week-preview": {
+      // Prints next week's (Mon-Sun) summary from real data. Sends nothing, saves no state.
+      const today = localParts(now).date;
+      const sunday = addDays(today, (7 - new Date(`${today}T12:00:00Z`).getUTCDay()) % 7);
+      const ctx = buildCtx(cfg, st, fromLocal(sunday, "19:00"));
+      ctx.notifier = undefined;
+      delete process.env.TELEGRAM_PRIVATE_CHAT_ID;
+      delete process.env.TELEGRAM_FAMILY_CHAT_ID;
+      console.log(`----- preview -----\n${await runDigest(ctx, true)}\n----- end -----`);
       break;
     }
     case "digest": {
