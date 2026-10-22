@@ -84,11 +84,9 @@ export class MyClubWriter implements AttendanceWriter {
     return raw ? (JSON.parse(raw) as Record<string, unknown>[]) : [];
   }
 
-  /** Read-only: one event's JSON as the logged-in child (after listEvents/selectChild for that host). */
-  async eventJson(host: string, id: string | number): Promise<Record<string, unknown>> {
-    const res = await this.req(`https://${host}/flow/events/${id}.json`, { headers: { accept: "application/json, text/javascript, */*; q=0.01", "x-requested-with": "XMLHttpRequest" } });
-    const j = JSON.parse(res.body) as { event?: Record<string, unknown> } & Record<string, unknown>;
-    return j.event ?? j;
+  /** Read-only GET on a club page as the selected child. */
+  async peek(host: string, path: string, xhr = false) {
+    return this.req(`https://${host}${path}`, xhr ? { headers: { accept: "application/json, text/javascript, text/html, */*; q=0.01", "x-requested-with": "XMLHttpRequest" } } : {});
   }
 
   async set(option: PollOption, child: string, attend: boolean): Promise<string> {

@@ -318,26 +318,27 @@ async function main() {
       break;
     }
     case "myclub-open": {
-      // Read-only: what the logged-in MyClub events page knows per club and child.
+      // Read-only: how the logged-in MyClub pages expose one event and the child's answer.
+      const { load } = await import("cheerio");
       const writer = new MyClubWriter();
-      const clubs: [string, string][] = [["ppj.myclub.fi", "Oskar"], ["ppj.myclub.fi", "Oliver"], ["kiekko-espoo.myclub.fi", "Oliver"], ["viimahockey.myclub.fi", "Oliver"]];
-      for (const [host, child] of clubs) {
-        try {
-          const evs = await writer.listEvents(host, child);
-          const months = new Set(evs.map((e) => JSON.stringify(e.month)));
-          console.log(`\n== ${host} ${child}: ${evs.length} events; months ${[...months].slice(0, 6).join(" ")}; group sample ${JSON.stringify(evs[0]?.group).slice(0, 120)}`);
-          for (const e of evs.slice(0, host.startsWith("ppj") ? 14 : 3)) {
-            const j = await writer.eventJson(host, e.id as number);
-            const flat = Object.entries(j)
-              .filter(([, v]) => v === null || typeof v !== "object")
-              .map(([k, v]) => `${k}=${JSON.stringify(v)?.slice(0, 40)}`);
-            console.log(`  ${e.id} ${String(e.name).slice(0, 45)} | ${flat.join(" ")}`);
-            const objs = Object.entries(j).filter(([, v]) => v && typeof v === "object").map(([k, v]) => `${k}:${JSON.stringify(v).slice(0, 160)}`);
-            if (objs.length) console.log(`    objs ${objs.join(" || ")}`);
-          }
-        } catch (err) {
-          console.log(`== ${host} ${child}: ${(err as Error).message}`);
-        }
+      const host = "ppj.myclub.fi";
+      const evs = await writer.listEvents(host, "Oskar");
+      const keys = new Set(evs.flatMap((e) => Object.keys(e)));
+      console.log(`list keys (all events): ${[...keys].join(", ")}`);
+      const lit = evs.filter((e) => /Litmanen|omatoimivuoro/.test(String(e.name))).slice(0, 3);
+      for (const e of lit) console.log(`list item: ${JSON.stringify(e).slice(0, 400)}`);
+      const id = lit[0]?.id ?? evs[0].id;
+      for (const [path, xhr] of [[`/flow/events/${id}`, false], [`/flow/events/${id}`, true], [`/flow/events/${id}.json`, true], [`/flow/events/details?id=${id}`, true], [`/flow/events?view=own`, false], [`/flow/events/own`, false], [`/flow/participations`, false]] as [string, boolean][]) {
+        const r = await writer.peek(host, path, xhr);
+        const $ = load(r.body);
+        const text = $("body").text().replace(/\s+/g, " ").trim();
+        console.log(`\n== GET ${path} xhr=${xhr}: ${r.status} ${r.body.length}b title="${$("title").text().trim().slice(0, 60)}"`);
+        console.log(`  text: ${(text || r.body).slice(0, 700)}`);
+        const data = new Set<string>();
+        $("[data-events], [data-event], [data-participation], [data-props], [data-react-props]").each((_, el) => {
+          for (const [k, v] of Object.entries(el.attribs)) if (k.startsWith("data-") && v.length > 20) data.add(`${k}=${v.slice(0, 600)}`);
+        });
+        for (const d of data) console.log(`  ${d}`);
       }
       break;
     }
