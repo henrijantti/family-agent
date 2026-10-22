@@ -331,7 +331,7 @@ async function main() {
         const all = snap.events.filter((e) => e.child === child && !e.cancelled);
         console.log(`${child}: ${all.length} unanswered in the feed, ${evs.length} in the next 7 days`);
         for (const e of evs) console.log(`  [ ] ${optionLabel(e)}`);
-        if (!evs.length) for (const e of all.slice(0, 3)) console.log(`  later: ${optionLabel(e)}`);
+        if (!evs.length) for (const e of all) console.log(`  in feed: ${optionLabel(e)}`);
       }
       break;
     }
