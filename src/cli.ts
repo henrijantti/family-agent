@@ -328,17 +328,20 @@ async function main() {
       const lit = evs.filter((e) => /Litmanen|omatoimivuoro/.test(String(e.name))).slice(0, 3);
       for (const e of lit) console.log(`list item: ${JSON.stringify(e).slice(0, 400)}`);
       const id = lit[0]?.id ?? evs[0].id;
-      for (const [path, xhr] of [[`/flow/events/${id}`, false], [`/flow/events/${id}`, true], [`/flow/events/${id}.json`, true], [`/flow/events/details?id=${id}`, true], [`/flow/events?view=own`, false], [`/flow/events/own`, false], [`/flow/participations`, false]] as [string, boolean][]) {
-        const r = await writer.peek(host, path, xhr);
+      for (const path of [`/flow/events/${id}`, `/flow/events/11776019`, `/flow/events`]) {
+        const r = await writer.peek(host, path);
         const $ = load(r.body);
+        $("script, style, nav, header").remove();
         const text = $("body").text().replace(/\s+/g, " ").trim();
-        console.log(`\n== GET ${path} xhr=${xhr}: ${r.status} ${r.body.length}b title="${$("title").text().trim().slice(0, 60)}"`);
-        console.log(`  text: ${(text || r.body).slice(0, 700)}`);
-        const data = new Set<string>();
-        $("[data-events], [data-event], [data-participation], [data-props], [data-react-props]").each((_, el) => {
-          for (const [k, v] of Object.entries(el.attribs)) if (k.startsWith("data-") && v.length > 20) data.add(`${k}=${v.slice(0, 600)}`);
+        const i = text.lastIndexOf("Kirjaudu ulos");
+        console.log(`\n== GET ${path}: ${r.status}`);
+        console.log(`  text: ${text.slice(i + 13, i + 13 + 2500)}`);
+        const marks = new Set<string>();
+        $("[class*=particip], [class*=indicat], [class*=attend], [class*=status], [data-indication], [data-participation], form, button").each((_, el) => {
+          const at = Object.entries(el.attribs).map(([k, v]) => `${k}=${v.slice(0, 60)}`).join(" ");
+          marks.add(`<${el.tagName} ${at}> ${$(el).text().replace(/\s+/g, " ").trim().slice(0, 50)}`);
         });
-        for (const d of data) console.log(`  ${d}`);
+        console.log(`  marks:\n    ${[...marks].slice(0, 40).join("\n    ")}`);
       }
       break;
     }
