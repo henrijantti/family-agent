@@ -318,22 +318,25 @@ async function main() {
       break;
     }
     case "myclub-open": {
-      // Read-only: what the logged-in MyClub events page lists per club and child.
+      // Read-only: what the logged-in MyClub events page knows per club and child.
       const writer = new MyClubWriter();
       const clubs: [string, string][] = [["ppj.myclub.fi", "Oskar"], ["ppj.myclub.fi", "Oliver"], ["kiekko-espoo.myclub.fi", "Oliver"], ["viimahockey.myclub.fi", "Oliver"]];
       for (const [host, child] of clubs) {
-        for (const q of ["", "?start_date=2026-10-26&end_date=2026-11-01"]) {
-          try {
-            const evs = await writer.listEvents(host, child, q);
-            console.log(`\n== ${host} ${child} ${q || "(default)"}: ${evs.length} events`);
-            if (evs[0]) console.log(`  keys: ${Object.keys(evs[0]).join(", ")}`);
-            for (const e of evs.slice(0, 40)) {
-              const pick = Object.entries(e).filter(([k]) => /^(id|name|title|starts?_at|start|date|particip|own|indicat|registr|enroll|can_|status)/i.test(k));
-              console.log(`  ${pick.map(([k, v]) => `${k}=${JSON.stringify(v)?.slice(0, 50)}`).join(" ")}`);
-            }
-          } catch (err) {
-            console.log(`== ${host} ${child}: ${(err as Error).message}`);
+        try {
+          const evs = await writer.listEvents(host, child);
+          const months = new Set(evs.map((e) => JSON.stringify(e.month)));
+          console.log(`\n== ${host} ${child}: ${evs.length} events; months ${[...months].slice(0, 6).join(" ")}; group sample ${JSON.stringify(evs[0]?.group).slice(0, 120)}`);
+          for (const e of evs.slice(0, host.startsWith("ppj") ? 14 : 3)) {
+            const j = await writer.eventJson(host, e.id as number);
+            const flat = Object.entries(j)
+              .filter(([, v]) => v === null || typeof v !== "object")
+              .map(([k, v]) => `${k}=${JSON.stringify(v)?.slice(0, 40)}`);
+            console.log(`  ${e.id} ${String(e.name).slice(0, 45)} | ${flat.join(" ")}`);
+            const objs = Object.entries(j).filter(([, v]) => v && typeof v === "object").map(([k, v]) => `${k}:${JSON.stringify(v).slice(0, 160)}`);
+            if (objs.length) console.log(`    objs ${objs.join(" || ")}`);
           }
+        } catch (err) {
+          console.log(`== ${host} ${child}: ${(err as Error).message}`);
         }
       }
       break;
