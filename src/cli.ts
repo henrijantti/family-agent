@@ -280,6 +280,11 @@ async function main() {
       if (snap.route === "ics") console.log("  note: calendar feeds carry events only, not sign-up deadlines or fees");
       break;
     }
+    case "myclub-discover": {
+      const { discoverMyClub } = await import("./myclub-discover.js");
+      await discoverMyClub(cfg);
+      break;
+    }
     case "attendance-preview": {
       // Shows what Sunday's practice polls would ask, from a fresh MyClub read. Posts nothing.
       const { weekEvents, optionLabel } = await import("./attendance.js");
