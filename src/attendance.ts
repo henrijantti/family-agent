@@ -55,7 +55,7 @@ const T = {
   fi: {
     question: (c: string) => `Mihin harjoituksiin ${c} osallistuu ensi viikolla?`,
     none: "Ei mihinkään näistä",
-    noAnswer: (c: string) => `Kukaan ei vastannut ${c}n kyselyyn, joten MyClubiin ei tehty muutoksia.`,
+    noAnswer: (c: string) => `Kukaan ei vastannut ${/[aeiouyäö]$/i.test(c) ? `${c}n` : `${c}in`} kyselyyn, joten MyClubiin ei tehty muutoksia.`,
     title: (c: string) => `MyClub-ilmoittautumiset: ${c}`,
     dry: "Ei vielä lähetetty MyClubiin: ilmoittautumisvaihe on vielä asennuksessa.",
     more: (n: number) => `${n} tapahtumaa ei mahtunut kyselyyn; vastaa niihin MyClubissa.`,
