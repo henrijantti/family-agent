@@ -119,9 +119,11 @@ export class GraphMail implements MailApi {
   }
 
   async flag(messageId: string, dueDate?: string) {
-    await this.call("PATCH", `/me/messages/${messageId}`, {
-      flag: { flagStatus: "flagged", ...(dueDate ? { dueDateTime: { dateTime: `${dueDate}T09:00:00`, timeZone: "FLE Standard Time" } } : {}) },
-    });
+    // Graph rejects a due date without a start date, or a start after the due date.
+    const today = new Date().toISOString().slice(0, 10);
+    const at = (d: string) => ({ dateTime: `${d}T09:00:00`, timeZone: "FLE Standard Time" });
+    const dates = dueDate ? { startDateTime: at(dueDate < today ? dueDate : today), dueDateTime: at(dueDate) } : {};
+    await this.call("PATCH", `/me/messages/${messageId}`, { flag: { flagStatus: "flagged", ...dates } });
   }
 
   async createReplyDraft(messageId: string, text: string) {
@@ -272,7 +274,8 @@ export async function scanInvoices(api: MailApi, state: StateData, lookbackDays:
     if (!state.outlook.knownBillers.includes(domain)) state.outlook.knownBillers.push(domain);
     state.outlook.bills.push(bill);
     newBills.push(bill);
-    await api.flag(m.id, bill.dueDate);
+    // A flag is a convenience; the bill is already recorded, so one bad message mustn't stop the scan.
+    await api.flag(m.id, bill.dueDate).catch((e) => console.warn(`could not flag a bill from ${domain}: ${(e as Error).message}`));
   }
   state.outlook.lastScan = now.toISOString();
   // Forget bills well past due.
