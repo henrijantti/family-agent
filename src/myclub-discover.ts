@@ -139,24 +139,47 @@ export async function discoverMyClub(cfg: Config, log = console.log) {
   const urls = new Set(inline.match(/["'](\/flow\/[^"'\s]+)["']/g) ?? []);
   log(`  urls in inline scripts: ${[...urls].map(mask).slice(0, 20).join("  ")}`);
 
-  // 5. Upcoming event pages from both feeds.
-  const now = Date.now();
-  for (const envName of ["MYCLUB_POLL_ICS_URL", "MYCLUB_ICS_URL"]) {
-    if (!env(envName)) continue;
-    const snap = await new IcsMyClub(envName).fetch(cfg);
-    const upcoming = snap.events.filter((e) => e.url && Date.parse("dateTime" in e.start ? e.start.dateTime : e.start.date) > now);
-    log(`\n== ${envName}: ${snap.events.length} events, ${upcoming.length} upcoming with a URL; hosts: ${[...new Set(upcoming.map((e) => new URL(e.url!).hostname))].join(" ")}`);
-    for (const e of upcoming.slice(0, 2)) {
+  // 5. Event JSON on the list page: keys and value types only.
+  const raw = $l("#events").attr("data-events");
+  let first: Record<string, unknown> | undefined;
+  if (raw) {
+    const arr = JSON.parse(raw) as Record<string, unknown>[];
+    first = arr[0];
+    const keys = new Map<string, Set<string>>();
+    for (const ev of arr) for (const [k, v] of Object.entries(ev)) {
+      if (!keys.has(k)) keys.set(k, new Set());
+      const shown = /status|state|enroll|regist|attend|particip|answer|can_|allow|deadline|type|kind/i.test(k) ? JSON.stringify(v).slice(0, 40) : Array.isArray(v) ? "array" : typeof v;
+      keys.get(k)!.add(mask(shown));
+    }
+    log(`  data-events: ${arr.length} events; keys:`);
+    for (const [k, vs] of keys) log(`    ${k}: ${[...vs].slice(0, 6).join(" | ")}`);
+  }
+
+  // 6. The app script: how details are fetched and answers are sent.
+  for (const src of $l("script[src]").map((_, el) => $l(el).attr("src")).get()) {
+    const url = new URL(src, list.url).toString();
+    if (!new URL(url).hostname.endsWith("myclub.fi")) continue;
+    const js = (await get(url)).html;
+    const hits = new Set<string>();
+    for (const m of js.matchAll(/.{0,60}(\/flow\/[a-z_\/]*(event|enroll|particip|attend|regist|answer|details)[a-z_\/]*).{0,80}/gi)) hits.add(m[0].replace(/\s+/g, " "));
+    for (const m of js.matchAll(/.{0,80}(participation|enrollment|registration|attendance)[A-Za-z_]*.{0,80}/g)) if (hits.size < 60) hits.add(m[0].replace(/\s+/g, " "));
+    log(`\n== script ${mask(new URL(url).pathname)} (${js.length} bytes): ${hits.size} relevant snippets`);
+    for (const h of [...hits].slice(0, 60)) log(`  ${h.slice(0, 220)}`);
+  }
+
+  // 7. Details request variants for one upcoming event.
+  if (first?.id) {
+    for (const [label, path, headers] of [
+      ["xhr id", `/flow/events/details?id=${first.id}`, { "x-requested-with": "XMLHttpRequest", accept: "text/html, */*" }],
+      ["xhr event_id", `/flow/events/details?event_id=${first.id}`, { "x-requested-with": "XMLHttpRequest", accept: "text/html, */*" }],
+      ["json", `/flow/events/${first.id}.json`, { accept: "application/json" }],
+    ] as const) {
       try {
-        const p = await get(e.url!);
-        describe(`upcoming event page (${envName})`, p);
-        const id = e.url!.match(/events\/(\d+)/)?.[1];
-        if (id) {
-          const d = await get(`https://${new URL(e.url!).hostname}/flow/events/details?id=${id}`);
-          describe(`events/details?id=N (${envName})`, d);
-        }
+        const d = await get(`https://ppj.myclub.fi${path}`, { headers: headers as Record<string, string> });
+        log(`\n== details ${label}: ${d.status}, ${d.html.length} bytes`);
+        if (d.html.length > 50) describe(`details ${label}`, d);
       } catch (err) {
-        log(`  event page: ${(err as Error).message}`);
+        log(`  details ${label}: ${(err as Error).message}`);
       }
     }
   }
