@@ -164,8 +164,28 @@ export async function discoverMyClub(cfg: Config, log = console.log) {
     const hits = new Set<string>();
     for (const m of js.matchAll(/.{0,100}(events\/details|\/flow\/events|participat|enroll|attend|registration)[^"'\s]{0,60}.{0,140}/gi)) if (hits.size < 80) hits.add(m[0].replace(/\s+/g, " "));
     for (const m of js.matchAll(/.{0,80}(participation|enrollment|registration|attendance)[A-Za-z_]*.{0,80}/g)) if (hits.size < 60) hits.add(m[0].replace(/\s+/g, " "));
-    log(`\n== script ${mask(new URL(url).pathname)} (${js.length} bytes): ${hits.size} relevant snippets`);
-    for (const h of [...hits].slice(0, 80)) log(`  ${h.slice(0, 300)}`);
+    log(`\n== script ${mask(new URL(url).pathname)} (${js.length} bytes)`);
+    for (const re of [/participate:function/, /function _n\(\)|_n=\(\)=>|function _n\b/, /events\.json/, /select_account/, /CALENDAR_EVENTS_LOADED|loadEvents|fetchEvents/]) {
+      let n = 0;
+      for (const m of js.matchAll(new RegExp(re.source, "g"))) {
+        if (n++ >= 3) break;
+        log(`  [${re.source}] ${js.slice(Math.max(0, m.index! - 150), m.index! + 650).replace(/\s+/g, " ")}`);
+      }
+    }
+  }
+
+  // 6b. JSON endpoints the calendar view may use: keys only.
+  const csrf = $l('meta[name="csrf-token"]').attr("content");
+  log(`\n== csrf meta present: ${!!csrf}`);
+  for (const path of ["/flow/events.json", `/flow/events/${first?.id}.json`]) {
+    const r = await get(`https://ppj.myclub.fi${path}`, { headers: { accept: "application/json, text/javascript, */*; q=0.01", "x-requested-with": "XMLHttpRequest" } });
+    log(`== GET ${mask(path)} xhr: ${r.status}, ${r.html.length} bytes`);
+    try {
+      const j = JSON.parse(r.html);
+      const o = Array.isArray(j) ? j[0] : j;
+      if (o) log(`  keys: ${Object.entries(o).map(([k, v]) => (/particip|indicat|regist|can_|allowed|only_|absence|full|queue|status/.test(k) ? `${k}=${JSON.stringify(v).slice(0, 30)}` : k)).join(", ")}`);
+      if (Array.isArray(j)) log(`  array length ${j.length}`);
+    } catch {}
   }
 
   // 7. Details request variants for one upcoming event.
