@@ -303,7 +303,12 @@ export function detectInvoice(msg: MailMessage): Omit<Bill, "newBiller" | "found
   if (!INVOICE_WORDS.test(text)) return null;
   // Newsletters mention "lasku" too; require an amount or a due date.
   const due = text.match(new RegExp(`(?:eräpäivä|erääntyy|maksettava viimeistään|due date|payment due|due)[^\\d]{0,30}(?:${DATE_RE.source})`, "i"));
-  const amount = text.match(/(?:yhteensä|summa|maksettava|loppusumma|määrä|amount|total|due)[^\d]{0,30}(\d{1,3}(?:[ .]\d{3})*(?:[.,]\d{2})?)\s*(€|eur|euroa)/i) ?? text.match(/(\d{1,3}(?:[ .]\d{3})*[.,]\d{2})\s*(€|eur)\b/i);
+  const amount =
+    text.match(/(?:yhteensä|summa|maksettava|loppusumma|määrä|amount|total|due)[^\d]{0,30}(\d{1,3}(?:[ .]\d{3})*(?:[.,]\d{2})?)\s*(€|eur|euroa)/i) ??
+    text.match(/(\d{1,3}(?:[ .]\d{3})*[.,]\d{2})\s*(€|eur)\b/i) ??
+    // "Summa: EUR 120,00" / "€ 45.00" (currency first, as in MyClub invoices)
+    text.match(/(?:€|eur)\s*(\d{1,3}(?:[ .]\d{3})*[.,]\d{2})\b/i) ??
+    text.match(/(?:yhteensä|summa|maksettava|loppusumma|hinta|amount|total)\s*:?\s*(\d{1,3}(?:[ .]\d{3})*[.,]\d{2})\b/i);
   const ref = text.match(/(?:viitenumero|viite|reference number|reference|ref\.?)\s*:?\s*(RF\d{2}[\d ]{4,25}\d|\d[\d ]{3,25}\d)/i);
   if (!due && !amount) return null;
   // Receipts and payment confirmations quote an amount too, but are already paid:
@@ -335,7 +340,12 @@ export async function scanInvoices(api: MailApi, state: StateData, lookbackDays:
   // On the very first scan every biller is unknown; don't flag them all as suspicious.
   const firstScan = !state.outlook.lastScan && state.outlook.knownBillers.length === 0;
   for (const m of msgs) {
-    if (known.has(m.id)) continue;
+    if (known.has(m.id)) {
+      // Fill in an amount an earlier parser missed.
+      const b = state.outlook.bills.find((x) => x.messageId === m.id);
+      if (b && !b.amount) b.amount = detectInvoice(m)?.amount;
+      continue;
+    }
     const found = detectInvoice(m);
     if (!found) continue;
     const domain = found.sender.split("@")[1] ?? found.sender;

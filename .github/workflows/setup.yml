@@ -25,6 +25,7 @@ on:
           - myclub-signup-test
           - outlook-login
           - outlook-test
+          - outlook-bills-rescan
           - outlook-triage --dry
           - outlook-triage
           - demo

@@ -177,7 +177,7 @@ function line(e: HubEvent, t: Labels): string {
   return `${cancelled ? `<s>${head}</s> <i>${t.cancelled}</i>` : head}${extras.length ? `\n ${extras.join("  ")}` : ""}`;
 }
 
-function conflictLine([a, b]: [HubEvent, HubEvent], t: Labels): string {
+function conflictLine([a, b]: [HubEvent, HubEvent], t: Labels, withDay = false): string {
   const hm = (ms: number) => localParts(new Date(ms)).time;
   const from = hm(Math.max(a.startMs, b.startMs));
   const to = hm(Math.min(a.endMs, b.endMs));
@@ -185,7 +185,8 @@ function conflictLine([a, b]: [HubEvent, HubEvent], t: Labels): string {
     const { who, what } = splitTitle(e.title);
     return `${esc(who ?? what)}${e.location ? ` (${esc(e.location.split(",")[0].trim())})` : ""}`;
   };
-  return `• ${t.overlap(from, to)}: ${side(a)} ${t.and} ${side(b)}, ${t.who}`;
+  const day = withDay ? `${niceDate(localParts(new Date(Math.max(a.startMs, b.startMs))).date, t)} ` : "";
+  return `• ${day}${t.overlap(from, to)}: ${side(a)} ${t.and} ${side(b)}, ${t.who}`;
 }
 
 export function buildDigest(inp: DigestInput): string {
@@ -230,7 +231,7 @@ export function buildDigest(inp: DigestInput): string {
 
   // 3. Conflicts
   const conf = days.flatMap((d) => conflicts(events.filter((e) => e.date === d)));
-  section(t.conflicts, conf.map((c) => conflictLine(c, t)));
+  section(t.conflicts, conf.map((c) => conflictLine(c, t, !!inp.weekAhead)));
 
   // 4. Changed or cancelled since yesterday
   const since = inp.now.getTime() - 26 * 3600000;

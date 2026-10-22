@@ -223,6 +223,17 @@ async function main() {
       st.save();
       break;
     }
+    case "outlook-bills-rescan": {
+      // Re-reads the lookback window so bills recorded earlier get fields a newer parser finds.
+      const { scanInvoices } = await import("./sources/outlook.js");
+      const mail = GraphMail.fromEnv(st.data);
+      st.data.outlook.lastScan = undefined;
+      const r = await scanInvoices(mail, st.data, cfg.outlook.scan_lookback_days, now);
+      console.log(`rescan: ${r.newBills.length} new bills`);
+      for (const b of st.data.outlook.bills) console.log(`  ${b.biller}: ${b.amount ?? "(no amount)"} due ${b.dueDate ?? "-"}`);
+      st.save();
+      break;
+    }
     case "outlook-test": {
       const mail = GraphMail.fromEnv(st.data);
       const msgs = await mail.listSince(new Date(now.getTime() - 3 * 86400000).toISOString().replace(/\.\d{3}Z$/, "Z"));
