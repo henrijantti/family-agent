@@ -74,6 +74,16 @@ export class MyClubWriter implements AttendanceWriter {
     return csrf;
   }
 
+  /** Read-only: the club's events list for the child, as the page's data-events JSON. */
+  async listEvents(host: string, child: string, query = ""): Promise<Record<string, unknown>[]> {
+    const { load } = await import("cheerio");
+    await this.login();
+    await this.selectChild(host, child);
+    const page = await this.req(`https://${host}/flow/events${query}`);
+    const raw = load(page.body)("#events").attr("data-events");
+    return raw ? (JSON.parse(raw) as Record<string, unknown>[]) : [];
+  }
+
   async set(option: PollOption, child: string, attend: boolean): Promise<string> {
     const m = option.url?.match(/^https:\/\/([a-z0-9-]+\.myclub\.fi)\/flow\/events\/(\d+)/);
     if (!m) throw new Error("no MyClub event link in the feed");

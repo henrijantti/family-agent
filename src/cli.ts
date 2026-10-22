@@ -317,6 +317,27 @@ async function main() {
       }
       break;
     }
+    case "myclub-open": {
+      // Read-only: what the logged-in MyClub events page lists per club and child.
+      const writer = new MyClubWriter();
+      const clubs: [string, string][] = [["ppj.myclub.fi", "Oskar"], ["ppj.myclub.fi", "Oliver"], ["kiekko-espoo.myclub.fi", "Oliver"], ["viimahockey.myclub.fi", "Oliver"]];
+      for (const [host, child] of clubs) {
+        for (const q of ["", "?start_date=2026-10-26&end_date=2026-11-01"]) {
+          try {
+            const evs = await writer.listEvents(host, child, q);
+            console.log(`\n== ${host} ${child} ${q || "(default)"}: ${evs.length} events`);
+            if (evs[0]) console.log(`  keys: ${Object.keys(evs[0]).join(", ")}`);
+            for (const e of evs.slice(0, 40)) {
+              const pick = Object.entries(e).filter(([k]) => /^(id|name|title|starts?_at|start|date|particip|own|indicat|registr|enroll|can_|status)/i.test(k));
+              console.log(`  ${pick.map(([k, v]) => `${k}=${JSON.stringify(v)?.slice(0, 50)}`).join(" ")}`);
+            }
+          } catch (err) {
+            console.log(`== ${host} ${child}: ${(err as Error).message}`);
+          }
+        }
+      }
+      break;
+    }
     case "myclub-discover": {
       const { discoverMyClub } = await import("./myclub-discover.js");
       await discoverMyClub(cfg);
