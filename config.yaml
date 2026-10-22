@@ -63,7 +63,7 @@ attendance:
   children: [Oliver, Oskar]
   poll: { days: [sun], time: "19:00" }
   apply: { days: [mon], time: "06:15" }
-  live: false
+  live: true    # verified 2026-10-22 with myclub-signup-test (no-op re-confirm)
 
 outlook:
   enabled: true
