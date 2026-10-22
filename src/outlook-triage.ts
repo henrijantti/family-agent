@@ -41,7 +41,7 @@ export function classify(m: MailMessage, opts: { skipDomains?: string[]; self?: 
   if (AUTHORITY_DOMAINS.test(domain)) return "important";
   if (NEVER_NEWSLETTER.test(domain)) return null;
   if (isNewsletter(m)) return "newsletter";
-  if (m.importance === "high") return "important";
+  // "High importance" is left out: marketing mail sets it too.
   // Mail from a person, a reply in a conversation, or mail whose subject asks for action.
   if (PERSONAL_DOMAINS.test(domain) && !BULK_SENDER.test(from)) return "important";
   if (/^(re|vs|vast|sv|aw|fw|fwd|vl)\s*:/i.test(m.subject ?? "")) return "important";
