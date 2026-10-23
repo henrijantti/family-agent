@@ -7,7 +7,7 @@ import { test } from "node:test";
 import { FakeCalendar } from "../src/calendar/fake.js";
 import { emptyState } from "../src/lib/state.js";
 import { handle, Tool } from "../src/agent/mcp.js";
-import { CHAT_TAG, eventTimes, familyTools } from "../src/agent/family-tools.js";
+import { CHAT_TAG, eventTimes, familyTools, updatedTimes } from "../src/agent/family-tools.js";
 import { BrainDeps, brainTools, lint, slugify } from "../src/agent/brain.js";
 import { testConfig } from "./config.js";
 
@@ -65,6 +65,18 @@ test("event times: all-day, default one hour, past midnight, multi-day", () => {
   assert.equal((eventTimes("2026-10-28", "17:30").end as any).dateTime, "2026-10-28T18:30:00+02:00");
   assert.equal((eventTimes("2026-10-28", "23:00", "01:00").end as any).dateTime, "2026-10-29T01:00:00+02:00");
   assert.deepEqual(eventTimes("2026-10-28", undefined, undefined, "2026-10-30").end, { date: "2026-10-31" });
+  // Default end past midnight lands on the next day.
+  assert.equal((eventTimes("2026-10-28", "23:30").end as any).dateTime, "2026-10-29T00:30:00+02:00");
+});
+
+test("updates keep the fields not given: moving the date keeps the times, a new start keeps the duration", () => {
+  const timed = { id: "e", start: { dateTime: "2026-10-28T09:00:00+02:00" }, end: { dateTime: "2026-10-28T14:00:00+02:00" } };
+  const iso = (t: any) => [t.start.dateTime ?? t.start.date, t.end.dateTime ?? t.end.date];
+  assert.deepEqual(iso(updatedTimes(timed, { date: "2026-10-30" })), ["2026-10-30T09:00:00+02:00", "2026-10-30T14:00:00+02:00"]);
+  assert.deepEqual(iso(updatedTimes(timed, { start: "10:00" })), ["2026-10-28T10:00:00+02:00", "2026-10-28T15:00:00+02:00"]);
+  assert.deepEqual(iso(updatedTimes(timed, { end: "16:00" })), ["2026-10-28T09:00:00+02:00", "2026-10-28T16:00:00+02:00"]);
+  const allDay = { id: "a", start: { date: "2026-10-28" }, end: { date: "2026-10-30" } };
+  assert.deepEqual(iso(updatedTimes(allDay, { date: "2026-11-02" })), ["2026-11-02", "2026-11-04"]);
 });
 
 test("calendar_add tags the event, skips a duplicate, and the chat can change and remove only its own events", async () => {
@@ -159,8 +171,9 @@ test("brain_capture writes one new inbox file, commits and pushes it to main", a
   assert.match(text, /^# Pelaajien äänet line two\n\nhttps:\/\/x.com\/a\/1\n\nCoach said X/);
   assert.match(git(d.remote, "log", "-1", "--format=%s", "main"), /^capture: Pelaajien äänet line two/);
   // Same title again gets its own file, never overwrites.
-  const r2 = (await call(tools, "brain_capture", { title: "Pelaajien äänet line two", text: "again" })).json();
+  const r2 = (await call(tools, "brain_capture", { title: "Pelaajien äänet line two", text: "again\n\n\n\nkept" })).json();
   assert.equal(r2.saved, "inbox/2026-10-23-pelaajien-aanet-line-two-2.md");
+  assert.match(readFileSync(join(d.root, r2.saved), "utf8"), /again\n\n\n\nkept\n/);
 });
 
 test("brain reads skip excluded folders; paths can't escape", async () => {
@@ -207,6 +220,9 @@ test("brain_propose puts the ingest on a review branch, never on main, and refus
   // The local clone stays on main with the inbox item still there until Henri merges.
   assert.ok(existsSync(join(d.root, "inbox/2026-10-01-old-idea.md")));
   assert.equal(git(d.root, "branch", "--show-current").trim(), "main");
+  // Same title again (or a retry) gets a new branch instead of failing.
+  const again = (await call(tools, "brain_propose", { title: "Old idea filed", summary: "retry", files: [{ path: "wisdom/principles/old-idea.md", content: "# Old idea v2" }] })).json();
+  assert.equal(again.branch, "ingest/2026-10-23-old-idea-filed-2");
 });
 
 test("brain lint finds drift, overdue reviews and principles without evidence", () => {

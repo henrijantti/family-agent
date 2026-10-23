@@ -55,7 +55,7 @@ export function eventTimes(date: string, start?: string, end?: string, endDate?:
     return { start: { date }, end: { date: addDays(endDate ?? date, 1) } };
   }
   const endTime = end ?? addMinutes(start, 60);
-  const lastDay = endDate ?? (end && end <= start ? addDays(date, 1) : date);
+  const lastDay = endDate ?? (endTime <= start ? addDays(date, 1) : date);
   return {
     start: { dateTime: localIso(date, start), timeZone: "Europe/Helsinki" },
     end: { dateTime: localIso(lastDay, endTime), timeZone: "Europe/Helsinki" },
@@ -65,6 +65,24 @@ export function eventTimes(date: string, start?: string, end?: string, endDate?:
 function addMinutes(hhmm: string, n: number): string {
   const m = (Number(hhmm.slice(0, 2)) * 60 + Number(hhmm.slice(3)) + n) % 1440;
   return `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
+}
+
+/** New times for an update: fields not given keep their current value, and a moved start keeps the duration. */
+export function updatedTimes(ev: CalendarEvent, a: { date?: string; start?: string; end?: string; endDate?: string }) {
+  const allDay = "date" in ev.start;
+  const curDate = allDay ? (ev.start as { date: string }).date : localParts(new Date((ev.start as { dateTime: string }).dateTime)).date;
+  const date = a.date ?? curDate;
+  if (allDay && !a.start) {
+    if (a.end) throw new ToolError("end needs a start time");
+    const span = daysBetween(curDate, (ev.end as { date: string }).date) - 1;
+    return eventTimes(date, undefined, undefined, a.endDate ?? addDays(date, Math.max(span, 0)));
+  }
+  const curStart = allDay ? undefined : new Date((ev.start as { dateTime: string }).dateTime);
+  const start = a.start ?? localParts(curStart!).time;
+  if (a.end || a.endDate) return eventTimes(date, start, a.end ?? (curStart ? localParts(new Date((ev.end as { dateTime: string }).dateTime)).time : undefined), a.endDate);
+  const minutes = curStart ? (Date.parse((ev.end as { dateTime: string }).dateTime) - curStart.getTime()) / 60_000 : 60;
+  const endAt = localParts(new Date(Date.parse(localIso(date, start)) + minutes * 60_000));
+  return eventTimes(date, start, endAt.time, endAt.date);
 }
 
 async function ownEvent(d: FamilyDeps, which: Writable, id: string): Promise<{ calendarId: string; ev: CalendarEvent }> {
@@ -163,14 +181,13 @@ export function familyTools(d: FamilyDeps): Tool[] {
       async run(a) {
         const which = a.calendar as Writable;
         const { calendarId, ev } = await ownEvent(d, which, a.id as string);
-        const oldDate = "date" in ev.start ? ev.start.date : localParts(new Date(ev.start.dateTime)).date;
         const timesChanged = a.date || a.start || a.end || a.endDate;
         const next: CalendarEvent = {
           ...ev,
           summary: (a.title as string) ?? ev.summary,
           location: (a.location as string) ?? ev.location,
           description: a.notes ? `${a.notes}\n\nAdded from the family chat.` : ev.description,
-          ...(timesChanged ? eventTimes((a.date as string) ?? oldDate, a.start as string, a.end as string, a.endDate as string) : {}),
+          ...(timesChanged ? updatedTimes(ev, a as { date?: string; start?: string; end?: string; endDate?: string }) : {}),
         };
         await cal(d).update(calendarId, ev.id, next);
         return { status: "updated", id: ev.id, calendar: which, start: when(next.start) };

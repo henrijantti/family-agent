@@ -134,6 +134,16 @@ async function pushMain(d: BrainDeps) {
   }
 }
 
+async function branchTaken(d: BrainDeps, branch: string): Promise<boolean> {
+  const local = await git(d, ["rev-parse", "--verify", "--quiet", `refs/heads/${branch}`]).then(
+    () => true,
+    () => false,
+  );
+  if (local || !d.push) return local;
+  const { stdout } = await git(d, ["ls-remote", "--heads", "origin", branch]);
+  return stdout.trim() !== "";
+}
+
 /** Vault health in numbers, per the monthly lint in AGENTS.md. Pure reads. */
 export function lint(d: BrainDeps) {
   const today = localParts(d.now()).date;
@@ -191,9 +201,10 @@ export function brainTools(d: BrainDeps): Tool[] {
         let rel = `${base}.md`;
         for (let i = 2; existsSync(join(d.root, rel)); i++) rel = `${base}-${i}.md`;
         const title = (a.title as string).replace(/\s+/g, " ").trim();
-        const body = [`# ${title}`, "", a.url ? `${a.url}\n` : "", a.text as string, "", `_Captured from Telegram ${p.date} ${p.time}_`, ""].join("\n");
+        // Henri's text goes in untouched; only the frame around it is ours.
+        const body = `# ${title}\n\n${a.url ? `${a.url}\n\n` : ""}${a.text as string}\n\n_Captured from Telegram ${p.date} ${p.time}_\n`;
         mkdirSync(dirname(join(d.root, rel)), { recursive: true });
-        writeFileSync(join(d.root, rel), body.replace(/\n{3,}/g, "\n\n"), { flag: "wx" });
+        writeFileSync(join(d.root, rel), body, { flag: "wx" });
         await git(d, ["add", "--", rel]);
         await git(d, ["commit", "--quiet", "-m", `capture: ${title}`, "--", rel]);
         await pushMain(d);
@@ -293,7 +304,10 @@ export function brainTools(d: BrainDeps): Tool[] {
         }
         for (const p of clear) if (!existsSync(safePath(d, p))) throw new ToolError(`${p} is not in the inbox`);
         await syncMain(d);
-        const branch = `ingest/${localParts(d.now()).date}-${slugify(a.title as string)}`;
+        // A retry or a second proposal with the same title gets its own branch, never reuses one.
+        const base = `ingest/${localParts(d.now()).date}-${slugify(a.title as string)}`;
+        let branch = base;
+        for (let i = 2; await branchTaken(d, branch); i++) branch = `${base}-${i}`;
         const wt = mkdtempSync(join(tmpdir(), "brain-ingest-"));
         try {
           await git(d, ["worktree", "add", "--quiet", "-b", branch, wt, "HEAD"]);
