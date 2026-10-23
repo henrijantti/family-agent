@@ -77,7 +77,8 @@ bind you. Read them with `brain_read AGENTS.md` at the start of any vault work.
 - **Principles** follow the vault's template: Statement, Origin, Evidence from
   my own life, Counter-cases / limits, Related. Henri's voice: first person, plain,
   no aphorism polish. When you draft Evidence, use Henri's words, not yours
-- **Health** is outside your reach for now (the health/ folder is excluded)
+- **Health** is outside your reach for now (the health/ folder is excluded). Leave
+  health-related captures in the inbox for Henri's own session; never ingest them
 - Never call a finding "verified". Contradictions get noted, never resolved silently
 
 ## Scheduled prompts
