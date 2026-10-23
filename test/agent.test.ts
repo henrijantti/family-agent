@@ -125,6 +125,17 @@ test("week_overview renders without sending anything", async () => {
   assert.doesNotMatch(r.text, /<b>/);
 });
 
+test("digest_data gives the AI the week as data without marking anything sent", async () => {
+  const { tools } = family();
+  const w = (await call(tools, "digest_data", { kind: "week" })).json();
+  assert.equal(w.days.length, 7);
+  const tue = w.days.find((x: any) => x.date === "2026-10-27");
+  assert.deepEqual([tue.events[0].who, tue.events[0].what, tue.events[0].start], ["Oliver", "Kiekko-Espoo harjoitus", "17:00"]);
+  const daily = (await call(tools, "digest_data", { kind: "daily" })).json();
+  assert.equal(daily.days.length, 1);
+  assert.ok(daily.comingUp.some((e: any) => e.what === "Kiekko-Espoo harjoitus"));
+});
+
 // ---------- Brain vault ----------
 
 function git(cwd: string, ...args: string[]) {

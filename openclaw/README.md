@@ -9,7 +9,7 @@ gateway. The agent's sandbox stays as it is (no network, no secrets, no shell).
 
 | Server | Command | Tools |
 | --- | --- | --- |
-| family | `family-agent-run.sh mcp family` | `calendar_list`, `calendar_add`, `calendar_update`, `calendar_delete`, `week_overview`, `bills_list` |
+| family | `family-agent-run.sh mcp family` | `calendar_list`, `calendar_add`, `calendar_update`, `calendar_delete`, `week_overview`, `digest_data`, `bills_list` |
 | brain | `family-agent-run.sh mcp brain` | `brain_capture`, `brain_index`, `brain_read`, `brain_search`, `brain_inbox`, `brain_lint`, `brain_propose` |
 
 Try any tool once from a shell: `npm run agent -- tool family calendar_list '{"from":"2026-10-26"}'`.
@@ -63,11 +63,47 @@ gateway rewrites hand edits).
 | Sat 10:00 | `Inbox nudge. Call brain_inbox. If it has items, tell Henri how many and the three oldest titles, and offer to ingest one now. If empty, say so in one line.` |
 | 1st of month 09:00 | `Monthly lint. Call brain_lint and report in at most 8 lines: inbox backlog, index drift, orphans, overdue reviews, principles still without evidence. Then ask the nextQuizQuestion as a quiz.` |
 
-7. **Smoke test** in the DM: "mitä viikonloppuna?", "lisää Oskarille hammaslääkäri ti 15:00
+7. **AI-written digest, shadow mode** (Henri chose "fully native, AI does the jobs",
+   2026-10-23). Two more cron jobs on agent `henri`, delivered to Henri's DM only, while
+   the scripted digest keeps posting to the family group:
+
+| When | Prompt |
+| --- | --- |
+| Daily 06:50 | `Morning digest, shadow run. Call digest_data with kind daily and write today's digest following the digest rules in AGENTS.md. Start with "Varjoajo:" so Henri knows it's the test version.` |
+| Sun 19:05 | `Week summary, shadow run. Call digest_data with kind week and write next week's summary following the digest rules in AGENTS.md. Start with "Varjoajo:".` |
+
+8. **Smoke test** in the DM: "mitä viikonloppuna?", "lisää Oskarille hammaslääkäri ti 15:00
    kouluun" then "poista se", send a photo of any notice, "brain: test capture", "ingest"
 
 Memory: one more agent and two small Node processes; check `free -m` after start
 (about 1.1 GB was free before).
+
+## Moving the jobs to OpenClaw (plan)
+
+Henri chose to have the AI run the jobs. The order keeps the family group from getting
+anything twice and keeps a working fallback at each step:
+
+1. **Now: shadow.** The AI writes the digest and the week summary to Henri's DM from
+   `digest_data`; the scripts still post to the family group. Henri compares a few days
+2. **Digest cutover.** Add the new bot to the family group, point the two cron jobs at
+   the group, turn off the script digest (config), and add a `digest_mark_sent` tool so
+   bills and Wilma items aren't repeated. Not built yet
+3. **Sync and bills.** MyClub to calendar, and the Outlook bill scan, become tools the
+   agent calls from cron (`sync_myclub`, `scan_bills`, wrapping the tested code). They
+   write state, so they replace the tick's runs at the same moment, never alongside.
+   Not built yet
+4. **Attendance polls.** Telegram polls need the bot's getUpdates, which OpenClaw owns once
+   the bot moves. Plan: the agent posts per child one message with buttons per event,
+   presses come back to the agent (`callback_data`), a `attendance_record` tool stores
+   them, and Monday's `attendance_apply` tool runs the existing MyClub sign-up code. The
+   last step, since it signs the boys up and out in MyClub. Not built yet
+5. **Bot handover.** When nothing in family-agent reads getUpdates (polls moved, and the
+   email approval buttons from PR #1 moved too), `@Family_fff_bot`'s token can move to
+   OpenClaw and the extra bot goes away
+
+ChatGPT Plus usage: two short AI runs a day for the digest, more for polls. The scripts
+used none. If the 5-hour or weekly limit is hit, OpenClaw falls back to Claude Sonnet
+(pay per use); that fallback is untested.
 
 ## Not built yet
 
