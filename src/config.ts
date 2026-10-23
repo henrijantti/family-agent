@@ -1,7 +1,6 @@
 import { readFileSync } from "node:fs";
 import { parse } from "yaml";
 import type { Day } from "./lib/time.js";
-import type { AssistantConfig } from "./mail-assistant.js";
 
 export interface RunSlot {
   days: Day[];
@@ -43,8 +42,8 @@ export interface Config {
     scan_lookback_days: number;
     /** Move Wilma's notification emails out of the inbox into this folder. */
     wilma_folder?: { name: string; senders: string[] };
-    /** Email assistant: reply drafts offered in Henri's private Telegram chat. */
-    assistant?: AssistantConfig;
+    /** The OpenClaw Email agent's tool server (src/agent/mail-tools.ts). */
+    email_agent?: { send: boolean; self: string[] };
   };
 }
 

@@ -7,9 +7,11 @@ import { addDays, daysBetween } from "../lib/time.js";
 // app registration (personal accounts only, public client, device-code
 // sign-in). Delegated scopes: Mail.ReadWrite, MailboxSettings.ReadWrite,
 // offline_access. The client refuses every send endpoint except one:
-// sendDraft(), which the email assistant calls only after Henri pressed Send
-// on that draft in Telegram, and only when outlook.assistant.send is on (then
-// Mail.Send is requested too, and the sign-in must be redone once).
+// sendDraft(), used only by the Email agent's mail_send tool, which OpenClaw
+// holds for Henri's approval and which sends only plain replies to the
+// original sender (src/agent/mail-tools.ts). It works only with
+// outlook.email_agent.send on, which also requests Mail.Send (the sign-in is
+// redone once).
 
 const AUTHORITY = "https://login.microsoftonline.com/consumers/oauth2/v2.0";
 const GRAPH = "https://graph.microsoft.com/v1.0";
@@ -28,6 +30,11 @@ export interface MailMessage {
   categories?: string[];
   importance?: "low" | "normal" | "high";
   internetMessageHeaders?: { name: string; value: string }[];
+  toRecipients?: { emailAddress: { name?: string; address: string } }[];
+  ccRecipients?: { emailAddress: { name?: string; address: string } }[];
+  bccRecipients?: { emailAddress: { name?: string; address: string } }[];
+  isDraft?: boolean;
+  conversationId?: string;
 }
 
 export interface MailApi {
@@ -201,12 +208,32 @@ export class GraphMail implements MailApi {
     return this.call<{ id: string }>("POST", `/me/messages/${messageId}/createReply`, { comment: text });
   }
 
+  /** One message with recipients and body, for reading or checking a draft. */
+  getMessage(id: string) {
+    const q = "$select=id,subject,from,toRecipients,ccRecipients,bccRecipients,receivedDateTime,bodyPreview,body,categories,flag,isDraft,conversationId";
+    return this.call<MailMessage>("GET", `/me/messages/${encodeURIComponent(id)}?${q}`);
+  }
+
+  async setCategories(id: string, categories: string[]) {
+    await this.call("PATCH", `/me/messages/${encodeURIComponent(id)}`, { categories });
+  }
+
+  /** Ids of well-known folders (deleteditems, junkemail, archive, ...); missing ones are left out. */
+  async wellKnownFolderIds(names: string[]) {
+    const out: Record<string, string> = {};
+    for (const n of names) {
+      const f = await this.call<{ id: string }>("GET", `/me/mailFolders/${n}?$select=id`).catch(() => undefined);
+      if (f) out[n] = f.id;
+    }
+    return out;
+  }
+
   /**
-   * Sends one existing draft, as it now stands in Drafts (Henri may have edited
-   * it). Only the email assistant calls this, after Henri approved that draft.
+   * Sends one existing draft, as it now stands in Drafts (Henri may have
+   * edited it). Only the Email agent's mail_send tool calls this.
    */
   async sendDraft(draftId: string) {
-    if (!this.canSend) throw new Error("Sending is off (outlook.assistant.send)");
+    if (!this.canSend) throw new Error("Sending is off (outlook.email_agent.send)");
     await this.call("POST", `/me/messages/${encodeURIComponent(draftId)}/send`, undefined, true);
   }
 

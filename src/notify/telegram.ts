@@ -1,9 +1,8 @@
 import { requireEnv } from "../config.js";
 
 // Telegram bot. It posts the digest and alerts, and the weekly practice
-// polls. Poll answers are read by closing the poll. The one thing it reads is
-// Henri's private chat: email assistant button presses and replies there
-// (updates from any other chat are skipped).
+// polls; it never acts on chat messages. Poll answers are read by closing the
+// poll, so the bot never has to read the group's conversation.
 
 export interface Notifier {
   send(chatId: string, html: string): Promise<void>;
@@ -11,24 +10,6 @@ export interface Notifier {
   poll?(chatId: string, question: string, options: string[]): Promise<{ messageId: number }>;
   /** Closes the poll and returns the voter count per option. */
   stopPoll?(chatId: string, messageId: number): Promise<number[]>;
-  /** Message with inline buttons; returns its message id. */
-  sendButtons?(chatId: string, html: string, buttons: Button[]): Promise<number>;
-  /** Button presses and messages since the last call. */
-  updates?(offset?: number): Promise<Update[]>;
-  answerButton?(callbackId: string, text: string): Promise<void>;
-  /** Replaces a message's text and removes its buttons. */
-  edit?(chatId: string, messageId: number, html: string): Promise<void>;
-}
-
-export interface Button {
-  text: string;
-  data: string; // at most 64 bytes
-}
-
-export interface Update {
-  update_id: number;
-  callback_query?: { id: string; from: { id: number }; data?: string; message?: { message_id: number; chat: { id: number } } };
-  message?: { message_id: number; from?: { id: number }; chat: { id: number; type: string }; text?: string; reply_to_message?: { message_id: number } };
 }
 
 const LIMIT = 4000; // Telegram's hard limit is 4096
@@ -85,29 +66,6 @@ export class TelegramBot implements Notifier {
   async stopPoll(chatId: string, messageId: number) {
     const p = await this.api<{ options: { voter_count: number }[] }>("stopPoll", { chat_id: chatId, message_id: messageId });
     return p.options.map((o) => o.voter_count);
-  }
-
-  async sendButtons(chatId: string, html: string, buttons: Button[]) {
-    const m = await this.api<{ message_id: number }>("sendMessage", {
-      chat_id: chatId,
-      text: html.slice(0, LIMIT),
-      parse_mode: "HTML",
-      disable_web_page_preview: true,
-      reply_markup: { inline_keyboard: [buttons.map((b) => ({ text: b.text, callback_data: b.data }))] },
-    });
-    return m.message_id;
-  }
-
-  updates(offset?: number) {
-    return this.api<Update[]>("getUpdates", { offset, timeout: 0, allowed_updates: ["callback_query", "message"] });
-  }
-
-  async answerButton(callbackId: string, text: string) {
-    await this.api("answerCallbackQuery", { callback_query_id: callbackId, text: text.slice(0, 200) });
-  }
-
-  async edit(chatId: string, messageId: number, html: string) {
-    await this.api("editMessageText", { chat_id: chatId, message_id: messageId, text: html.slice(0, LIMIT), parse_mode: "HTML", disable_web_page_preview: true });
   }
 
   /** Lists chats the bot has seen, to find the family group's chat id during setup. */
