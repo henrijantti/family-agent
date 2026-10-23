@@ -29,7 +29,7 @@ export interface Ctx {
 const familyChat = () => env("TELEGRAM_FAMILY_CHAT_ID");
 const privateChat = () => env("TELEGRAM_PRIVATE_CHAT_ID");
 
-function calId(cfg: Config, which: "family" | "school" | "hobbies") {
+export function calId(cfg: Config, which: "family" | "school" | "hobbies") {
   const name = which === "family" ? cfg.calendar.family_calendar_id_env : which === "school" ? cfg.calendar.school_calendar_id_env : cfg.calendar.hobbies_calendar_id_env;
   return env(name);
 }
