@@ -1,6 +1,7 @@
 import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { htmlToText, type MailMessage } from "../sources/outlook.js";
+import { MAX_PDF_BYTES, readBillPdf, type BillFields } from "../sources/bill-pdf.js";
 import { Tool, ToolError } from "./mcp.js";
 
 // Tools for the Email agent, an OpenClaw agent of its own that gets only these.
@@ -38,6 +39,9 @@ export interface MailToolApi {
   unflag(messageId: string): Promise<void>;
   /** Absent when sending is off. */
   sendDraft?(draftId: string): Promise<void>;
+  /** File attachments (id, type, size); with attachmentBytes, enables mail_bill_pdf. */
+  listAttachments?(messageId: string): Promise<{ id: string; contentType: string; size: number; isInline: boolean }[]>;
+  attachmentBytes?(messageId: string, attachmentId: string): Promise<Uint8Array>;
 }
 
 /** A reply draft this agent made; mail_send only sends drafts recorded here. */
@@ -66,7 +70,22 @@ export interface MailDeps {
   approvalWaitMs?: number;
   /** Sorting rules learned from Henri's corrections (server only). No file, no rule tools. */
   rulesFile?: string;
+  /** Record of mail_bill_pdf reads; desk_report checks reported IBANs against it. */
+  billPdfFile?: string;
 }
+
+/** What mail_bill_pdf read from one email's PDF, as recorded. */
+export interface PdfBillRecord extends Omit<BillFields, "source"> {
+  messageId: string;
+  source: BillFields["source"];
+  at: string;
+}
+
+export function pdfBillReads(file: string | undefined, messageId: string): PdfBillRecord[] {
+  return file ? lines<PdfBillRecord>(file).filter((r) => r.messageId === messageId) : [];
+}
+
+const MAX_PDFS = 3;
 
 /** What the agent does with mail from a sender, as Henri taught it. */
 export const RULE_ACTIONS = ["folder", "important", "not_newsletter", "keep_in_inbox"] as const;
@@ -262,6 +281,40 @@ export function mailTools(d: MailDeps): Tool[] {
       },
     },
   ];
+  if (d.mail.listAttachments && d.mail.attachmentBytes) {
+    const list = d.mail.listAttachments.bind(d.mail);
+    const bytes = d.mail.attachmentBytes.bind(d.mail);
+    tools.push({
+      name: "mail_bill_pdf",
+      description:
+        "Read the payment details from an email's PDF bill: amount, currency, due date, IBAN and reference, checked against their check digits. Returns those fields only, never the PDF's text. Read-only: nothing is paid.",
+      input: { properties: { id: { type: "string", pattern: ID, description: "the email with the PDF" } }, required: ["id"] },
+      async run(a) {
+        const id = String(a.id);
+        const pdfs = (await list(id)).filter((x) => /pdf/i.test(x.contentType) && !x.isInline);
+        if (!pdfs.length) return { pdfs: 0, note: "no PDF attachment on this email" };
+        const out = [];
+        for (const [i, p] of pdfs.slice(0, MAX_PDFS).entries()) {
+          if (p.size > MAX_PDF_BYTES) {
+            out.push({ pdf: i + 1, unreadable: "too_big" });
+            continue;
+          }
+          const r = await readBillPdf(await bytes(id, p.id));
+          if (!r.ok) {
+            out.push({ pdf: i + 1, unreadable: r.unreadable });
+            continue;
+          }
+          const { source, ...fields } = r.fields;
+          if (d.billPdfFile && Object.keys(fields).length) {
+            mkdirSync(dirname(d.billPdfFile), { recursive: true });
+            appendFileSync(d.billPdfFile, JSON.stringify({ messageId: id, ...fields, source, at: d.now().toISOString() } satisfies PdfBillRecord) + "\n", { mode: 0o600 });
+          }
+          out.push({ pdf: i + 1, pages: r.pages, ...fields, from: source === "barcode" ? "virtual bar code" : "printed labels", missing: r.missing });
+        }
+        return { pdfs: pdfs.length, ...(pdfs.length > MAX_PDFS ? { note: `read the first ${MAX_PDFS}` } : {}), results: out };
+      },
+    });
+  }
   if (d.rulesFile) {
     const file = d.rulesFile;
     tools.push(

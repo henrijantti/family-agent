@@ -7,6 +7,7 @@ import { feesDue, MyClubSnapshot, openSignups } from "../sources/myclub.js";
 import { calId, collectHub, Ctx } from "../jobs.js";
 import { StateData } from "../lib/state.js";
 import { addDays, daysBetween, localIso, localParts } from "../lib/time.js";
+import { weekPlan } from "../digest/week-plan.js";
 import { Tool, ToolError } from "./mcp.js";
 
 // Tools for the chat front door. Reads cover all three calendars and the bill
@@ -28,6 +29,8 @@ export interface FamilyDeps {
   now(): Date;
   /** The family-group agent's copy: no bills (they are Henri's, from his Outlook). */
   group?: boolean;
+  /** The mail desk's file: bills the Email agent reported go into Henri's week plan. */
+  deskFile?: string;
 }
 
 type Writable = "school" | "hobbies";
@@ -262,6 +265,15 @@ export function familyTools(d: FamilyDeps): Tool[] {
       },
     },
     {
+      name: "week_plan",
+      description:
+        "Henri's Sunday week plan for next Monday to Sunday, ready to post to Henri as it is (Finnish, his layout): bills due (with the PDF's reference when the Email agent read it), MyClub fees and sign-ups, Wilma exams, driving clashes, each day, events per child and free evenings. Read-only, sends nothing. Henri's own chat only: it holds his bills.",
+      input: { properties: {} },
+      async run() {
+        return weekPlan(ctx(d), d.deskFile, "markdown");
+      },
+    },
+    {
       name: "bills_list",
       description: "Open bills found in Henri's Outlook: biller, amount, due date, reference, days left. Read-only; paying stays with Henri.",
       input: { properties: { all: { type: "boolean", description: "true = every tracked bill, default only due within 14 days or overdue" } } },
@@ -283,7 +295,7 @@ export function familyTools(d: FamilyDeps): Tool[] {
       },
     },
   ];
-  return d.group ? tools.filter((t) => t.name !== "bills_list") : tools;
+  return d.group ? tools.filter((t) => t.name !== "bills_list" && t.name !== "week_plan") : tools;
 }
 
 export function stripHtml(html: string): string {

@@ -9,7 +9,7 @@ gateway. The agent's sandbox stays as it is (no network, no secrets, no shell).
 
 | Server | Command | Tools |
 | --- | --- | --- |
-| family | `family-agent-run.sh mcp family` | `calendar_list`, `calendar_add`, `calendar_update`, `calendar_delete`, `week_overview`, `digest_data`, `bills_list` |
+| family | `family-agent-run.sh mcp family` | `calendar_list`, `calendar_add`, `calendar_update`, `calendar_delete`, `week_overview`, `digest_data`, `bills_list`, `week_plan` (not in the `--group` copy) |
 | brain | `family-agent-run.sh mcp brain` | `brain_capture`, `brain_index`, `brain_read`, `brain_search`, `brain_inbox`, `brain_lint`, `brain_propose` |
 | jobs | `family-agent-run.sh mcp jobs` | `sync_myclub`, `scan_bills`, `digest_mark_sent`, `attendance_week`, `attendance_record`, `attendance_apply` (each refuses until its job is in `agent_jobs`, see below) |
 
@@ -76,6 +76,7 @@ gateway rewrites hand edits).
 | --- | --- |
 | Daily 06:50 | `Morning digest, shadow run. Call digest_data with kind daily and write today's digest following the digest rules in AGENTS.md. Start with "Varjoajo:" so Henri knows it's the test version.` |
 | Sun 19:05 | `Week summary, shadow run. Call digest_data with kind week and write next week's summary following the digest rules in AGENTS.md. Start with "Varjoajo:".` |
+| Sun 19:10 | `Week plan. Call week_plan and post its text exactly as returned: no additions, no rewording, no reformatting.` |
 
 8. **Smoke test** in the DM: "mitä viikonloppuna?", "lisää Oskarille hammaslääkäri ti 15:00
    kouluun" then "poista se", send a photo of any notice, "brain: test capture", "ingest"
@@ -93,7 +94,7 @@ only link is the mail desk (below), which carries ids, categories and numbers, n
 
 | Server | Command | Tools |
 | --- | --- | --- |
-| mail | `family-agent-run.sh mcp mail` | `mail_inbox`, `mail_read`, `mail_folders`, `mail_create_folder`, `mail_move`, `mail_label`, `mail_draft_reply`, `mail_send` (only with `outlook.email_agent.send: true`) |
+| mail | `family-agent-run.sh mcp mail` | `mail_inbox`, `mail_read`, `mail_folders`, `mail_create_folder`, `mail_move`, `mail_label`, `mail_draft_reply`, `mail_bill_pdf`, `mail_send` (only with `outlook.email_agent.send: true`) |
 
 Guarantees in code (src/agent/mail-tools.ts, src/sources/outlook.ts):
 
@@ -105,6 +106,11 @@ Guarantees in code (src/agent/mail-tools.ts, src/sources/outlook.ts):
   `mail-approval` plugin when Henri answers the card, so without the plugin
   nothing sends (fails closed). Every other Graph send path stays blocked
 - Email content is returned marked untrusted
+- `mail_bill_pdf` (src/sources/bill-pdf.ts) reads PDF attachments read-only with
+  pdf.js (no eval, no fonts, 5 MB, 4 pages, 20 s cap) and returns only amount,
+  currency, due date, IBAN and reference, each format-checked and IBAN/reference
+  check-digit-checked. The PDF's text never leaves the tool. Reads are recorded
+  in `state/mail-bill-pdf.jsonl`
 
 Deploy (server thread, after Henri's OK):
 
@@ -164,7 +170,11 @@ Guarantees in code (src/agent/desk.ts):
 - The `desk` server has no Outlook access and no mail secrets; it reads and writes
   `state/mail-desk.jsonl` only
 - A report is schema-checked: message ids, a category from a fixed list, ISO due
-  date, numeric amount, currency, draft id, counts. Anything else is refused
+  date, numeric amount, currency, IBAN and reference (both must pass their check
+  digits), draft id, counts. Anything else is refused
+- Code marks a bill `fromPdf` when its IBAN/reference match what `mail_bill_pdf`
+  read, and `ibanChanged` when the same sender domain reported another IBAN before
+  (Henri's week plan shows a warning)
 - Sender address and received time are filled in by code from Outlook, never by
   the agent. Subjects, bodies and sender names are never stored
 - Agent-to-agent messaging stays off; the desk file is the only link
