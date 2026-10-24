@@ -33,12 +33,16 @@ export default definePluginEntry({
       const d = draft(stateDir, draftId);
       // Henri reads this on his phone: who, what, and the start of the reply. No ids.
       const known = !!d.replyTo;
+      // server/check.sh approval-test uses SELFTEST<time> ids and finds its card by that id.
+      const selftest = draftId.startsWith("SELFTEST");
       return {
         requireApproval: {
-          title: (known ? `📧 Lähetetäänkö vastaus: ${d.replyTo}?` : "📧 Ei lähetettävää luonnosta").slice(0, 80),
-          description: (known
-            ? `Aihe: ${d.subject || "(ei aihetta)"}\n\n${d.preview ?? ""}`
-            : "Tätä luonnosta ei löytynyt, joten mitään ei lähetetä. Paina Deny.").slice(0, 512),
+          title: (selftest ? "🔧 Palvelimen testikortti" : known ? `📧 Lähetetäänkö vastaus: ${d.replyTo}?` : "📧 Ei lähetettävää luonnosta").slice(0, 80),
+          description: (selftest
+            ? `Automaattinen testi, hylätään itsestään. Mitään ei lähetetä. (${draftId})`
+            : known
+              ? `Aihe: ${d.subject || "(ei aihetta)"}\n\n${d.preview ?? ""}`
+              : "Tätä luonnosta ei löytynyt, joten mitään ei lähetetä. Paina Deny.").slice(0, 512),
           severity: "warning",
           allowedDecisions: ["allow-once", "deny"],
           timeoutMs: 600_000,
