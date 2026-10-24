@@ -19,9 +19,10 @@ import { familyTools } from "./agent/family-tools.js";
 import { brainDepsFromEnv, brainTools } from "./agent/brain.js";
 import { mailTools } from "./agent/mail-tools.js";
 import { dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 
 const log = (s: string) => console.log(`[${new Date().toISOString()}] ${s}`);
-const FIX = new URL("../test/fixtures/", import.meta.url).pathname;
+const FIX = fileURLToPath(new URL("../test/fixtures/", import.meta.url));
 
 function store() {
   if (env("GITHUB_ACTIONS") && !env("STATE_KEY")) throw new Error("STATE_KEY secret is not set; the agent will not run without encrypted state");

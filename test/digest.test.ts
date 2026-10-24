@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { fileURLToPath } from "node:url";
 import { testConfig } from "./config.js";
 import { FakeCalendar } from "../src/calendar/fake.js";
 import { Ctx, tick } from "../src/jobs.js";
@@ -10,7 +11,7 @@ import { FixtureMyClub } from "../src/sources/myclub.js";
 import { FixtureMail } from "../src/sources/outlook.js";
 import { FixtureWilma, WilmaProvider } from "../src/sources/wilma.js";
 
-const FIX = new URL("./fixtures/", import.meta.url).pathname;
+const FIX = fileURLToPath(new URL("./fixtures/", import.meta.url));
 Object.assign(process.env, {
   GOOGLE_FAMILY_CALENDAR_ID: "family",
   GOOGLE_SCHOOL_CALENDAR_ID: "school",
