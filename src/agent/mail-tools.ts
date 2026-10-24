@@ -26,7 +26,7 @@ const FORBIDDEN_FOLDERS = ["deleteditems", "junkemail", "sentitems", "drafts", "
 type Addr = { emailAddress: { name?: string; address: string } };
 
 export interface MailToolApi {
-  listInbox(sinceIso: string, max: number): Promise<MailMessage[]>;
+  listInbox(sinceIso: string, max: number, folderId?: string): Promise<MailMessage[]>;
   getMessage(id: string): Promise<MailMessage>;
   createReplyDraft(messageId: string, text: string): Promise<{ id: string }>;
   listFolders(): Promise<{ id: string; displayName: string }[]>;
@@ -129,9 +129,11 @@ export function mailTools(d: MailDeps): Tool[] {
   const tools: Tool[] = [
     {
       name: "mail_inbox",
-      description: "List inbox mail from the last N days, newest first: id, sender, subject, received, preview, categories, flagged.",
+      description:
+        "List mail from the last N days, newest first: id, sender, subject, received, preview, categories, flagged. Inbox by default, or one of Henri's folders or Archive by name.",
       input: {
         properties: {
+          folder: { type: "string", maxLength: 60, description: "default Inbox" },
           days: { type: "integer", description: "1-30, default 2" },
           max: { type: "integer", description: "1-100, default 40" },
         },
@@ -140,7 +142,8 @@ export function mailTools(d: MailDeps): Tool[] {
         const days = Math.min(Math.max(Number(a.days ?? 2), 1), 30);
         const max = Math.min(Math.max(Number(a.max ?? 40), 1), 100);
         const since = new Date(d.now().getTime() - days * 86400000).toISOString().replace(/\.\d{3}Z$/, "Z");
-        const msgs = await d.mail.listInbox(since, max);
+        const folder = a.folder ? (await folderId(d, String(a.folder))).id : undefined;
+        const msgs = await d.mail.listInbox(since, max, folder);
         return {
           note: UNTRUSTED,
           messages: msgs.map((m) => ({

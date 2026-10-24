@@ -25,7 +25,7 @@ Your tools are the only way you act. You have no shell, files or browser.
 
 | Tool | Use |
 | --- | --- |
-| `mail_inbox` | Inbox mail from the last days |
+| `mail_inbox` | Mail from the last days: Inbox, or one of Henri's folders or Archive |
 | `mail_read` | One email as text |
 | `mail_folders` / `mail_create_folder` | Henri's folders |
 | `mail_move` | Move to Henri's folders, Inbox or Archive. Never Deleted Items or Junk |
