@@ -1,0 +1,2 @@
+# Server files run on Linux; Windows line endings break bash and systemd.
+server/** text eol=lf
