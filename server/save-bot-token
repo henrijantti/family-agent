@@ -1,0 +1,27 @@
+#!/bin/bash
+# Saves a Telegram bot token typed at a hidden prompt, for OpenClaw.
+# Installed to /usr/local/sbin/save-bot-token (root:root 755). From the laptop:
+#   ssh -t root@<server> save-bot-token assistant
+# (plain ssh over the tailnet; `tailscale ssh` has no -t, and without a TTY the
+# token would echo while typed)
+# Writes ~openclaw/.secrets/telegram-<name>-bot.env (TELEGRAM_<NAME>_BOT_TOKEN=...)
+# and telegram-<name>-bot.token (raw token, for OpenClaw's tokenFile), openclaw:root 600.
+# SECRETS_DIR overrides the target folder (used for testing).
+set -euo pipefail
+name="${1:?usage: save-bot-token <name>}"
+[[ "$name" =~ ^[a-z][a-z0-9-]*$ ]] || { echo "name must be lowercase letters, digits, dashes"; exit 2; }
+dir="${SECRETS_DIR:-/home/openclaw/.secrets}"
+var="TELEGRAM_$(echo "$name" | tr 'a-z-' 'A-Z_')_BOT_TOKEN"
+
+read -rsp "Paste the $name bot token (hidden), then Enter: " t; echo
+t="$(printf '%s' "$t" | tr -d '\r\n ')"
+[[ "$t" =~ ^[0-9]{6,12}:[A-Za-z0-9_-]{30,}$ ]] || { echo "that doesn't look like a BotFather token; nothing saved"; exit 1; }
+
+umask 077
+install -d -m 700 "$dir"
+printf '%s=%s\n' "$var" "$t" > "$dir/telegram-$name-bot.env"
+printf '%s' "$t" > "$dir/telegram-$name-bot.token"
+if id openclaw >/dev/null 2>&1; then chown openclaw:root "$dir/telegram-$name-bot.env" "$dir/telegram-$name-bot.token"; fi
+chmod 600 "$dir/telegram-$name-bot.env" "$dir/telegram-$name-bot.token"
+echo "saved, ${#t} chars"
+unset t
