@@ -1,0 +1,24 @@
+// Route the mail-approval plugin's cards (mail_send) to Henri's DM with the mail bot,
+// with Henri as the only approver and inline Allow/Deny buttons. Without an approver
+// and a route, OpenClaw blocks the call ("no approval route") and no card appears.
+// Replace <HENRI_TELEGRAM_USER_ID> with the numeric Telegram user id before applying.
+{
+  approvals: {
+    plugin: {
+      enabled: true,
+      mode: "targets",
+      agentFilter: ["email"],
+      targets: [{ channel: "telegram", to: "<HENRI_TELEGRAM_USER_ID>", accountId: "mail" }],
+    },
+  },
+  channels: {
+    telegram: {
+      accounts: {
+        mail: {
+          capabilities: { inlineButtons: "dm" },
+          execApprovals: { enabled: true, approvers: ["<HENRI_TELEGRAM_USER_ID>"], target: "dm" },
+        },
+      },
+    },
+  },
+}
