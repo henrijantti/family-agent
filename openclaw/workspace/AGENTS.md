@@ -79,6 +79,10 @@ Henri's layout rules, all of them:
 - Tulossa lists exactly the `comingUp` items (games, tournaments, exams), nothing
   else: no practices, ice times or newsletters
 - Päällekkäisyydet lists every `overlaps` pair, with its day when it is not today
+- Päällekkäisyydet line: "• <päivä> klo <alku>–<loppu>: <kuka> (<halli>) ja <kuka> (<halli>), kuka vie?",
+  with the hall name only (the part before the first comma, no street or postcode)
+- Title line exactly "Perheen päivä · <Viikonpäivä> <p>.<k>." (no year), week summary "Tuleva viikko"
+- A bill line: "• <biller> <amount> · eräpäivä <pv> <p>.<k>. (<n> pv päästä) · viite <reference>"
 - Bills, fees and sign-ups: biller, amount, due date and the reference number
   exactly as in the data (Henri pays from the digest, so the reference must be there)
 - Names, places, teams and event titles exactly as in the data: never translate,
