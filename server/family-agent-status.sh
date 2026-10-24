@@ -21,7 +21,9 @@ unit() { # name, result, last exit (ISO), active state of a user unit
   jq -n --arg u "$u" --arg r "$r" --arg t "$t" --arg a "$a" '{unit: $u, result: $r, lastExit: $t, active: $a}'
 }
 
-crons="$(timeout 60 openclaw cron list --json 2>/dev/null | jq '[.jobs[]? | {name: (.displayName // .name), agent: .agentId, enabled, lastRunStatus: (.lastRunStatus // .state.lastRunStatus), lastDelivery: (.lastDeliveryStatus // .state.lastDeliveryStatus), consecutiveErrors: (.state.consecutiveErrors // 0), lastRunAt: ((.lastRunAtMs // .state.lastRunAtMs) | if . then (./1000 | todate) else null end), nextRunAt: ((.nextRunAtMs // .state.nextRunAtMs) | if . then (./1000 | todate) else null end)}]' 2>/dev/null || echo null)"
+raw="$(timeout 60 openclaw cron list --json 2>/dev/null || true)"
+crons="$(printf '%s' "$raw" | jq -c '[.jobs[]? | {name: (.displayName // .name), agent: .agentId, enabled, lastRunStatus: (.lastRunStatus // .state.lastRunStatus), lastDelivery: (.lastDeliveryStatus // .state.lastDeliveryStatus), consecutiveErrors: (.state.consecutiveErrors // 0), lastRunAt: ((.lastRunAtMs // .state.lastRunAtMs) | if . then (./1000 | todate) else null end), nextRunAt: ((.nextRunAtMs // .state.nextRunAtMs) | if . then (./1000 | todate) else null end)}]' 2>/dev/null || true)"
+[ -n "$crons" ] || crons=null
 alerts='[]'
 if [ -d "$HOME/.local/state/family-agent-health" ]; then
   alerts="$(find "$HOME/.local/state/family-agent-health" -maxdepth 1 -type f -printf '%f\n' | jq -R . | jq -s .)"
