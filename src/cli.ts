@@ -4,7 +4,7 @@ import { FakeCalendar } from "./calendar/fake.js";
 import { GoogleCalendar } from "./calendar/google.js";
 import { eventId } from "./calendar/sync.js";
 import { Ctx, JobName, runDigest, tick, wilmaFetchDue } from "./jobs.js";
-import { StateStore } from "./lib/state.js";
+import { StateStore, type StateData } from "./lib/state.js";
 import { addDays, fromLocal, localIso, localParts, toMinutes } from "./lib/time.js";
 import { ConsoleNotifier, TelegramBot } from "./notify/telegram.js";
 import { FixtureMyClub, IcsMyClub, myclubProvider } from "./sources/myclub.js";
@@ -22,6 +22,8 @@ import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const log = (s: string) => console.log(`[${new Date().toISOString()}] ${s}`);
+/** Environment the mail tool server keeps; everything else (Telegram, Google, MyClub, STATE_KEY) is dropped. */
+const MAIL_ENV = ["PATH", "HOME", "LANG", "TZ", "NODE_OPTIONS", "NODE_EXTRA_CA_CERTS", "HTTPS_PROXY", "HTTP_PROXY", "NO_PROXY", "FAMILY_AGENT_NOW", "OUTLOOK_CLIENT_ID", "OUTLOOK_REFRESH_TOKEN"];
 const FIX = fileURLToPath(new URL("../test/fixtures/", import.meta.url));
 
 function store() {
@@ -441,9 +443,12 @@ async function main() {
         tools = brainTools(brainDepsFromEnv(clock));
       } else if (which === "mail") {
         // Reads the Outlook sign-in from state and never saves state (the tick owns it).
+        // This process reads untrusted email, so it keeps only the Outlook part of the
+        // state and drops every other secret from its environment.
         const ea = cfg.outlook.email_agent ?? { send: false, self: [] };
-        const mail = GraphMail.fromEnv(st.data, ea.send);
+        const mail = GraphMail.fromEnv({ outlook: st.data.outlook } as StateData, ea.send);
         const dir = dirname(env("STATE_FILE") ?? "state/state.json");
+        for (const k of Object.keys(process.env)) if (!MAIL_ENV.includes(k)) delete process.env[k];
         tools = mailTools({
           mail: ea.send ? mail : Object.assign(Object.create(mail), { sendDraft: undefined }),
           draftsFile: `${dir}/mail-drafts.jsonl`,

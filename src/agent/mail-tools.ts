@@ -62,6 +62,8 @@ export interface MailDeps {
   approvalsFile: string;
   self: string[];
   now(): Date;
+  /** How long mail_send waits for the plugin to finish writing Henri's Allow (default 3 s). */
+  approvalWaitMs?: number;
 }
 
 const addr = (a?: Addr) => (a?.emailAddress.address ?? "").toLowerCase();
@@ -248,6 +250,8 @@ export function mailTools(d: MailDeps): Tool[] {
         const rec = findDraft(d.draftsFile, draftId);
         if (!rec) throw new ToolError("only drafts made with mail_draft_reply can be sent");
         if (rec.sentAt) throw new ToolError("that draft was already sent");
+        // The plugin records the Allow when Henri answers; give that write a moment to land.
+        for (let waited = 0; !approved(d.approvalsFile, rec, d.now()) && waited < (d.approvalWaitMs ?? 3000); waited += 250) await new Promise((r) => setTimeout(r, 250));
         if (!approved(d.approvalsFile, rec, d.now())) throw new ToolError("not sent: Henri has not approved this draft (the approval card must be answered with Allow)");
         const draft = await d.mail.getMessage(draftId);
         const why = sendBlocker(draft, rec);
