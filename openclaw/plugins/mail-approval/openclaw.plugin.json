@@ -1,0 +1,13 @@
+{
+  "id": "mail-approval",
+  "name": "Mail approval",
+  "description": "Holds every mail_send call until Henri taps Allow, and records the Allow for the family-agent mail tool server.",
+  "entry": "./index.ts",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "stateDir": { "type": "string", "description": "family-agent state folder holding mail-drafts.jsonl and mail-approvals.jsonl" }
+    }
+  }
+}

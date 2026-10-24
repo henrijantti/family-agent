@@ -42,6 +42,8 @@ export interface Config {
     scan_lookback_days: number;
     /** Move Wilma's notification emails out of the inbox into this folder. */
     wilma_folder?: { name: string; senders: string[] };
+    /** The OpenClaw Email agent's tool server (src/agent/mail-tools.ts). */
+    email_agent?: { send: boolean; self: string[] };
   };
 }
 

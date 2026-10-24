@@ -9,11 +9,16 @@ import { addDays, fromLocal, localIso, localParts, toMinutes } from "./lib/time.
 import { ConsoleNotifier, TelegramBot } from "./notify/telegram.js";
 import { FixtureMyClub, IcsMyClub, myclubProvider } from "./sources/myclub.js";
 import { MyClubInvites, MyClubWriter } from "./sources/myclub-signup.js";
-import { FixtureMail, GraphMail, deviceSignIn } from "./sources/outlook.js";
+import { FixtureMail, GraphMail, deviceSignIn, scopes } from "./sources/outlook.js";
 import { FixtureWilma, LiveWilma, SnapshotWilma } from "./sources/wilma.js";
 import { encrypt } from "./lib/state.js";
 import { triage, triageReport } from "./outlook-triage.js";
 import { mkdirSync, writeFileSync } from "node:fs";
+import { handle, serve, Tool } from "./agent/mcp.js";
+import { familyTools } from "./agent/family-tools.js";
+import { brainDepsFromEnv, brainTools } from "./agent/brain.js";
+import { mailTools } from "./agent/mail-tools.js";
+import { dirname } from "node:path";
 
 const log = (s: string) => console.log(`[${new Date().toISOString()}] ${s}`);
 const FIX = new URL("../test/fixtures/", import.meta.url).pathname;
@@ -219,7 +224,7 @@ async function main() {
       break;
     }
     case "outlook-login": {
-      await deviceSignIn(env("OUTLOOK_CLIENT_ID")!, st.data, (s) => console.log(s));
+      await deviceSignIn(env("OUTLOOK_CLIENT_ID")!, st.data, (s) => console.log(s), scopes(!!cfg.outlook.email_agent?.send));
       st.save();
       break;
     }
@@ -421,6 +426,40 @@ async function main() {
       console.log(`----- preview -----\n${await runDigest(ctx, true)}\n----- end -----`);
       break;
     }
+    case "mcp":
+    case "tool": {
+      // mcp family|brain                 tool server on stdio for OpenClaw
+      // tool family|brain|mail <name> [json]  call one tool once (testing)
+      const which = args[0];
+      const clock = () => (env("FAMILY_AGENT_NOW") ? new Date(env("FAMILY_AGENT_NOW")!) : new Date());
+      let tools: Tool[];
+      if (which === "family") {
+        const calendar = buildCtx(cfg, st, now).calendar;
+        tools = familyTools({ cfg, calendar, loadState: () => store().data, now: clock });
+      } else if (which === "brain") {
+        tools = brainTools(brainDepsFromEnv(clock));
+      } else if (which === "mail") {
+        // Reads the Outlook sign-in from state and never saves state (the tick owns it).
+        const ea = cfg.outlook.email_agent ?? { send: false, self: [] };
+        const mail = GraphMail.fromEnv(st.data, ea.send);
+        const dir = dirname(env("STATE_FILE") ?? "state/state.json");
+        tools = mailTools({
+          mail: ea.send ? mail : Object.assign(Object.create(mail), { sendDraft: undefined }),
+          draftsFile: `${dir}/mail-drafts.jsonl`,
+          approvalsFile: `${dir}/mail-approvals.jsonl`,
+          self: ea.self,
+          now: clock,
+        });
+      } else throw new Error("usage: mcp family|brain|mail");
+      if (cmd === "mcp") {
+        serve(`family-agent-${which}`, tools);
+        return;
+      }
+      const res = (await handle(which, tools, { id: 1, method: "tools/call", params: { name: args[1], arguments: JSON.parse(args[2] ?? "{}") } })) as any;
+      console.log(res.result?.content?.[0]?.text ?? JSON.stringify(res));
+      if (res.result?.isError) process.exitCode = 1;
+      break;
+    }
     case "digest": {
       const ctx = buildCtx(cfg, st, now);
       await runDigest(ctx, args.includes("--week"));
@@ -441,7 +480,9 @@ async function main() {
   outlook-draft <id> <file> save a reply draft (never sends)
   wilma-students           list the children on the Wilma login
   wilma-fetch [--force]    (home runner) fetch Wilma if a slot is near, save the snapshot
-  digest [--week]          build and send the digest now`);
+  digest [--week]          build and send the digest now
+  mcp family|brain|mail    tool server on stdio for the OpenClaw agent
+  tool family|brain|mail <name> [json]  call one agent tool once, print the result`);
   }
 }
 

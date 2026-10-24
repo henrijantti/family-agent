@@ -47,3 +47,8 @@ src/digest/build.ts     the combined digest
 src/notify/telegram.ts  send-only bot
 test/                   fixtures and tests
 ```
+
+## OpenClaw assistant
+
+`openclaw/` holds the private Telegram assistant: two tool servers (`npm run agent -- mcp family|brain`),
+its instructions and the deploy steps. See [openclaw/README.md](openclaw/README.md).
