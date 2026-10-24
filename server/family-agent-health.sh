@@ -64,17 +64,20 @@ backup_recent() { # a backup succeeded in the last 26 hours (skips the first day
   [ "$up" -lt 93600 ] && return 0
   unit_ok family-agent-backup.service && [ -n "$(find "$HOME/.backup/repo" -maxdepth 1 -name '*.age' -mmin -1560 2>/dev/null | head -1)" ]
 }
-crons_ok() { # no enabled OpenClaw cron job whose last runs failed
-  local bad
-  bad="$(timeout 60 openclaw cron list --json 2>/dev/null | jq -r '[.jobs[]? | select(.enabled != false) | select((.state.consecutiveErrors // 0) > 0 or ((.lastRunStatus // .state.lastRunStatus // "") | test("error|fail"; "i")))] | length' 2>/dev/null)"
-  [ -z "$bad" ] || [ "$bad" = 0 ]
+crons_ok() { # the cron list is readable and no enabled job's last runs failed
+  local out bad
+  # The gateway refuses the cron list without its token (and still exits 0).
+  # shellcheck source=/dev/null
+  out="$(set -a; . "$HOME/.secrets/gateway.env"; set +a; timeout 60 openclaw cron list --json 2>/dev/null)" || return 1
+  bad="$(printf '%s' "$out" | jq -r 'if (.jobs | type) != "array" then "unreadable" else [.jobs[] | select(.enabled != false) | select((.state.consecutiveErrors // 0) > 0 or ((.lastRunStatus // .state.lastRunStatus // "") | test("error|fail"; "i")))] | length end' 2>/dev/null)"
+  [ "$bad" = 0 ]
 }
 
 check tick "Perheagentin ajo epäonnistui (viimeisin ajo päättyi virheeseen)" unit_ok family-agent-tick.service
 check tick-stale "Perheagentti ei ole ajanut 40 minuuttiin" tick_recent
 check gateway "OpenClaw-palvelu ei ole käynnissä (botit eivät vastaa)" gateway_up
 check backup "Yön varmuuskopio ei onnistunut" backup_recent
-check crons "Jokin ajastettu tehtävä (esim. aamukooste) päättyi virheeseen" crons_ok
+check crons "Jokin ajastettu tehtävä (esim. aamukooste) päättyi virheeseen, tai tehtävälistaa ei voi lukea" crons_ok
 check memory "Palvelimen muisti on vähissä (alle $MIN_FREE_MB Mt vapaana)" mem_ok
 check disk "Palvelimen levy on yli $MAX_DISK_PCT % täynnä" disk_ok
 exit 0

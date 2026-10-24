@@ -21,8 +21,10 @@ unit() { # name, result, last exit (ISO), active state of a user unit
   jq -n --arg u "$u" --arg r "$r" --arg t "$t" --arg a "$a" '{unit: $u, result: $r, lastExit: $t, active: $a}'
 }
 
-raw="$(timeout 60 openclaw cron list --json 2>/dev/null || true)"
-crons="$(printf '%s' "$raw" | jq -c '[.jobs[]? | {name: (.displayName // .name), agent: .agentId, enabled, lastRunStatus: (.lastRunStatus // .state.lastRunStatus), lastDelivery: (.lastDeliveryStatus // .state.lastDeliveryStatus), consecutiveErrors: (.state.consecutiveErrors // 0), lastRunAt: ((.lastRunAtMs // .state.lastRunAtMs) | if . then (./1000 | todate) else null end), nextRunAt: ((.nextRunAtMs // .state.nextRunAtMs) | if . then (./1000 | todate) else null end)}]' 2>/dev/null || true)"
+# The gateway refuses the cron list without its token (and still exits 0).
+# shellcheck source=/dev/null
+raw="$(set -a; . "$HOME/.secrets/gateway.env"; set +a; timeout 60 openclaw cron list --json 2>/dev/null || true)"
+crons="$(printf '%s' "$raw" | jq -c 'if (.jobs | type) != "array" then null else [.jobs[] | {name: (.displayName // .name), agent: .agentId, enabled, lastRunStatus: (.lastRunStatus // .state.lastRunStatus), lastDelivery: (.lastDeliveryStatus // .state.lastDeliveryStatus), consecutiveErrors: (.state.consecutiveErrors // 0), lastRunAt: ((.lastRunAtMs // .state.lastRunAtMs) | if . then (./1000 | todate) else null end), nextRunAt: ((.nextRunAtMs // .state.nextRunAtMs) | if . then (./1000 | todate) else null end)}] end' 2>/dev/null || true)"
 [ -n "$crons" ] || crons=null
 alerts='[]'
 if [ -d "$HOME/.local/state/family-agent-health" ]; then
