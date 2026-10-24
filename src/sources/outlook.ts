@@ -132,8 +132,8 @@ export class GraphMail implements MailApi {
     return out;
   }
 
-  /** Inbox messages since a date, with headers (for List-Unsubscribe). Read-only. */
-  async listInbox(sinceIso: string, max: number) {
+  /** Inbox (or another folder's) messages since a date, with headers (for List-Unsubscribe). Read-only. */
+  async listInbox(sinceIso: string, max: number, folderId = "inbox") {
     const q = new URLSearchParams({
       $filter: `receivedDateTime ge ${sinceIso}`,
       $select: "id,subject,from,receivedDateTime,bodyPreview,body,flag,categories,importance,internetMessageHeaders",
@@ -141,7 +141,7 @@ export class GraphMail implements MailApi {
       $top: "50",
     });
     const out: MailMessage[] = [];
-    let next: string | undefined = `/me/mailFolders/inbox/messages?${q}`;
+    let next: string | undefined = `/me/mailFolders/${encodeURIComponent(folderId)}/messages?${q}`;
     while (next && out.length < max) {
       const page: { value: MailMessage[]; "@odata.nextLink"?: string } = await this.call("GET", next);
       out.push(...page.value);

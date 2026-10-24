@@ -15,6 +15,8 @@ import { encrypt } from "./lib/state.js";
 import { triage, triageReport } from "./outlook-triage.js";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { handle, serve, Tool } from "./agent/mcp.js";
+import { jobsTools } from "./agent/jobs-tools.js";
+import { withLock } from "./lib/lock.js";
 import { familyTools } from "./agent/family-tools.js";
 import { brainDepsFromEnv, brainTools } from "./agent/brain.js";
 import { mailTools } from "./agent/mail-tools.js";
@@ -150,9 +152,13 @@ async function main() {
     case "tick": {
       const forceArg = args.find((a) => a.startsWith("--force="));
       const force = forceArg ? (forceArg.slice(8).split(",").filter(Boolean) as JobName[]) : undefined;
-      const ctx = buildCtx(cfg, st, now);
-      await tick(ctx, force);
-      st.save();
+      // The agent's job tools write the same state file: one writer at a time.
+      await withLock(env("STATE_FILE") ?? "state/state.json", async () => {
+        const fresh = store();
+        const ctx = buildCtx(cfg, fresh, now);
+        await tick(ctx, force);
+        fresh.save();
+      });
       break;
     }
     case "demo": {
@@ -431,7 +437,7 @@ async function main() {
     }
     case "mcp":
     case "tool": {
-      // mcp family|brain                 tool server on stdio for OpenClaw
+      // mcp family|brain|jobs|mail       tool server on stdio for OpenClaw
       // tool family|brain|mail <name> [json]  call one tool once (testing)
       const which = args[0];
       const clock = () => (env("FAMILY_AGENT_NOW") ? new Date(env("FAMILY_AGENT_NOW")!) : new Date());
@@ -439,6 +445,14 @@ async function main() {
       if (which === "family") {
         const calendar = buildCtx(cfg, st, now).calendar;
         tools = familyTools({ cfg, calendar, loadState: () => store().data, now: clock });
+      } else if (which === "jobs") {
+        tools = jobsTools({
+          cfg,
+          openState: store,
+          statePath: env("STATE_FILE") ?? "state/state.json",
+          makeCtx: (data, notifier) => ({ ...buildCtx(cfg, { data } as StateStore, clock()), notifier }),
+          now: clock,
+        });
       } else if (which === "brain") {
         tools = brainTools(brainDepsFromEnv(clock));
       } else if (which === "mail") {

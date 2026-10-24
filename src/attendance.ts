@@ -27,6 +27,13 @@ export interface AttendancePoll {
   status: "open" | "applied" | "no-answer" | "superseded";
 }
 
+export interface AgentPoll {
+  postedAt: string;
+  options: Record<string, PollOption[]>; // child -> events offered
+  votes: Record<string, boolean>; // `${child}|${eventId}` -> going
+  status: "open" | "applied";
+}
+
 /** Signs a child up for, or out of, one MyClub event. Returns a short result. */
 export interface AttendanceWriter {
   readonly live: boolean;
