@@ -263,8 +263,8 @@ export function buildDigest(inp: DigestInput): string {
     const coming = events.filter((e) => e.date > today && e.date <= horizon && isComingUp(e.title));
     section(t.coming, coming.map((e) => {
       const { who, what } = splitTitle(e.title);
-      return `• <b>${niceDate(e.date, t)}</b>${e.start ? ` ${e.start}` : ""} ${who ? `<b>${esc(who)}</b> · ` : ""}${esc(what)}${e.alsoOnFamily ? ` <i>(${t.alsoFamily})</i>` : ""}`;
-    }));
+      return `• <b>${niceDate(e.date, t)}</b>${e.start ? ` ${e.start}` : ""} ${who ? `<b>${esc(who)}</b> · ` : ""}${esc(what)}${e.alsoOnFamily ? ` <i>(${t.alsoFamily})</i>` : ""}${e.location ? `\n 📍 ${place(e.location)}` : ""}`;
+    }), "\n\n");
   }
 
   // School news that needs no action

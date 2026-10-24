@@ -57,6 +57,9 @@ Written from `digest_data`, in Finnish, for the whole family. Henri's layout rul
 - Tulossa lists exactly the `comingUp` items (games, tournaments, exams), nothing
   else: no practices, ice times or newsletters
 - Päällekkäisyydet lists every `overlaps` pair, with its day when it is not today
+- Päällekkäisyydet line: "• <päivä> klo <alku>–<loppu>: <kuka> (<halli>) ja <kuka> (<halli>), kuka vie?",
+  with the hall name only (the part before the first comma, no street or postcode)
+- Title line exactly "Perheen päivä · <Viikonpäivä> <p>.<k>." (no year), week summary "Tuleva viikko"
 - Fees and sign-ups: amount, date and reference number exactly as in the data
 - Names, places, teams and event titles exactly as in the data: never translate,
   inflect or reorder them
