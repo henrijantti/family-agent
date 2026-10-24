@@ -3,8 +3,9 @@
 // `openclaw config patch --file` as openclaw, after `openclaw agents add henri`.
 // Then: `openclaw agents bind --agent henri --bind telegram:assistant`.
 // Replace <HENRI_TELEGRAM_USER_ID> with the numeric Telegram user id before applying.
-// Brain: add `brain` to mcp.servers and "brain__*" to the allow lists once the
-// Brain deploy key works and ~/brain is cloned.
+// Brain: needs ~/brain cloned first with the read-write deploy key
+// (ssh://git@ssh.github.com:443/henrijantti/Brain.git, ~/.ssh/brain_deploy) and
+// BRAIN_DIR / BRAIN_EXCLUDE=health in ~/.secrets/family-agent.
 {
   channels: {
     telegram: {
@@ -46,6 +47,7 @@
   mcp: {
     servers: {
       family: { command: "/home/openclaw/family-agent-run.sh", args: ["mcp", "family"] },
+      brain: { command: "/home/openclaw/family-agent-run.sh", args: ["mcp", "brain"] },
     },
   },
   tools: { sandbox: { tools: { alsoAllow: ["mail__*", "family__*", "brain__*"] } } },
