@@ -22,7 +22,10 @@ unit() { # name, result, last exit (ISO), active state of a user unit
 }
 
 crons="$(timeout 60 openclaw cron list --json 2>/dev/null | jq '[.jobs[]? | {name: (.displayName // .name), agent: .agentId, enabled, lastRunStatus: (.lastRunStatus // .state.lastRunStatus), lastDelivery: (.lastDeliveryStatus // .state.lastDeliveryStatus), consecutiveErrors: (.state.consecutiveErrors // 0), lastRunAt: ((.lastRunAtMs // .state.lastRunAtMs) | if . then (./1000 | todate) else null end), nextRunAt: ((.nextRunAtMs // .state.nextRunAtMs) | if . then (./1000 | todate) else null end)}]' 2>/dev/null || echo null)"
-alerts="$(ls -1 "$HOME/.local/state/family-agent-health" 2>/dev/null | jq -R . | jq -s . || echo '[]')"
+alerts='[]'
+if [ -d "$HOME/.local/state/family-agent-health" ]; then
+  alerts="$(find "$HOME/.local/state/family-agent-health" -maxdepth 1 -type f -printf '%f\n' | jq -R . | jq -s .)"
+fi
 
 mkdir -p "$DIR"
 [ -d "$DIR/.git" ] || git -C "$DIR" init -q
