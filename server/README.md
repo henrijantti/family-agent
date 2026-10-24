@@ -37,6 +37,7 @@ Helsinki) from scratch. Nothing here contains secrets.
 | `family-agent.patch.json5` | `openclaw config patch --file`: agent `family` in the family group. Only at the @Family_fff_bot handover (see openclaw/README.md) |
 | `save-bot-token` | `/usr/local/sbin/save-bot-token`: `ssh -t root@<server> save-bot-token <name>` saves a Telegram bot token from a hidden prompt |
 | `check.sh` | Root helper: `bash check.sh status\|logs\|doctor\|audit\|test\|mem` (redacts secrets) |
+| `laptop/` | Not for the server: Claude Code permissions for server work from the laptop (Machina). `powershell -ExecutionPolicy Bypass -File server\laptop\install.ps1` writes `.claude\settings.local.json` and merges the `autoMode` block into `~\.claude\settings.json` (backup first, JSON validated) |
 
 ## Changing config later
 
