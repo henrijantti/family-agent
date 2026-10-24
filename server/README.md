@@ -31,6 +31,7 @@ Helsinki) from scratch. Nothing here contains secrets.
 | `systemd/family-agent-backup.service` + `.timer` | user units; backup at 02:30 Helsinki |
 | `email-agent.patch.json5` | `openclaw config patch --file`: agent `email`, `mail` MCP server, tool policy |
 | `email-telegram.patch.json5` | `openclaw config patch --file`: the mail bot (DM allowlist), then `agents bind --agent email --bind telegram:mail` |
+| `save-bot-token` | `/usr/local/sbin/save-bot-token`: `ssh -t root@<server> save-bot-token <name>` saves a Telegram bot token from a hidden prompt |
 | `check.sh` | Root helper: `bash check.sh status\|logs\|doctor\|audit\|test\|mem` (redacts secrets) |
 
 ## Changing config later
