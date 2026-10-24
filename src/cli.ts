@@ -14,6 +14,9 @@ import { FixtureWilma, LiveWilma, SnapshotWilma } from "./sources/wilma.js";
 import { encrypt } from "./lib/state.js";
 import { triage, triageReport } from "./outlook-triage.js";
 import { mkdirSync, writeFileSync } from "node:fs";
+import { handle, serve, Tool } from "./agent/mcp.js";
+import { familyTools } from "./agent/family-tools.js";
+import { brainDepsFromEnv, brainTools } from "./agent/brain.js";
 
 const log = (s: string) => console.log(`[${new Date().toISOString()}] ${s}`);
 const FIX = new URL("../test/fixtures/", import.meta.url).pathname;
@@ -421,6 +424,28 @@ async function main() {
       console.log(`----- preview -----\n${await runDigest(ctx, true)}\n----- end -----`);
       break;
     }
+    case "mcp":
+    case "tool": {
+      // mcp family|brain                 tool server on stdio for OpenClaw
+      // tool family|brain <name> [json]  call one tool once (testing)
+      const which = args[0];
+      const clock = () => (env("FAMILY_AGENT_NOW") ? new Date(env("FAMILY_AGENT_NOW")!) : new Date());
+      let tools: Tool[];
+      if (which === "family") {
+        const calendar = buildCtx(cfg, st, now).calendar;
+        tools = familyTools({ cfg, calendar, loadState: () => store().data, now: clock });
+      } else if (which === "brain") {
+        tools = brainTools(brainDepsFromEnv(clock));
+      } else throw new Error("usage: mcp family|brain");
+      if (cmd === "mcp") {
+        serve(`family-agent-${which}`, tools);
+        return;
+      }
+      const res = (await handle(which, tools, { id: 1, method: "tools/call", params: { name: args[1], arguments: JSON.parse(args[2] ?? "{}") } })) as any;
+      console.log(res.result?.content?.[0]?.text ?? JSON.stringify(res));
+      if (res.result?.isError) process.exitCode = 1;
+      break;
+    }
     case "digest": {
       const ctx = buildCtx(cfg, st, now);
       await runDigest(ctx, args.includes("--week"));
@@ -441,7 +466,9 @@ async function main() {
   outlook-draft <id> <file> save a reply draft (never sends)
   wilma-students           list the children on the Wilma login
   wilma-fetch [--force]    (home runner) fetch Wilma if a slot is near, save the snapshot
-  digest [--week]          build and send the digest now`);
+  digest [--week]          build and send the digest now
+  mcp family|brain         tool server on stdio for the OpenClaw agent
+  tool family|brain <name> [json]  call one agent tool once, print the result`);
   }
 }
 
