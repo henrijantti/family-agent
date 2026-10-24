@@ -206,6 +206,7 @@ export function dueJobs(cfg: Config, state: StateData, now: Date): DueJob[] {
   const lp = localParts(now);
   const due: DueJob[] = [];
   const check = (job: JobName, slot: RunSlot) => {
+    if (cfg.agent_jobs?.includes(job)) return; // the OpenClaw agent runs this one now
     if (!slot.days.includes(lp.day)) return;
     const start = toMinutes(slot.time);
     if (lp.minutes < start || lp.minutes >= start + WINDOW_MIN) return;

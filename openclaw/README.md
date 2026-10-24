@@ -11,6 +11,7 @@ gateway. The agent's sandbox stays as it is (no network, no secrets, no shell).
 | --- | --- | --- |
 | family | `family-agent-run.sh mcp family` | `calendar_list`, `calendar_add`, `calendar_update`, `calendar_delete`, `week_overview`, `digest_data`, `bills_list` |
 | brain | `family-agent-run.sh mcp brain` | `brain_capture`, `brain_index`, `brain_read`, `brain_search`, `brain_inbox`, `brain_lint`, `brain_propose` |
+| jobs | `family-agent-run.sh mcp jobs` | `sync_myclub`, `scan_bills`, `digest_mark_sent`, `attendance_week`, `attendance_record`, `attendance_apply` (each refuses until its job is in `agent_jobs`, see below) |
 
 Try any tool once from a shell: `npm run agent -- tool family calendar_list '{"from":"2026-10-26"}'`.
 
@@ -28,6 +29,10 @@ Try any tool once from a shell: `npm run agent -- tool family calendar_list '{"f
   `CLAUDE.md` or `templates/`, and can't read or write excluded folders
   (`health/` by default, `BRAIN_EXCLUDE`)
 - Every tool argument is checked against its schema; unknown arguments are refused
+- The jobs server writes state, so it and the 15-minute tick take a lock on the state
+  file (`state.json.lock`, one writer at a time). A job runs in one place only: the
+  tick skips every job listed in config `agent_jobs`, and the job tools refuse any job
+  not listed. `attendance_apply` acts only on events Henri answered with a button
 - git runs with fixed arguments through execFile, no shell
 
 ## Deploy (server thread)
@@ -142,18 +147,36 @@ anything twice and keeps a working fallback at each step:
 
 1. **Now: shadow.** The AI writes the digest and the week summary to Henri's DM from
    `digest_data`; the scripts still post to the family group. Henri compares a few days
-2. **Digest cutover.** Add the new bot to the family group, point the two cron jobs at
-   the group, turn off the script digest (config), and add a `digest_mark_sent` tool so
-   bills and Wilma items aren't repeated. Not built yet
-3. **Sync and bills.** MyClub to calendar, and the Outlook bill scan, become tools the
-   agent calls from cron (`sync_myclub`, `scan_bills`, wrapping the tested code). They
-   write state, so they replace the tick's runs at the same moment, never alongside.
-   Not built yet
-4. **Attendance polls.** Telegram polls need the bot's getUpdates, which OpenClaw owns once
-   the bot moves. Plan: the agent posts per child one message with buttons per event,
-   presses come back to the agent (`callback_data`), a `attendance_record` tool stores
-   them, and Monday's `attendance_apply` tool runs the existing MyClub sign-up code. The
-   last step, since it signs the boys up and out in MyClub. Not built yet
+2. **Digest cutover.** Add the new bot to the family group, point the two digest cron
+   jobs at the group (prompts below), then add `digest` and `week-ahead` to `agent_jobs`
+   in config.yaml so the script stops. The prompt ends with `digest_mark_sent`, so bills
+   and Wilma items aren't repeated. Built
+3. **Sync and bills.** Add `myclub` and `outlook` to `agent_jobs` and create the sync
+   crons below in the same step. They replace the tick's runs, never alongside. Built
+4. **Attendance.** Add `attendance-poll` and `attendance-apply` to `agent_jobs` with the
+   two crons below. The agent posts one message per child with a button per event
+   (`att|<child>|<eventId>|1` going, `|0` not going), presses come back to the agent as
+   `callback_data` and go to `attendance_record`, Monday's `attendance_apply` runs the
+   existing MyClub sign-up code. Unlike the Telegram poll, events nobody pressed are
+   left alone (the poll declined unticked ones). Last step, since it signs the boys up
+   and out in MyClub. Built
+
+Each step: change config.yaml in the repo (GitHub is master), deploy, then create the
+crons. To go back, remove the jobs from `agent_jobs` and pause the crons.
+
+| Step | When (Helsinki) | Delivered to | Prompt |
+| --- | --- | --- | --- |
+| 2 | Daily 06:45 | family group | `Morning digest. Call digest_data with kind daily and write today's digest following the digest rules in AGENTS.md. Post it, then call digest_mark_sent with kind daily.` |
+| 2 | Sun 19:00 | family group | `Week summary. Call digest_data with kind week and write next week's summary following the digest rules in AGENTS.md. Post it, then call digest_mark_sent with kind week.` |
+| 3 | Daily 06:15 | Henri's DM | `MyClub sync. Call sync_myclub. If alerts is not empty, post each alert. If health is not ok, say so in one line. Otherwise reply only NO_REPLY.` |
+| 3 | Daily 06:20 | Henri's DM | `Bill scan. Call scan_bills. List each new bill in one line (biller, amount, due date, mark new billers). If none, reply only NO_REPLY.` |
+| 4 | Sun 19:00 | family group | `Practice question. Call attendance_week. For each child with events, post one message "<child>: ensi viikon treenit" with two buttons per event, "✅ <label>" (att|<child>|<eventId>|1) and "➖ <label>" (att|<child>|<eventId>|0).` |
+| 4 | Mon 06:15 | family group | `Apply practice answers. Call attendance_apply and post the results per child in Finnish. Name children nobody answered for.` |
+
+The step 3 times follow config.yaml's MyClub and Outlook `runs`. Check that OpenClaw
+2026.10.6 drops a `NO_REPLY` cron answer (or adjust the wording), and that inline
+buttons work in groups for the bot.
+
 5. **Bot handover.** When nothing in family-agent reads getUpdates (polls moved; the email
    agent has its own bot and uses OpenClaw approvals), `@Family_fff_bot`'s token can move to
    OpenClaw and the extra bot goes away

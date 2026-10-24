@@ -1,4 +1,4 @@
-import type { AttendancePoll } from "../attendance.js";
+import type { AgentPoll, AttendancePoll } from "../attendance.js";
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
@@ -47,6 +47,8 @@ export interface StateData {
     session?: string;
     /** Weekly practice polls (see attendance.ts). */
     polls?: AttendancePoll[];
+    /** The OpenClaw agent's weekly attendance question: events offered per child and the answers given. */
+    agentPoll?: AgentPoll;
     /** MyClub event ids the family said a child will skip. */
     declined?: string[];
   };
