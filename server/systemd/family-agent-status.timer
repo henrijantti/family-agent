@@ -1,0 +1,10 @@
+# Every 15 minutes, a few minutes after each tick.
+[Unit]
+Description=Family agent status file every 15 minutes
+
+[Timer]
+OnCalendar=*:08/15
+Persistent=true
+
+[Install]
+WantedBy=timers.target
