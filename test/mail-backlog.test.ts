@@ -33,6 +33,8 @@ test("backlog target: people, bills, flagged, Tärkeä and club mail stay; bulk 
   assert.equal(target(msg("laskut@energia.fi", "Lasku", { bodyPreview: "Eräpäivä 1.6.2024 summa 45,00 €" }), rules), "Inbox");
   assert.equal(target(msg("noreply@inschool.fi", "Wilma"), rules, { skipDomains: ["inschool.fi"] }), "Inbox");
   assert.equal(target(msg("info@company.fi", "Hei"), rules), "Inbox");
+  assert.equal(target(msg("noreply@utility.fi", "Lasku lokakuu"), rules), "Inbox", "possible bill, body not checked");
+  assert.equal(target(msg("noreply@shop.fi", "Muistutus: maksamaton tilaus"), rules), "Inbox");
 });
 
 test("backlog target: Henri's learned rules win", () => {

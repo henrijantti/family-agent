@@ -19,11 +19,11 @@ MAX_DISK_PCT=85
 mkdir -p "$STATE"
 
 send() {
-  if [ "$DRY" = 1 ]; then printf -- '--- message\n%s\n' "$1"; return; fi
+  if [ "$DRY" = 1 ]; then printf -- '--- message\n%s\n' "$1"; return 1; fi # dry runs remember nothing
   local token chat
   token="$(tr -d '[:space:]' < "${HEALTH_TOKEN_FILE:-$HOME/.secrets/telegram-assistant-bot.token}")" || return
   chat="$(tr -d '[:space:]' < "${HEALTH_CHAT_FILE:-$HOME/.secrets/health-chat-id}")" || return
-  curl -sS -m 20 -o /dev/null "https://api.telegram.org/bot${token}/sendMessage" \
+  curl -fsS -m 20 -o /dev/null "https://api.telegram.org/bot${token}/sendMessage" \
     --data-urlencode "chat_id=${chat}" --data-urlencode "text=$1" --data-urlencode "disable_notification=false"
 }
 
@@ -31,16 +31,15 @@ send() {
 problem() {
   local f="$STATE/$1"
   if [ -f "$f" ] && [ -z "$(find "$f" -mmin +"$REPEAT_MIN")" ]; then return; fi
-  printf '%s\n' "$2" > "$f"
-  send "$(printf '⚠️ Palvelinhälytys\n\n%s\n\nKatson asiaa seuraavaksi; sinun ei tarvitse tehdä mitään.' "$2")"
+  # Remember the alert only once it is delivered, so a failed send is retried next run.
+  send "$(printf '⚠️ Palvelinhälytys\n\n%s\n\nKatson asiaa seuraavaksi; sinun ei tarvitse tehdä mitään.' "$2")" && printf '%s\n' "$2" > "$f"
 }
 
 # ok <key>: if <key> was alerting, say once that it is fixed.
 ok() {
   local f="$STATE/$1"
   [ -f "$f" ] || return
-  send "$(printf '✅ Korjaantui\n\n%s' "$(head -1 "$f")")"
-  rm -f "$f"
+  send "$(printf '✅ Korjaantui\n\n%s' "$(head -1 "$f")")" && rm -f "$f"
 }
 
 check() { # check <key> <text> <command...>: the command succeeds when healthy

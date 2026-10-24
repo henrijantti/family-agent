@@ -16,6 +16,7 @@ export const STAY = "Inbox";
 
 const RECEIPT = /(kuitti|receipt|tilausvahvistus|order confirmation|tilauksesi|your order|maksuvahvistus|payment confirmation|payment received|maksu vastaanotettu|kiitos tilauksestasi|thank you for your order|varausvahvistus|booking confirmation)/i;
 const NOTIFY_SENDER = /(no-?reply|do-?not-?reply|notifications?@|notify|alerts?@|ilmoitus|automated|mailer-daemon|accounts?@)/i;
+const BILL_HINT = /(lasku|invoice|\bbill\b|eräpäivä|erääntyy|muistutus|reminder|payment due|amount due|maksettava|perintä|e-lasku)/i;
 // Club mail and Microsoft account security stay where Henri sees them (as in outlook-triage).
 const KEEP_SENDER = /(myclub\.fi|accountprotection\.microsoft\.com)$/i;
 
@@ -56,6 +57,8 @@ export function target(m: MailMessage, rules: MailRule[], opts: { skipDomains?: 
   if (rule) return rule.action === "folder" && rule.folder ? rule.folder : STAY;
   if (m.flag?.flagStatus === "flagged") return STAY;
   if ((m.categories ?? []).some((c) => c === "Tärkeä" || c === "Lasku")) return STAY;
+  // The listing has only the preview, so anything that could be a bill stays.
+  if (BILL_HINT.test(`${m.subject ?? ""}\n${m.bodyPreview ?? ""}`)) return STAY;
   if ((opts.skipDomains ?? []).some((d) => from.endsWith(d)) || (opts.self ?? []).includes(from) || KEEP_SENDER.test(from)) return STAY;
   const kind = classify(m, opts);
   if (kind === "invoice" || kind === "important") return STAY;

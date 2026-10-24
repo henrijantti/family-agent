@@ -212,15 +212,22 @@ export class GraphMail implements MailApi {
       let wait = 0;
       for (let i = 0; i < pending.length; i += 20) {
         const chunk = pending.slice(i, i + 20);
-        const res = await this.call<{ responses: { id: string; status: number; headers?: Record<string, string>; body?: { id?: string } }[] }>("POST", "/$batch", {
-          requests: chunk.map((o, n) => ({
-            id: String(n),
-            method: "POST",
-            url: `/me/messages/${o.id}/move`,
-            headers: { "content-type": "application/json" },
-            body: { destinationId: o.folderId },
-          })),
-        });
+        let res: { responses: { id: string; status: number; headers?: Record<string, string>; body?: { id?: string } }[] };
+        try {
+          res = await this.call("POST", "/$batch", {
+            requests: chunk.map((o, n) => ({
+              id: String(n),
+              method: "POST",
+              url: `/me/messages/${o.id}/move`,
+              headers: { "content-type": "application/json" },
+              body: { destinationId: o.folderId },
+            })),
+          });
+        } catch (e) {
+          // Keep what earlier requests moved: their new ids must reach the move log.
+          for (const op of chunk) out.set(op.id, { id: op.id, error: (e as Error).message.slice(0, 120) });
+          continue;
+        }
         for (const r of res.responses) {
           const op = chunk[Number(r.id)];
           if (r.status < 300 && r.body?.id) out.set(op.id, { id: op.id, newId: r.body.id });
