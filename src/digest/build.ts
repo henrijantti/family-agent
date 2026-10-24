@@ -156,9 +156,11 @@ function who(title: string): string | undefined {
 
 /** Games, tournaments and exams: the only events "Coming up" lists (not practices, ice times or newsletters). */
 export function isComingUp(title: string): boolean {
+  // Named games first, so "Harjoitusottelu" (a practice match) stays in.
+  if (/exam|koe\b|turnaus|tournament|cup|ottelu|match|peli\b|game\b|\bvs\b/i.test(title)) return true;
   if (/harjoit|treeni|jäävuoro|omatoimi|taitokoulu|tiedote|practice/i.test(title)) return false;
   // "K-Espoo Blues 3 - Ice Force": two teams around a spaced dash is a game.
-  return /exam|koe\b|turnaus|tournament|cup|ottelu|match|peli\b|game\b|\bvs\b|\s[-–]\s/i.test(title);
+  return /\s[-–]\s/.test(title);
 }
 
 /** Two timed events in different places overlapping: someone has to drive two places,

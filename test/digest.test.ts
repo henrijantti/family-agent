@@ -119,6 +119,7 @@ test("one child booked in two places is a conflict; games count as coming up, pr
   assert.ok(isComingUp("Oliver: K-Espoo Blues 3 - Ice Force"));
   assert.ok(isComingUp("Oskar: Talviliiga Ottelupäivä - Valkoinen"));
   assert.ok(isComingUp("Aino: Matematiikan koe"));
+  assert.ok(isComingUp("Oliver: Harjoitusottelu K-Espoo - Ice Force"));
   assert.ok(!isComingUp("Oliver: K-E Blues 15: Jäävuoro"));
   assert.ok(!isComingUp("Oskar: Taitokoulu 2017 -syntyneet"));
   assert.ok(!isComingUp("Oliver: Lokakuun tiedote 2026 - alustava"));
