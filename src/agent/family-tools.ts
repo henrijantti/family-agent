@@ -26,6 +26,8 @@ export interface FamilyDeps {
   /** A fresh copy of the agent's state (read-only use). */
   loadState(): StateData;
   now(): Date;
+  /** The family-group agent's copy: no bills (they are Henri's, from his Outlook). */
+  group?: boolean;
 }
 
 type Writable = "school" | "hobbies";
@@ -113,7 +115,7 @@ const fields = {
 };
 
 export function familyTools(d: FamilyDeps): Tool[] {
-  return [
+  const tools: Tool[] = [
     {
       name: "calendar_list",
       description: "List events on the family, school and hobbies calendars between two dates (inclusive). Read-only.",
@@ -252,7 +254,7 @@ export function familyTools(d: FamilyDeps): Tool[] {
           overlaps: days.flatMap((day) => conflicts(events.filter((e) => e.date === day)).map(([x, y]) => [view(x), view(y)])),
           signupsClosing: myclub ? openSignups(myclub, today, week ? 7 : 3).map((e) => ({ child: e.child, title: e.title, deadline: e.signup?.deadline })) : [],
           feesDue: myclub ? feesDue(myclub, today, 7) : [],
-          billsToday: d.cfg.outlook.enabled ? billsToRemind(c.state, today, d.cfg.outlook.remind_days_before).map((b) => ({ biller: b.biller, amount: b.amount, dueDate: b.dueDate, reference: b.reference, inDays: b.inDays })) : [],
+          billsToday: d.cfg.outlook.enabled && !d.group ? billsToRemind(c.state, today, d.cfg.outlook.remind_days_before).map((b) => ({ biller: b.biller, amount: b.amount, dueDate: b.dueDate, reference: b.reference, inDays: b.inDays })) : [],
           schoolNews: c.state.digestQueue,
           changedSinceYesterday: c.state.changes.filter((x) => Date.parse(x.at) > since && x.kind !== "new"),
           sourcesFailing: Object.entries(c.state.health).filter(([, h]) => !h.ok).map(([s]) => s),
@@ -281,6 +283,7 @@ export function familyTools(d: FamilyDeps): Tool[] {
       },
     },
   ];
+  return d.group ? tools.filter((t) => t.name !== "bills_list") : tools;
 }
 
 export function stripHtml(html: string): string {

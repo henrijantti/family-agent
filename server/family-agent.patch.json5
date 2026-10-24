@@ -1,0 +1,63 @@
+// Family agent `family` in the family Telegram group (2026-10-24 design).
+// DO NOT APPLY until no tick job reads @Family_fff_bot with getUpdates (attendance
+// moved to agent buttons, digest cut over; openclaw/README.md "Moving the jobs to
+// OpenClaw"). Then save the bot token (`save-bot-token family`), apply this with
+// `openclaw config patch --file`, and `openclaw agents bind --agent family --bind telegram:family`.
+// Replace <HENRI_TELEGRAM_USER_ID>; add the spouse's numeric id to groupAllowFrom when Henri gives it.
+// Check key names against `openclaw config schema` on the running version first.
+{
+  channels: {
+    telegram: {
+      accounts: {
+        family: {
+          tokenFile: "/home/openclaw/.secrets/telegram-family-bot.token",
+          // No private chats with the family bot: Henri's private chat is the Chief of staff.
+          dmPolicy: "disabled",
+          groupPolicy: "allowlist",
+          // Only these people can make the bot act in the group.
+          groupAllowFrom: ["<HENRI_TELEGRAM_USER_ID>"],
+          groups: {
+            // "Family group"; answers only when @-mentioned or replied to.
+            "-5586784958": { requireMention: true },
+          },
+          joinIntro: false,
+        },
+      },
+    },
+  },
+  agents: {
+    entries: {
+      family: {
+        name: "Family",
+        workspace: "/home/openclaw/.openclaw/workspace-family",
+        sandbox: { mode: "all" },
+        tools: {
+          profile: "messaging",
+          // The group copies of the family and jobs servers (--group): no bills in digest_data,
+          // no bills_list, no scan_bills. Enforced in code, not by tool names.
+          alsoAllow: ["familygroup__*", "jobsgroup__*", "view_image"],
+          // No Brain, mail, desk or Henri's copies: nothing private to Henri can reach the group.
+          deny: [
+            "group:runtime", "group:fs", "browser", "image_generate", "sessions_spawn", "sessions_send",
+            "brain__*", "mail__*", "desk__*", "family__*", "jobs__*",
+          ],
+          elevated: { enabled: false },
+        },
+      },
+      main: { tools: { deny: ["mail__*", "family__*", "brain__*", "desk__*", "jobs__*", "familygroup__*", "jobsgroup__*"] } },
+      henri: { tools: { deny: ["group:runtime", "group:fs", "browser", "image_generate", "sessions_spawn", "sessions_send", "mail__*", "familygroup__*", "jobsgroup__*"] } },
+      email: {
+        tools: {
+          deny: ["group:runtime", "group:fs", "browser", "image_generate", "sessions_spawn", "sessions_send", "family__*", "brain__*", "desk__*", "jobs__*", "familygroup__*", "jobsgroup__*"],
+        },
+      },
+    },
+  },
+  mcp: {
+    servers: {
+      familygroup: { command: "/home/openclaw/family-agent-run.sh", args: ["mcp", "family", "--group"] },
+      jobsgroup: { command: "/home/openclaw/family-agent-run.sh", args: ["mcp", "jobs", "--group"] },
+    },
+  },
+  tools: { sandbox: { tools: { alsoAllow: ["mail__*", "family__*", "brain__*", "desk__*", "jobs__*", "familygroup__*", "jobsgroup__*"] } } },
+}
