@@ -41,7 +41,7 @@ function setup(opts: { send?: boolean; draftTo?: string[]; cc?: string[] } = {})
     ...(opts.send === false ? {} : { sendDraft: async (id: string) => void sent.push(id) }),
   };
   const files = { draftsFile: join(dir, "mail-drafts.jsonl"), approvalsFile: join(dir, "mail-approvals.jsonl") };
-  const tools = mailTools({ mail: api, ...files, self: ["henri@outlook.com"], now: () => NOW });
+  const tools = mailTools({ mail: api, ...files, self: ["henri@outlook.com"], now: () => NOW, approvalWaitMs: 0 });
   const allow = (draftId: string, at = NOW) => appendFileSync(files.approvalsFile, JSON.stringify({ draftId, decision: "allow-once", at: at.toISOString() }) + "\n");
   return { tools, sent, moved, allow };
 }
@@ -77,6 +77,18 @@ test("mail_send needs Henri's fresh Allow, sends once, and only replies to the o
   assert.match((await call(tools, "mail_send", { draftId })).text, /already sent/);
   assert.deepEqual(sent, [draftId]);
   assert.match((await call(tools, "mail_send", { draftId: "OTHERDRAFT123" })).text, /only drafts made with mail_draft_reply/);
+});
+
+test("mail_send waits briefly for an Allow that is still being written", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "mail-"));
+  const sent: string[] = [];
+  const files = { draftsFile: join(dir, "d.jsonl"), approvalsFile: join(dir, "a.jsonl") };
+  appendFileSync(files.draftsFile, JSON.stringify({ draftId: "DRAFTxxxxxxxx1", messageId: ID, replyTo: "anna@gmail.com", subject: "", preview: "", at: NOW.toISOString() }) + "\n");
+  const api = { getMessage: async () => ({ id: "DRAFTxxxxxxxx1", isDraft: true, receivedDateTime: "", toRecipients: to("anna@gmail.com") }), sendDraft: async (id: string) => void sent.push(id) } as unknown as MailToolApi;
+  const tools = mailTools({ mail: api, ...files, self: [], now: () => NOW, approvalWaitMs: 2000 });
+  setTimeout(() => appendFileSync(files.approvalsFile, JSON.stringify({ draftId: "DRAFTxxxxxxxx1", decision: "allow-once", at: NOW.toISOString() }) + "\n"), 300);
+  assert.equal((await call(tools, "mail_send", { draftId: "DRAFTxxxxxxxx1" })).json().sent, true);
+  assert.deepEqual(sent, ["DRAFTxxxxxxxx1"]);
 });
 
 test("mail_send refuses a draft whose recipients were changed", async () => {
