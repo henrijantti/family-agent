@@ -25,6 +25,8 @@ export interface JobsDeps {
   /** A job context over the given state, with sources and calendar. */
   makeCtx(state: StateData, notifier: Notifier): Ctx;
   now(): Date;
+  /** The family-group agent's copy: no bill scan, and its digest doesn't use up bill reminders it never showed. */
+  group?: boolean;
 }
 
 /** Collects what a job would have posted, as plain text for the agent. */
@@ -55,7 +57,7 @@ async function withState<T>(d: JobsDeps, fn: (st: StateStore, ctx: Ctx, out: Col
 const key = (child: string, eventId: string) => `${child}|${eventId}`;
 
 export function jobsTools(d: JobsDeps): Tool[] {
-  return [
+  const tools: Tool[] = [
     {
       name: "sync_myclub",
       description:
@@ -97,7 +99,7 @@ export function jobsTools(d: JobsDeps): Tool[] {
         return withState(d, async (st) => {
           const now = d.now();
           const today = localParts(now).date;
-          const due = d.cfg.outlook.enabled ? billsToRemind(st.data, today, d.cfg.outlook.remind_days_before) : [];
+          const due = d.cfg.outlook.enabled && !d.group ? billsToRemind(st.data, today, d.cfg.outlook.remind_days_before) : [];
           for (const b of st.data.outlook.bills) if (due.some((x) => x.messageId === b.messageId)) (b.remindedOn ??= []).push(today);
           // Both reports show schoolNews from digest_data, so both use it up (as the script does).
           st.data.digestQueue = [];
@@ -190,4 +192,5 @@ export function jobsTools(d: JobsDeps): Tool[] {
       },
     },
   ];
+  return d.group ? tools.filter((t) => t.name !== "scan_bills") : tools;
 }
