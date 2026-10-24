@@ -1,4 +1,5 @@
 import { mkdirSync, rmSync, statSync } from "node:fs";
+import { dirname } from "node:path";
 
 // One writer at a time for the state file: the 15-minute tick and the agent's
 // job tools both read, change and save it. A directory is created atomically,
@@ -8,6 +9,7 @@ import { mkdirSync, rmSync, statSync } from "node:fs";
 export async function withLock<T>(path: string, fn: () => Promise<T>, waitMs = 120_000, staleMs = 15 * 60_000): Promise<T> {
   const dir = `${path}.lock`;
   const until = Date.now() + waitMs;
+  mkdirSync(dirname(path), { recursive: true }); // first run: no state folder yet
   for (;;) {
     try {
       mkdirSync(dir);

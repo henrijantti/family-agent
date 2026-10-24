@@ -128,6 +128,9 @@ test("the state lock runs one writer at a time and takes over a stale lock", asy
 
   mkdirSync(`${path}.lock`);
   await assert.rejects(withLock(path, async () => 1, 600), /busy/);
+
+  // First run: the state folder doesn't exist yet.
+  assert.equal(await withLock(join(dir, "new", "state.json"), async () => "ok"), "ok");
 });
 
 test("the tick skips the jobs listed in agent_jobs", async () => {

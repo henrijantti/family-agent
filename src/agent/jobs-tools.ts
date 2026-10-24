@@ -99,7 +99,8 @@ export function jobsTools(d: JobsDeps): Tool[] {
           const today = localParts(now).date;
           const due = d.cfg.outlook.enabled ? billsToRemind(st.data, today, d.cfg.outlook.remind_days_before) : [];
           for (const b of st.data.outlook.bills) if (due.some((x) => x.messageId === b.messageId)) (b.remindedOn ??= []).push(today);
-          if (a.kind === "daily") st.data.digestQueue = [];
+          // Both reports show schoolNews from digest_data, so both use it up (as the script does).
+          st.data.digestQueue = [];
           st.data.lastDigestAt = now.toISOString();
           return { marked: a.kind, billsReminded: due.length };
         });

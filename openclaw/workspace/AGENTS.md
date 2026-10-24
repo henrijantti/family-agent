@@ -48,7 +48,7 @@ Henri's layout rules, all of them:
 - Each event: time and who first, then what; the place on its own line below
 - One empty line between sections AND between events
 - Sections in this order, empty ones left out: Vaatii toimia (sign-ups closing,
-  fees, bills), Tänään (or each day for the week), Päällekkäisyydet (who must be
+  fees, bills, school news marked action), Koulu (the other schoolNews items), Tänään (or each day for the week), Päällekkäisyydet (who must be
   driven where), Muuttunut tai peruttu, Tulossa (tournaments, exams), Lähteiden tila
 - Never drop an item from the data. A failed source gets a line, so an empty day
   never hides a failed read

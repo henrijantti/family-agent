@@ -229,7 +229,7 @@ export function familyTools(d: FamilyDeps): Tool[] {
     {
       name: "digest_data",
       description:
-        "Everything the morning digest (daily) or the Sunday week summary (week) needs, as data: events per day with who/what/place, overlaps where someone must drive two places, MyClub sign-ups closing and fees due, bills to remind today, changes since yesterday, sources that failed. Read-only: marks nothing as sent.",
+        "Everything the morning digest (daily) or the Sunday week summary (week) needs, as data: events per day with who/what/place, overlaps where someone must drive two places, MyClub sign-ups closing and fees due, bills to remind today, school news (Wilma messages and notes waiting for the digest), changes since yesterday, sources that failed. Read-only: marks nothing as sent.",
       input: { properties: { kind: { type: "string", enum: ["daily", "week"] } }, required: ["kind"] },
       async run(a) {
         const c = ctx(d);
@@ -253,6 +253,7 @@ export function familyTools(d: FamilyDeps): Tool[] {
           signupsClosing: myclub ? openSignups(myclub, today, week ? 7 : 3).map((e) => ({ child: e.child, title: e.title, deadline: e.signup?.deadline })) : [],
           feesDue: myclub ? feesDue(myclub, today, 7) : [],
           billsToday: d.cfg.outlook.enabled ? billsToRemind(c.state, today, d.cfg.outlook.remind_days_before).map((b) => ({ biller: b.biller, amount: b.amount, dueDate: b.dueDate, reference: b.reference, inDays: b.inDays })) : [],
+          schoolNews: c.state.digestQueue,
           changedSinceYesterday: c.state.changes.filter((x) => Date.parse(x.at) > since && x.kind !== "new"),
           sourcesFailing: Object.entries(c.state.health).filter(([, h]) => !h.ok).map(([s]) => s),
         };
