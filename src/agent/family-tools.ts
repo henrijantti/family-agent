@@ -1,7 +1,9 @@
 import { randomBytes } from "node:crypto";
 import { Config } from "../config.js";
 import { CalendarApi, CalendarEvent, EventTime } from "../calendar/types.js";
-import { buildDigest } from "../digest/build.js";
+import { buildDigest, conflicts, mergeCrossCalendar, splitTitle } from "../digest/build.js";
+import { billsToRemind } from "../sources/outlook.js";
+import { feesDue, MyClubSnapshot, openSignups } from "../sources/myclub.js";
 import { calId, collectHub, Ctx } from "../jobs.js";
 import { StateData } from "../lib/state.js";
 import { addDays, daysBetween, localIso, localParts } from "../lib/time.js";
@@ -55,7 +57,7 @@ export function eventTimes(date: string, start?: string, end?: string, endDate?:
     return { start: { date }, end: { date: addDays(endDate ?? date, 1) } };
   }
   const endTime = end ?? addMinutes(start, 60);
-  const lastDay = endDate ?? (end && end <= start ? addDays(date, 1) : date);
+  const lastDay = endDate ?? (endTime <= start ? addDays(date, 1) : date);
   return {
     start: { dateTime: localIso(date, start), timeZone: "Europe/Helsinki" },
     end: { dateTime: localIso(lastDay, endTime), timeZone: "Europe/Helsinki" },
@@ -65,6 +67,24 @@ export function eventTimes(date: string, start?: string, end?: string, endDate?:
 function addMinutes(hhmm: string, n: number): string {
   const m = (Number(hhmm.slice(0, 2)) * 60 + Number(hhmm.slice(3)) + n) % 1440;
   return `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
+}
+
+/** New times for an update: fields not given keep their current value, and a moved start keeps the duration. */
+export function updatedTimes(ev: CalendarEvent, a: { date?: string; start?: string; end?: string; endDate?: string }) {
+  const allDay = "date" in ev.start;
+  const curDate = allDay ? (ev.start as { date: string }).date : localParts(new Date((ev.start as { dateTime: string }).dateTime)).date;
+  const date = a.date ?? curDate;
+  if (allDay && !a.start) {
+    if (a.end) throw new ToolError("end needs a start time");
+    const span = daysBetween(curDate, (ev.end as { date: string }).date) - 1;
+    return eventTimes(date, undefined, undefined, a.endDate ?? addDays(date, Math.max(span, 0)));
+  }
+  const curStart = allDay ? undefined : new Date((ev.start as { dateTime: string }).dateTime);
+  const start = a.start ?? localParts(curStart!).time;
+  if (a.end || a.endDate) return eventTimes(date, start, a.end ?? (curStart ? localParts(new Date((ev.end as { dateTime: string }).dateTime)).time : undefined), a.endDate);
+  const minutes = curStart ? (Date.parse((ev.end as { dateTime: string }).dateTime) - curStart.getTime()) / 60_000 : 60;
+  const endAt = localParts(new Date(Date.parse(localIso(date, start)) + minutes * 60_000));
+  return eventTimes(date, start, endAt.time, endAt.date);
 }
 
 async function ownEvent(d: FamilyDeps, which: Writable, id: string): Promise<{ calendarId: string; ev: CalendarEvent }> {
@@ -163,14 +183,13 @@ export function familyTools(d: FamilyDeps): Tool[] {
       async run(a) {
         const which = a.calendar as Writable;
         const { calendarId, ev } = await ownEvent(d, which, a.id as string);
-        const oldDate = "date" in ev.start ? ev.start.date : localParts(new Date(ev.start.dateTime)).date;
         const timesChanged = a.date || a.start || a.end || a.endDate;
         const next: CalendarEvent = {
           ...ev,
           summary: (a.title as string) ?? ev.summary,
           location: (a.location as string) ?? ev.location,
           description: a.notes ? `${a.notes}\n\nAdded from the family chat.` : ev.description,
-          ...(timesChanged ? eventTimes((a.date as string) ?? oldDate, a.start as string, a.end as string, a.endDate as string) : {}),
+          ...(timesChanged ? updatedTimes(ev, a as { date?: string; start?: string; end?: string; endDate?: string }) : {}),
         };
         await cal(d).update(calendarId, ev.id, next);
         return { status: "updated", id: ev.id, calendar: which, start: when(next.start) };
@@ -205,6 +224,38 @@ export function familyTools(d: FamilyDeps): Tool[] {
           weekAhead: true,
         });
         return stripHtml(html);
+      },
+    },
+    {
+      name: "digest_data",
+      description:
+        "Everything the morning digest (daily) or the Sunday week summary (week) needs, as data: events per day with who/what/place, overlaps where someone must drive two places, MyClub sign-ups closing and fees due, bills to remind today, changes since yesterday, sources that failed. Read-only: marks nothing as sent.",
+      input: { properties: { kind: { type: "string", enum: ["daily", "week"] } }, required: ["kind"] },
+      async run(a) {
+        const c = ctx(d);
+        const week = a.kind === "week";
+        const today = localParts(c.now).date;
+        const events = mergeCrossCalendar(await collectHub(c, week ? 8 : d.cfg.digest.coming_up_days));
+        const days = week ? Array.from({ length: 7 }, (_, i) => addDays(today, i + 1)) : [today];
+        const view = (e: (typeof events)[number]) => {
+          const cancelled = /^CANCELLED: /.test(e.title);
+          const { who, what } = splitTitle(e.title.replace(/^CANCELLED: /, ""));
+          return { date: e.date, start: e.start, end: e.end, who, what, location: e.location, calendar: e.calendar, cancelled, tentative: e.tentative, alsoOnFamily: e.alsoOnFamily };
+        };
+        const myclub = c.state.myclub.lastSnapshot as MyClubSnapshot | undefined;
+        const since = c.now.getTime() - 26 * 3600_000;
+        return {
+          today,
+          kind: a.kind,
+          days: days.map((day) => ({ date: day, events: events.filter((e) => e.date === day).map(view) })),
+          comingUp: week ? [] : events.filter((e) => e.date > today).map(view),
+          overlaps: days.flatMap((day) => conflicts(events.filter((e) => e.date === day)).map(([x, y]) => [view(x), view(y)])),
+          signupsClosing: myclub ? openSignups(myclub, today, week ? 7 : 3).map((e) => ({ child: e.child, title: e.title, deadline: e.signup?.deadline })) : [],
+          feesDue: myclub ? feesDue(myclub, today, 7) : [],
+          billsToday: d.cfg.outlook.enabled ? billsToRemind(c.state, today, d.cfg.outlook.remind_days_before).map((b) => ({ biller: b.biller, amount: b.amount, dueDate: b.dueDate, reference: b.reference, inDays: b.inDays })) : [],
+          changedSinceYesterday: c.state.changes.filter((x) => Date.parse(x.at) > since && x.kind !== "new"),
+          sourcesFailing: Object.entries(c.state.health).filter(([, h]) => !h.ok).map(([s]) => s),
+        };
       },
     },
     {
