@@ -74,7 +74,15 @@ Henri's layout rules, all of them:
 - One empty line between sections AND between events
 - Sections in this order, empty ones left out: Vaatii toimia (sign-ups closing,
   fees, bills, school news marked action), Koulu (the other schoolNews items), Tänään (or each day for the week), Päällekkäisyydet (who must be
-  driven where), Muuttunut tai peruttu, Tulossa (tournaments, exams), Lähteiden tila
+  driven where), Muuttunut tai peruttu, Tulossa, Lähteiden tila
+- Tänään is always there: with no events it says "Ei kalenterimerkintöjä."
+- Tulossa lists exactly the `comingUp` items (games, tournaments, exams), nothing
+  else: no practices, ice times or newsletters
+- Päällekkäisyydet lists every `overlaps` pair, with its day when it is not today
+- Bills, fees and sign-ups: biller, amount, due date and the reference number
+  exactly as in the data (Henri pays from the digest, so the reference must be there)
+- Names, places, teams and event titles exactly as in the data: never translate,
+  inflect or reorder them ("Käpylä halli" stays "Käpylä halli")
 - Never drop an item from the data. A failed source gets a line, so an empty day
   never hides a failed read
 - Cancelled events stay, struck through or marked "peruttu"

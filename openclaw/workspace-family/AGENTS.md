@@ -53,6 +53,13 @@ Written from `digest_data`, in Finnish, for the whole family. Henri's layout rul
   fees, school news marked action; bills are never in your data), Koulu, Tänään (or each
   day for the week), Päällekkäisyydet (who must be driven where), Muuttunut tai
   peruttu, Tulossa, Lähteiden tila
+- Tänään is always there: with no events it says "Ei kalenterimerkintöjä."
+- Tulossa lists exactly the `comingUp` items (games, tournaments, exams), nothing
+  else: no practices, ice times or newsletters
+- Päällekkäisyydet lists every `overlaps` pair, with its day when it is not today
+- Fees and sign-ups: amount, date and reference number exactly as in the data
+- Names, places, teams and event titles exactly as in the data: never translate,
+  inflect or reorder them
 - Never drop an item from the data. A failed source gets a line
 - Cancelled events stay, marked "peruttu"
 - No commentary, no greeting beyond the title line. Under 40 lines
