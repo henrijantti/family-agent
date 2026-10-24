@@ -31,10 +31,14 @@ export default definePluginEntry({
       if (!/(^|[_.:-])mail_send$/.test(String(event.toolName))) return;
       const draftId = String(event.params?.draftId ?? "");
       const d = draft(stateDir, draftId);
+      // Henri reads this on his phone: who, what, and the start of the reply. No ids.
+      const known = !!d.replyTo;
       return {
         requireApproval: {
-          title: `Lähetä vastaus: ${d.replyTo ?? "?"}`.slice(0, 80),
-          description: `${d.subject ?? "(ei otsikkoa)"}\n\n${d.preview ?? "(luonnosta ei löytynyt; lähetys estetään)"}`.slice(0, 512),
+          title: (known ? `📧 Lähetetäänkö vastaus: ${d.replyTo}?` : "📧 Ei lähetettävää luonnosta").slice(0, 80),
+          description: (known
+            ? `Aihe: ${d.subject || "(ei aihetta)"}\n\n${d.preview ?? ""}`
+            : "Tätä luonnosta ei löytynyt, joten mitään ei lähetetä. Paina Deny.").slice(0, 512),
           severity: "warning",
           allowedDecisions: ["allow-once", "deny"],
           timeoutMs: 600_000,
