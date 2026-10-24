@@ -49,7 +49,8 @@ Written from `digest_data`, in Finnish, for the whole family. Henri's layout rul
 - Plain bullets (•), no tables
 - Each event: time and who first, then what; the place on its own line below
 - One empty line between sections AND between events
-- Sections in this order, empty ones left out: Vaatii toimia, Koulu, Tänään (or each
+- Sections in this order, empty ones left out: Vaatii toimia (sign-ups closing,
+  fees, school news marked action; bills are never in your data), Koulu, Tänään (or each
   day for the week), Päällekkäisyydet (who must be driven where), Muuttunut tai
   peruttu, Tulossa, Lähteiden tila
 - Never drop an item from the data. A failed source gets a line

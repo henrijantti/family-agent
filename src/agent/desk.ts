@@ -2,6 +2,7 @@ import { execFile } from "node:child_process";
 import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
 import { dirname } from "node:path";
 import type { MailMessage } from "../sources/outlook.js";
+import { findDraft } from "./mail-tools.js";
 import { Tool, ToolError } from "./mcp.js";
 
 // The mail desk: how the Chief of staff agent (`henri`) gets email work done
@@ -22,14 +23,14 @@ const ID = "^[A-Za-z0-9_=+/-]{10,400}$";
 const TASK_ID = "^t[0-9]{8}-[0-9a-z]{6}$";
 
 export const KINDS = ["sort", "bills", "needs_reply", "draft_reply", "newsletters", "count"] as const;
-export const CATEGORIES = ["bill", "needs_reply", "newsletter", "receipt", "personal", "school", "hobbies", "work", "official", "phishing", "other"] as const;
+export const CATEGORIES = ["bill", "needs_reply", "newsletter", "receipt", "personal", "school", "hobbies", "work", "official", "phishing", "important", "flagged", "inbox", "other"] as const;
 export const FAILURES = ["no_access", "not_found", "unclear_task", "too_many", "error"] as const;
 const CURRENCIES = ["EUR", "USD", "GBP", "SEK", "NOK"];
 
 const KIND_HELP =
   "sort: run the morning sort now. bills: open bills with due date and amount. needs_reply: emails waiting for Henri's answer. " +
   "draft_reply: draft a reply to messageId following instruction (Henri approves any send in the mail bot). " +
-  "newsletters: newsletter senders of the last 7 days with counts. count: how many unread / flagged emails.";
+  "newsletters: newsletter senders of the last 7 days with counts. count: how many emails in the inbox from the last 2 days, how many flagged, how many labelled Tärkeä.";
 
 export interface DeskTask {
   type: "task";
@@ -143,6 +144,8 @@ export function deskTools(d: DeskDeps): Tool[] {
 
 export interface DeskWorkerDeps extends DeskDeps {
   getMessage(id: string): Promise<MailMessage>;
+  /** mail_draft_reply's record: a reported draftId must be one of these drafts. */
+  draftsFile: string;
 }
 
 const item: Record<string, import("./mcp.js").Prop> = {
@@ -188,9 +191,18 @@ export function deskWorkerTools(d: DeskWorkerDeps): Tool[] {
         const items: DeskItem[] = [];
         for (const it of raw) {
           if (it.count !== undefined && (it.count < 0 || it.count > 100000)) throw new ToolError("count out of range");
+          if (it.draftId) {
+            // Only a draft mail_draft_reply really made, so the id can't carry made-up words.
+            const rec = findDraft(d.draftsFile, it.draftId);
+            if (!rec) throw new ToolError("draftId must be a draft made with mail_draft_reply");
+            if (it.messageId && rec.messageId !== it.messageId) throw new ToolError("that draft answers a different email");
+          }
           const out: DeskItem = { ...it };
           if (it.messageId) {
-            const m = await d.getMessage(it.messageId);
+            // Looking the id up in Outlook also refuses ids that aren't real messages.
+            const m = await d.getMessage(it.messageId).catch(() => {
+              throw new ToolError("messageId is not an email in Outlook");
+            });
             const addr = m.from?.emailAddress.address?.toLowerCase();
             if (addr && /^[^\s@<>"]{1,64}@[a-z0-9.-]{1,190}$/.test(addr)) out.sender = addr;
             if (m.receivedDateTime) out.received = m.receivedDateTime;

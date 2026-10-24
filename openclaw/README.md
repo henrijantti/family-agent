@@ -184,9 +184,12 @@ Deploy (server thread):
 ## Family agent (at the @Family_fff_bot handover)
 
 Agent `family`, instructions `openclaw/workspace-family/AGENTS.md`, config
-`server/family-agent.patch.json5`. Tools: `family` (without `bills_list`) and
-`jobs` (without `scan_bills`); no Brain, mail or desk, so nothing private reaches
-the group. In the group only allowlisted senders can trigger it (Henri; his spouse
+`server/family-agent.patch.json5`. Tools: the group copies of the family and jobs
+servers (`mcp family --group`, `mcp jobs --group`), which leave out Henri's bills in
+code: no `bills_list`, no `scan_bills`, `digest_data` without `billsToday`, and its
+`digest_mark_sent` doesn't use up bill reminders. No Brain, mail or desk, so nothing
+private reaches the group. Bill reminders go to Henri through the Chief of staff
+instead (step 4 cron). In the group only allowlisted senders can trigger it (Henri; his spouse
 once Henri gives the id) and only by @-mention or reply; bot privacy mode stays on.
 Deploy it at step 3 below, not before: until then the scripts read
 @Family_fff_bot with getUpdates. At that point the shadow and cutover digest crons
@@ -225,6 +228,7 @@ crons. To go back, remove the jobs from `agent_jobs` and pause the crons.
 | --- | --- | --- | --- |
 | 4 | Daily 06:45 | family group (`family`) | `Morning digest. Call digest_data with kind daily and write today's digest following the digest rules in AGENTS.md. Post it, then call digest_mark_sent with kind daily.` |
 | 4 | Sun 19:00 | family group (`family`) | `Week summary. Call digest_data with kind week and write next week's summary following the digest rules in AGENTS.md. Post it, then call digest_mark_sent with kind week.` |
+| 4 | Daily 06:50 | Henri's DM (`henri`) | `Bill reminders. Call digest_data with kind daily. If billsToday is not empty, list each bill in one line (biller, amount, due date, reference). Otherwise reply only NO_REPLY.` |
 | 2 | Daily 06:15 | Henri's DM (`henri`) | `MyClub sync. Call sync_myclub. If alerts is not empty, post each alert. If health is not ok, say so in one line. Otherwise reply only NO_REPLY.` |
 | 2 | Daily 06:20 | Henri's DM (`henri`) | `Bill scan. Call scan_bills. List each new bill in one line (biller, amount, due date, mark new billers). If none, reply only NO_REPLY.` |
 | 3 | Sun 19:00 | family group (`family`) | `Practice question. Call attendance_week. For each child with events, post one message "<child>: ensi viikon treenit" with two buttons per event, "✅ <label>" (att|<child>|<eventId>|1) and "➖ <label>" (att|<child>|<eventId>|0).` |

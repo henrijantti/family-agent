@@ -438,14 +438,16 @@ async function main() {
     }
     case "mcp":
     case "tool": {
-      // mcp family|brain|jobs|mail|desk  tool server on stdio for OpenClaw
+      // mcp family|brain|jobs|mail|desk [--group]  tool server on stdio for OpenClaw
       // tool family|brain|mail <name> [json]  call one tool once (testing)
       const which = args[0];
       const clock = () => (env("FAMILY_AGENT_NOW") ? new Date(env("FAMILY_AGENT_NOW")!) : new Date());
       let tools: Tool[];
+      // --group: the family-group agent's copy, without Henri's bills
+      const group = args.includes("--group");
       if (which === "family") {
         const calendar = buildCtx(cfg, st, now).calendar;
-        tools = familyTools({ cfg, calendar, loadState: () => store().data, now: clock });
+        tools = familyTools({ cfg, calendar, loadState: () => store().data, now: clock, group });
       } else if (which === "jobs") {
         tools = jobsTools({
           cfg,
@@ -453,6 +455,7 @@ async function main() {
           statePath: env("STATE_FILE") ?? "state/state.json",
           makeCtx: (data, notifier) => ({ ...buildCtx(cfg, { data } as StateStore, clock()), notifier }),
           now: clock,
+          group,
         });
       } else if (which === "brain") {
         tools = brainTools(brainDepsFromEnv(clock));
@@ -472,7 +475,7 @@ async function main() {
             self: ea.self,
             now: clock,
           }),
-          ...deskWorkerTools({ file: `${dir}/mail-desk.jsonl`, now: clock, getMessage: (id) => mail.getMessage(id) }),
+          ...deskWorkerTools({ file: `${dir}/mail-desk.jsonl`, now: clock, getMessage: (id) => mail.getMessage(id), draftsFile: `${dir}/mail-drafts.jsonl` }),
         ];
       } else if (which === "desk") {
         // Chief of staff's side of the mail desk: the task file only, no Outlook, no mail secrets.

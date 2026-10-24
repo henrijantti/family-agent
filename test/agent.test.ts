@@ -19,7 +19,7 @@ async function call(tools: Tool[], name: string, args: object) {
   return { error: !!res.result.isError, text, json: () => JSON.parse(text) };
 }
 
-function family() {
+function family(group = false) {
   process.env.GOOGLE_FAMILY_CALENDAR_ID = "family";
   process.env.GOOGLE_SCHOOL_CALENDAR_ID = "school";
   process.env.GOOGLE_HOBBIES_CALENDAR_ID = "hobbies";
@@ -39,7 +39,7 @@ function family() {
     { messageId: "m2", biller: "Later", sender: "b@x.fi", dueDate: "2026-12-30", subject: "Lasku", newBiller: false, foundAt: "" },
   );
   state.digestQueue.push({ child: "Oskar", kind: "bulletin", text: "Retki perjantaina", action: true });
-  return { cal, tools: familyTools({ cfg: testConfig(), calendar: cal, loadState: () => structuredClone(state), now: () => NOW }) };
+  return { cal, tools: familyTools({ cfg: testConfig(), calendar: cal, loadState: () => structuredClone(state), now: () => NOW, group }) };
 }
 
 test("MCP: initialize, tools/list, notifications get no reply, unknown method errors", async () => {
@@ -136,6 +136,17 @@ test("digest_data gives the AI the week as data without marking anything sent", 
   assert.equal(daily.days.length, 1);
   assert.deepEqual(daily.schoolNews.map((n: any) => n.text), ["Retki perjantaina"]);
   assert.ok(daily.comingUp.some((e: any) => e.what === "Kiekko-Espoo harjoitus"));
+});
+
+test("digest_data in the family group's copy has no bills", async () => {
+  const state = emptyState();
+  state.outlook.bills.push({ messageId: "m3", biller: "Soon", sender: "c@x.fi", amount: "10 €", dueDate: "2026-10-25", subject: "Lasku", newBiller: false, foundAt: "" });
+  const tools = (group: boolean) => familyTools({ cfg: testConfig(), calendar: new FakeCalendar(), loadState: () => structuredClone(state), now: () => NOW, group });
+  const henri = (await call(tools(false), "digest_data", { kind: "daily" })).json();
+  const group = (await call(tools(true), "digest_data", { kind: "daily" })).json();
+  assert.ok(henri.billsToday.length > 0, "the private copy shows the PPJ bill");
+  assert.deepEqual(group.billsToday, []);
+  assert.ok(!family(true).tools.some((t) => t.name === "bills_list"));
 });
 
 // ---------- Brain vault ----------

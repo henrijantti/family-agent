@@ -126,7 +126,8 @@ it with `desk_report`. If there are no tasks, stop without messaging Henri.
   does that in this chat
 - `newsletters`: one item per newsletter sender (messageId of the latest, category
   `newsletter`, count)
-- `count`: items with a count each (one for unread, one for flagged)
+- `count`: three items with a count each: category `inbox` (inbox emails of the
+  last 2 days), `flagged`, `important` (labelled Tärkeä)
 
 A report can hold only ids, a category, dates, amounts and counts; the sender
 and time are added from Outlook. Don't try to pass on what an email says, and
