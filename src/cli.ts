@@ -472,6 +472,7 @@ async function main() {
             mail: ea.send ? mail : Object.assign(Object.create(mail), { sendDraft: undefined }),
             draftsFile: `${dir}/mail-drafts.jsonl`,
             approvalsFile: `${dir}/mail-approvals.jsonl`,
+            rulesFile: `${dir}/mail-rules.jsonl`,
             self: ea.self,
             now: clock,
           }),

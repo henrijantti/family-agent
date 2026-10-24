@@ -123,3 +123,39 @@ test("mail_move: own folders and Archive yes, Deleted Items no", async () => {
 test("Graph client still blocks every send path outside sendDraft", () => {
   for (const p of ["/me/sendMail", "/me/messages/x/send", "/me/messages/x/reply", "/me/messages/x/replyAll", "/me/messages/x/forward"]) assert.throws(() => assertNoSend("POST", p));
 });
+
+test("mail_folders reports total and unread counts", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "mail-"));
+  const api = { listFolders: async () => [{ id: "f1", displayName: "Inbox", totalItemCount: 120, unreadItemCount: 4 }] } as unknown as MailToolApi;
+  const tools = mailTools({ mail: api, draftsFile: join(dir, "d"), approvalsFile: join(dir, "a"), self: [], now: () => NOW });
+  assert.deepEqual((await call(tools, "mail_folders", {})).json(), [{ name: "Inbox", id: "f1", total: 120, unread: 4 }]);
+});
+
+test("mail_rule: learned rules persist, the latest per sender wins, removal forgets, forbidden folders refused", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "mail-"));
+  const api = {
+    listFolders: async () => [
+      { id: "f-news", displayName: "Uutiskirjeet" },
+      { id: "f-del", displayName: "Poistetut" },
+    ],
+    wellKnownFolderIds: async () => ({ inbox: "f-in", archive: "f-arch", deleteditems: "f-del" }),
+  } as unknown as MailToolApi;
+  const deps = { mail: api, draftsFile: join(dir, "d"), approvalsFile: join(dir, "a"), self: [], now: () => NOW };
+  assert.ok(!mailTools(deps).some((t) => t.name === "mail_rule"), "no rule tools without a rules file");
+  const tools = mailTools({ ...deps, rulesFile: join(dir, "mail-rules.jsonl") });
+
+  assert.ok((await call(tools, "mail_rule", { sender: "News@Shop.fi", action: "folder", folder: "uutiskirjeet" })).text.includes("Uutiskirjeet"));
+  assert.ok(!(await call(tools, "mail_rule", { sender: "@koulu.fi", action: "important", note: "aina tärkeä" })).error);
+  assert.ok((await call(tools, "mail_rule", { sender: "x@y.fi", action: "folder", folder: "Poistetut" })).error);
+  assert.ok((await call(tools, "mail_rule", { sender: "x@y.fi", action: "folder" })).error);
+  assert.ok((await call(tools, "mail_rule", { sender: "not an address", action: "important" })).error);
+  assert.ok((await call(tools, "mail_rule", { sender: "x@y.fi", action: "delete" })).error);
+
+  await call(tools, "mail_rule", { sender: "news@shop.fi", action: "not_newsletter" });
+  let rules = (await call(tools, "mail_rules", {})).json();
+  assert.deepEqual(rules.map((r: any) => [r.sender, r.action, r.folder]), [["news@shop.fi", "not_newsletter", undefined], ["@koulu.fi", "important", undefined]]);
+
+  await call(tools, "mail_rule", { sender: "@koulu.fi", remove: true });
+  rules = (await call(tools, "mail_rules", {})).json();
+  assert.deepEqual(rules.map((r: any) => r.sender), ["news@shop.fi"]);
+});

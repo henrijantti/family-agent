@@ -132,11 +132,13 @@ Deploy (server thread, after Henri's OK):
 
 | When | Prompt |
 | --- | --- |
-| Daily 07:30 | `Morning sort. Read USER.md, then call mail_inbox for the last day. Label bills Lasku and flag them, apply Henri's sender rules and folder plan, and send Henri at most 8 lines: what you moved, bills with due dates, suspected phishing, and emails that need Henri's answer, each with a one-line suggested reply to approve.` |
-| Sun 18:00 | `Weekly newsletter review. Call mail_inbox for 7 days for the Inbox, Archive and each folder in USER.md where newsletters go. List the senders of newsletters and marketing mail with how many each sent, and ask Henri which to unsubscribe from (Henri unsubscribes; you never open their links). Label those emails "Peru tilaus?".` |
+| Daily 07:30 | `Morning sort. Call mail_rules, then mail_inbox for the last day. Follow the rules, label bills Lasku and flag them, and move clear newsletters, notifications and receipts as AGENTS.md says. Send Henri at most 8 lines: what you moved (by folder, with counts), bills with due dates, suspected phishing, and emails that need Henri's answer, each with a one-line suggested reply to approve.` |
+| Sun 18:00 | `Weekly newsletter review. Call mail_inbox for 7 days for the Inbox, Archive and each folder where newsletters go (Uutiskirjeet and any folder rule). List the senders of newsletters and marketing mail with how many each sent, and ask Henri which to unsubscribe from (Henri unsubscribes; you never open their links). Label those emails "Peru tilaus?".` |
 
-7. **USER.md** in the `email` workspace (server only, not in git): Henri's folder plan,
-   always-important senders, auto-archive senders, recurring bills, 3-5 sample replies
+7. **Learned rules**: no setup. The agent sorts clear newsletters, notifications and
+   receipts, and saves Henri's corrections with `mail_rule` to `state/mail-rules.jsonl`
+   (server only). **USER.md** in the `email` workspace (optional, not in git): recurring
+   bills and 3-5 sample replies
 
 Known gap: the mail server reads state but doesn't save rotated refresh tokens.
 Microsoft keeps old ones valid, and the 15-minute tick saves its own.
