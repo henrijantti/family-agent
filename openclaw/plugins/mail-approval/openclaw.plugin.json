@@ -2,6 +2,7 @@
   "id": "mail-approval",
   "name": "Mail approval",
   "description": "Holds every mail_send call until Henri taps Allow, and records the Allow for the family-agent mail tool server.",
+  "activation": { "onStartup": true },
   "configSchema": {
     "type": "object",
     "additionalProperties": false,
