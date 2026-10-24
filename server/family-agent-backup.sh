@@ -35,6 +35,8 @@ cp -a "$HOME/family-agent/state" "$work/payload/family-agent-state"
 
 [ -d "$B/repo/.git" ] || git clone -q "$REPO_URL" "$B/repo" 2>/dev/null || { mkdir -p "$B/repo" && git -C "$B/repo" init -q && git -C "$B/repo" remote add origin "$REPO_URL"; }
 cd "$B/repo"
+# An existing clone may still point at an older URL (e.g. port 22).
+git remote set-url origin "$REPO_URL"
 git config user.name "family-agent server"
 git config user.email "family-agent-backup@localhost"
 tar -czf - -C "$work/payload" . | age -r "$recipient" -o "backup-$stamp.tar.gz.age"
