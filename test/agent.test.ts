@@ -135,7 +135,8 @@ test("digest_data gives the AI the week as data without marking anything sent", 
   const daily = (await call(tools, "digest_data", { kind: "daily" })).json();
   assert.equal(daily.days.length, 1);
   assert.deepEqual(daily.schoolNews.map((n: any) => n.text), ["Retki perjantaina"]);
-  assert.ok(daily.comingUp.some((e: any) => e.what === "Kiekko-Espoo harjoitus"));
+  // Practices are in days[], not in comingUp (games, tournaments and exams only).
+  assert.ok(!daily.comingUp.some((e: any) => e.what === "Kiekko-Espoo harjoitus"));
 });
 
 test("digest_data in the family group's copy has no bills", async () => {

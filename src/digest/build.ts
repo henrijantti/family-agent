@@ -154,7 +154,15 @@ function who(title: string): string | undefined {
   return m?.[1];
 }
 
-/** Two timed events for different people overlapping: someone has to drive two places. */
+/** Games, tournaments and exams: the only events "Coming up" lists (not practices, ice times or newsletters). */
+export function isComingUp(title: string): boolean {
+  if (/harjoit|treeni|jäävuoro|omatoimi|taitokoulu|tiedote|practice/i.test(title)) return false;
+  // "K-Espoo Blues 3 - Ice Force": two teams around a spaced dash is a game.
+  return /exam|koe\b|turnaus|tournament|cup|ottelu|match|peli\b|game\b|\bvs\b|\s[-–]\s/i.test(title);
+}
+
+/** Two timed events in different places overlapping: someone has to drive two places,
+ * or one child is booked in two places at once. */
 export function conflicts(events: HubEvent[]): [HubEvent, HubEvent][] {
   const timed = events.filter((e) => e.start && !/^CANCELLED/.test(e.title) && !/\(not going\)$/.test(e.title));
   const out: [HubEvent, HubEvent][] = [];
@@ -162,7 +170,7 @@ export function conflicts(events: HubEvent[]): [HubEvent, HubEvent][] {
     for (let j = i + 1; j < timed.length; j++) {
       const a = timed[i];
       const b = timed[j];
-      if (a.startMs < b.endMs && b.startMs < a.endMs && who(a.title) !== who(b.title) && a.location !== b.location) out.push([a, b]);
+      if (a.startMs < b.endMs && b.startMs < a.endMs && a.location !== b.location) out.push([a, b]);
     }
   return out;
 }
@@ -181,12 +189,14 @@ function conflictLine([a, b]: [HubEvent, HubEvent], t: Labels, withDay = false):
   const hm = (ms: number) => localParts(new Date(ms)).time;
   const from = hm(Math.max(a.startMs, b.startMs));
   const to = hm(Math.min(a.endMs, b.endMs));
+  // One child in two places names the two events; two children name who.
+  const same = !!who(a.title) && who(a.title) === who(b.title);
   const side = (e: HubEvent) => {
     const { who, what } = splitTitle(e.title);
-    return `${esc(who ?? what)}${e.location ? ` (${esc(e.location.split(",")[0].trim())})` : ""}`;
+    return `${esc(same ? what : (who ?? what))}${e.location ? ` (${esc(e.location.split(",")[0].trim())})` : ""}`;
   };
   const day = withDay ? `${niceDate(localParts(new Date(Math.max(a.startMs, b.startMs))).date, t)} ` : "";
-  return `• ${day}${t.overlap(from, to)}: ${side(a)} ${t.and} ${side(b)}, ${t.who}`;
+  return `• ${day}${t.overlap(from, to)}: ${same ? `${esc(who(a.title)!)}: ` : ""}${side(a)} ${t.and} ${side(b)}, ${t.who}`;
 }
 
 export function buildDigest(inp: DigestInput): string {
@@ -229,19 +239,26 @@ export function buildDigest(inp: DigestInput): string {
   }
   if (inp.weekAhead && !events.some((e) => days.includes(e.date))) out.push(t.nothing);
 
-  // 3. Conflicts
+  // 3. Conflicts: today's, and in the daily digest also those in the coming days
   const conf = days.flatMap((d) => conflicts(events.filter((e) => e.date === d)));
-  section(t.conflicts, conf.map((c) => conflictLine(c, t, !!inp.weekAhead)));
+  const confLines = conf.map((c) => conflictLine(c, t, !!inp.weekAhead));
+  if (!inp.weekAhead) {
+    for (let i = 1; i <= inp.cfg.digest.coming_up_days; i++) {
+      const d = addDays(today, i);
+      for (const c of conflicts(events.filter((e) => e.date === d))) confLines.push(conflictLine(c, t, true));
+    }
+  }
+  section(t.conflicts, confLines);
 
   // 4. Changed or cancelled since yesterday
   const since = inp.now.getTime() - 26 * 3600000;
   const ch = inp.changes.filter((c) => Date.parse(c.at) > since && c.kind !== "new");
   section(t.changed, ch.map((c) => `• ${c.kind === "cancelled" ? t.cancelled : t.changedW}: ${esc(c.title)} (${c.when})`));
 
-  // 5. Coming up: exams and tournaments in the next N days
+  // 5. Coming up: games, tournaments and exams in the next N days
   if (!inp.weekAhead) {
     const horizon = addDays(today, inp.cfg.digest.coming_up_days);
-    const coming = events.filter((e) => e.date > today && e.date <= horizon && /exam|koe\b|turnaus|tournament|cup|ottelu|match/i.test(e.title));
+    const coming = events.filter((e) => e.date > today && e.date <= horizon && isComingUp(e.title));
     section(t.coming, coming.map((e) => {
       const { who, what } = splitTitle(e.title);
       return `• <b>${niceDate(e.date, t)}</b>${e.start ? ` ${e.start}` : ""} ${who ? `<b>${esc(who)}</b> · ` : ""}${esc(what)}${e.alsoOnFamily ? ` <i>(${t.alsoFamily})</i>` : ""}`;

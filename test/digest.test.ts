@@ -108,3 +108,19 @@ test("event titles are shortened and conflicts say who overlaps when", async () 
   const c = conflicts([ev("Oskar: A", "14:15", "16:00", "Areena, Helsinki"), ev("Oliver: B", "15:45", "18:15", "Matinkylä 5, Espoo")]);
   assert.equal(c.length, 1);
 });
+
+test("one child booked in two places is a conflict; games count as coming up, practices don't", async () => {
+  const { conflicts, isComingUp, toHubEvent } = await import("../src/digest/build.js");
+  const ev = (summary: string, from: string, to: string, location: string) =>
+    toHubEvent({ id: summary, summary, location, start: { dateTime: localIso("2026-10-25", from) }, end: { dateTime: localIso("2026-10-25", to) } }, "hobbies");
+  const c = conflicts([ev("Oliver: PPJ Laru 2015", "13:30", "15:15", "Ruukinlahti, Espoo"), ev("Oliver: K-Espoo Blues 3 - Ice Force", "14:00", "16:30", "Matinkylä, Espoo")]);
+  assert.equal(c.length, 1);
+  assert.equal(conflicts([ev("Oliver: A", "13:30", "15:15", "Areena"), ev("Oliver: A", "13:30", "15:15", "Areena")]).length, 0);
+  assert.ok(isComingUp("Oliver: K-Espoo Blues 3 - Ice Force"));
+  assert.ok(isComingUp("Oskar: Talviliiga Ottelupäivä - Valkoinen"));
+  assert.ok(isComingUp("Aino: Matematiikan koe"));
+  assert.ok(!isComingUp("Oliver: K-E Blues 15: Jäävuoro"));
+  assert.ok(!isComingUp("Oskar: Taitokoulu 2017 -syntyneet"));
+  assert.ok(!isComingUp("Oliver: Lokakuun tiedote 2026 - alustava"));
+  assert.ok(!isComingUp("Oliver: Kiekko-Espoo harjoitus"));
+});
