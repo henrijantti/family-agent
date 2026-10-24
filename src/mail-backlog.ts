@@ -47,7 +47,9 @@ export interface Plan {
 const sender = (m: MailMessage) => (m.from?.emailAddress.address ?? "").toLowerCase();
 
 function ruleFor(rules: MailRule[], from: string): MailRule | undefined {
-  return rules.find((r) => r.sender === from) ?? rules.find((r) => r.sender.startsWith("@") && from.endsWith(r.sender));
+  // "@club.fi" covers the domain and its subdomains (x@mail.club.fi), not "x@otherclub.fi".
+  const domain = from.split("@")[1] ?? "";
+  return rules.find((r) => r.sender === from) ?? rules.find((r) => r.sender.startsWith("@") && (domain === r.sender.slice(1) || domain.endsWith(`.${r.sender.slice(1)}`)));
 }
 
 /** Where one old Inbox email should go, or Inbox to leave it. */
