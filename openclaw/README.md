@@ -78,6 +78,56 @@ gateway rewrites hand edits).
 Memory: one more agent and two small Node processes; check `free -m` after start
 (about 1.1 GB was free before).
 
+## Email agent (second agent, own bot)
+
+A separate agent `email` for Henri's Outlook: sort, label, draft replies, flag
+bills, and send a reply only after Henri taps Allow. Instructions:
+`openclaw/workspace-email/AGENTS.md`. It never shares tools, bot or memory with
+`henri`, so email text can't steer the agent that has the calendar and Brain.
+
+| Server | Command | Tools |
+| --- | --- | --- |
+| mail | `family-agent-run.sh mcp mail` | `mail_inbox`, `mail_read`, `mail_folders`, `mail_create_folder`, `mail_move`, `mail_label`, `mail_draft_reply`, `mail_send` (only with `outlook.email_agent.send: true`) |
+
+Guarantees in code (src/agent/mail-tools.ts, src/sources/outlook.ts):
+
+- No forward, delete or inbox-rule tools. Moves to Deleted Items, Junk, Sent, Drafts
+  or Outbox are refused
+- `mail_send` sends only a draft `mail_draft_reply` recorded, once, addressed to
+  exactly the original sender with no Cc/Bcc, and only with a fresh (15 min)
+  Allow in `mail-approvals.jsonl`. That file is written only by the
+  `mail-approval` plugin when Henri answers the card, so without the plugin
+  nothing sends (fails closed). Every other Graph send path stays blocked
+- Email content is returned marked untrusted
+
+Deploy (server thread, after Henri's OK):
+
+1. **Bot:** Henri makes one more BotFather bot (e.g. "Henri Mail"). Add it as a
+   second OpenClaw Telegram account, DMs allowlisted to Henri's user id, no groups,
+   and bind it only to agent `email`
+2. **Agent:** add agent `email` with its own workspace, copy
+   `openclaw/workspace-email/AGENTS.md` into it, model `anthropic/claude-sonnet-5-5`
+   (plugin approvals don't work under the codex runtime yet, openclaw#173073), sandbox mode all
+3. **Tool server:** register `mail` under `mcp.servers` (command
+   `/home/openclaw/family-agent-run.sh`, args `["mcp","mail"]`), probe it. Tool policy
+   for `email`: only the `mail` MCP tools plus messaging; no exec, file, browser or
+   image tools. `henri` and every other agent get no `mail` tools
+4. **Approval plugin:** install from the local path
+   `/home/openclaw/family-agent/openclaw/plugins/mail-approval` (local install, not
+   ClawHub; allow it in the install policy for this path only), config
+   `stateDir=/home/openclaw/family-agent/state`. Check the manifest and
+   `before_tool_call` / `requireApproval` against 2026.10.6 first, then test one
+   send to Henri's own Gmail
+5. **Sending on:** Henri adds the delegated Graph permission `Mail.Send` to the Entra
+   app. Then set `outlook.email_agent.send: true` and run `family-agent-run.sh
+   outlook-login` once on the server (device code, asks for Mail.Send). Until then
+   the agent drafts only
+6. **Schedule** (OpenClaw cron, agent `email`, to Henri's mail DM): daily 07:30
+   `Morning sort. Call mail_inbox for the last day. Label bills Lasku and flag them, move newsletters and notifications out of the inbox, and send Henri at most 8 lines: what you moved, bills with due dates, and emails that need Henri's answer, each with a one-line suggested reply to approve.`
+
+Known gap: the mail server reads state but doesn't save rotated refresh tokens.
+Microsoft keeps old ones valid, and the 15-minute tick saves its own.
+
 ## Moving the jobs to OpenClaw (plan)
 
 Henri chose to have the AI run the jobs. The order keeps the family group from getting
@@ -97,8 +147,8 @@ anything twice and keeps a working fallback at each step:
    presses come back to the agent (`callback_data`), a `attendance_record` tool stores
    them, and Monday's `attendance_apply` tool runs the existing MyClub sign-up code. The
    last step, since it signs the boys up and out in MyClub. Not built yet
-5. **Bot handover.** When nothing in family-agent reads getUpdates (polls moved, and the
-   email approval buttons from PR #1 moved too), `@Family_fff_bot`'s token can move to
+5. **Bot handover.** When nothing in family-agent reads getUpdates (polls moved; the email
+   agent has its own bot and uses OpenClaw approvals), `@Family_fff_bot`'s token can move to
    OpenClaw and the extra bot goes away
 
 ChatGPT Plus usage: two short AI runs a day for the digest, more for polls. The scripts

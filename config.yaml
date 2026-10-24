@@ -83,3 +83,10 @@ outlook:
   # Wilma's notification emails skip the inbox (Henri: too much noise); the
   # agent keeps an Outlook rule that files them, read, in this folder.
   wilma_folder: { name: Wilma, senders: [inschool.fi] }
+  # OpenClaw Email agent (Henri, 2026-10-23): reads, sorts and drafts; sends a
+  # reply only after Henri taps Allow in Telegram (openclaw/README.md).
+  # send stays false until Mail.Send is added to the Entra app and
+  # "outlook-login" is run again on the server.
+  email_agent:
+    send: false
+    self: [henri.jantti@outlook.com]
