@@ -39,4 +39,34 @@ mem)
   R "systemctl --user show openclaw-gateway -p MemoryCurrent -p NRestarts -p ActiveState"
   R "docker ps --format '{{.Names}} {{.Image}} {{.Status}}'"
   ;;
+approval-test)
+  # Run after every gateway or plugin change, before calling it fixed: the email
+  # agent asks to send a dummy draft, the mail-approval card must reach Henri's
+  # mail bot chat, and this script denies it. Nothing can be sent (the draft id
+  # doesn't exist, and the card is denied). Henri sees one card, marked denied.
+  F=/home/openclaw/family-agent/state/mail-approvals.jsonl
+  before=$(R "wc -l < $F 2>/dev/null || echo 0")
+  R "timeout 240 openclaw agent --agent email --message 'Approval self-test from the server: call mail_send once with draftId SELFTESTxxxxxxxx01, then reply with the tool result in one line.' >/tmp/approval-test.out 2>&1" &
+  agent=$!
+  id=""
+  for _ in $(seq 1 30); do
+    sleep 4
+    id=$(R "timeout 30 openclaw approvals pending 2>/dev/null" | grep -oE 'plugin:[A-Za-z0-9_-]+' | head -1)
+    [ -n "$id" ] && break
+  done
+  if [ -z "$id" ]; then echo "FAIL: no approval request within 2 minutes (plugin not loaded or no route)"; wait $agent; exit 1; fi
+  echo "approval request: $id"
+  R "timeout 30 openclaw approvals resolve $id deny" | redact | tail -3
+  wait $agent
+  after=$(R "wc -l < $F 2>/dev/null || echo 0")
+  last=$(R "tail -1 $F 2>/dev/null" | jq -r '.decision // empty' 2>/dev/null)
+  echo "agent said: $(tail -1 /tmp/approval-test.out 2>/dev/null | redact | cut -c1-200)"
+  if [ "$after" -gt "$before" ] && [ "$last" = deny ]; then
+    echo "OK: card created, denied, recorded (mail-approvals.jsonl +$((after - before)), last decision deny)"
+  else
+    echo "FAIL: no deny row recorded (before $before, after $after, last '$last')"; exit 1
+  fi
+  echo "Check Henri's mail bot chat for the card: the delivery itself can only be seen there or in the gateway log:"
+  journalctl _UID="$U" --no-pager --since "-5 min" -o cat | grep -iE 'approval|telegram' | redact | tail -5
+  ;;
 esac
