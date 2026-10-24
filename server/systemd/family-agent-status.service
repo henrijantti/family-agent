@@ -1,0 +1,11 @@
+# systemd USER unit for the openclaw user: publish status.json to the backup repo.
+[Unit]
+Description=Family agent status file
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=%h/family-agent-status.sh
+TimeoutStartSec=3min
+Nice=10
