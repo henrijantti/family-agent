@@ -1,5 +1,16 @@
 #!/bin/bash
-# OpenClaw security.installPolicy: refuse every skill and plugin install.
+# OpenClaw security.installPolicy: refuse every skill and plugin install, except
+# the family-agent mail-approval plugin from its one reviewed local folder.
 # Installed to /usr/local/bin/openclaw-install-policy (root:root 755).
-cat >/dev/null
+ALLOWED_PLUGIN="mail-approval"
+ALLOWED_PATH="/home/openclaw/family-agent/openclaw/plugins/mail-approval"
+
+req="$(cat)"
+if printf '%s' "$req" | jq -e --arg n "$ALLOWED_PLUGIN" --arg p "$ALLOWED_PATH" '
+    .protocolVersion == 1 and .targetType == "plugin" and .targetName == $n
+    and ([.origin, .source, .request] | [.. | strings] | index($p)) != null
+  ' >/dev/null 2>&1; then
+  printf '%s\n' '{"protocolVersion":1,"decision":"allow"}'
+  exit 0
+fi
 printf '%s\n' '{"protocolVersion":1,"decision":"block","reason":"Installs are disabled on this server. Change /usr/local/bin/openclaw-install-policy as root to allow a reviewed install."}'

@@ -29,6 +29,8 @@ Helsinki) from scratch. Nothing here contains secrets.
 | `systemd/family-agent-tick.service` + `.timer` | user units; a tick every 15 min (replaced GitHub's tick.yml on 2026-10-23) |
 | `family-agent-backup.sh` | `/home/openclaw/family-agent-backup.sh`: nightly encrypted backup |
 | `systemd/family-agent-backup.service` + `.timer` | user units; backup at 02:30 Helsinki |
+| `email-agent.patch.json5` | `openclaw config patch --file`: agent `email`, `mail` MCP server, tool policy |
+| `email-telegram.patch.json5` | `openclaw config patch --file`: the mail bot (DM allowlist), then `agents bind --agent email --bind telegram:mail` |
 | `check.sh` | Root helper: `bash check.sh status\|logs\|doctor\|audit\|test\|mem` (redacts secrets) |
 
 ## Changing config later

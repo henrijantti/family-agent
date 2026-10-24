@@ -1,0 +1,32 @@
+// Email agent: config patch applied with `openclaw config patch --file` (as openclaw).
+// Telegram account + binding are added separately once the bot token is on disk.
+{
+  agents: {
+    defaults: { systemAgent: { agentId: "main" } },
+    entries: {
+      // The main chat agent never sees mail tools.
+      main: { tools: { deny: ["mail__*"] } },
+      email: {
+        name: "Email",
+        workspace: "/home/openclaw/.openclaw/workspace-email",
+        // Plugin approvals don't work under the codex runtime yet (openclaw#173073).
+        model: { primary: "anthropic/claude-sonnet-5-5", fallbacks: [] },
+        sandbox: { mode: "all" },
+        tools: {
+          profile: "messaging",
+          alsoAllow: ["mail__*"],
+          deny: ["group:runtime", "group:fs", "browser", "image_generate", "sessions_spawn", "sessions_send"],
+          elevated: { enabled: false },
+        },
+      },
+    },
+  },
+  // Global server definition; only `email` is allowed to use it (see denies above).
+  mcp: {
+    servers: {
+      mail: { command: "/home/openclaw/family-agent-run.sh", args: ["mcp", "mail"] },
+    },
+  },
+  // Sandboxed sessions need MCP tools allowlisted explicitly.
+  tools: { sandbox: { tools: { alsoAllow: ["mail__*"] } } },
+}
