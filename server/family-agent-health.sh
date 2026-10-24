@@ -5,7 +5,7 @@
 # Sends Henri one short private Telegram message per problem (never the family
 # group), at most once per problem every 6 hours, and one message when it is fixed.
 # Bot token and Henri's chat id come from files under ~/.secrets (not in git):
-#   HEALTH_TOKEN_FILE  default ~/.secrets/telegram-assistant.token (Chief of staff bot)
+#   HEALTH_TOKEN_FILE  default ~/.secrets/telegram-assistant-bot.token (Chief of staff bot)
 #   HEALTH_CHAT_FILE   default ~/.secrets/health-chat-id
 # --dry prints the messages instead of sending them.
 set -uo pipefail
@@ -21,7 +21,7 @@ mkdir -p "$STATE"
 send() {
   if [ "$DRY" = 1 ]; then printf -- '--- message\n%s\n' "$1"; return; fi
   local token chat
-  token="$(tr -d '[:space:]' < "${HEALTH_TOKEN_FILE:-$HOME/.secrets/telegram-assistant.token}")" || return
+  token="$(tr -d '[:space:]' < "${HEALTH_TOKEN_FILE:-$HOME/.secrets/telegram-assistant-bot.token}")" || return
   chat="$(tr -d '[:space:]' < "${HEALTH_CHAT_FILE:-$HOME/.secrets/health-chat-id}")" || return
   curl -sS -m 20 -o /dev/null "https://api.telegram.org/bot${token}/sendMessage" \
     --data-urlencode "chat_id=${chat}" --data-urlencode "text=$1" --data-urlencode "disable_notification=false"
@@ -65,9 +65,9 @@ backup_recent() { # a backup succeeded in the last 26 hours (skips the first day
   [ "$up" -lt 93600 ] && return 0
   unit_ok family-agent-backup.service && [ -n "$(find "$HOME/.backup/repo" -maxdepth 1 -name '*.age' -mmin -1560 2>/dev/null | head -1)" ]
 }
-crons_ok() { # no OpenClaw cron job whose last run failed
+crons_ok() { # no enabled OpenClaw cron job whose last runs failed
   local bad
-  bad="$(timeout 60 openclaw cron list --json 2>/dev/null | jq -r '[.. | objects | select(has("lastStatus") or has("lastRunStatus")) | select((.lastStatus // .lastRunStatus) | tostring | test("error|fail"; "i"))] | length' 2>/dev/null)"
+  bad="$(timeout 60 openclaw cron list --json 2>/dev/null | jq -r '[.jobs[]? | select(.enabled != false) | select((.state.consecutiveErrors // 0) > 0 or ((.lastRunStatus // .state.lastRunStatus // "") | test("error|fail"; "i")))] | length' 2>/dev/null)"
   [ -z "$bad" ] || [ "$bad" = 0 ]
 }
 
