@@ -29,7 +29,7 @@ export interface MailToolApi {
   listInbox(sinceIso: string, max: number, folderId?: string): Promise<MailMessage[]>;
   getMessage(id: string): Promise<MailMessage>;
   createReplyDraft(messageId: string, text: string): Promise<{ id: string }>;
-  listFolders(): Promise<{ id: string; displayName: string }[]>;
+  listFolders(): Promise<{ id: string; displayName: string; totalItemCount?: number; unreadItemCount?: number }[]>;
   wellKnownFolderIds(names: string[]): Promise<Record<string, string>>;
   createFolder(name: string): Promise<{ id: string }>;
   move(messageId: string, folderId: string): Promise<void>;
@@ -64,6 +64,27 @@ export interface MailDeps {
   now(): Date;
   /** How long mail_send waits for the plugin to finish writing Henri's Allow (default 3 s). */
   approvalWaitMs?: number;
+  /** Sorting rules learned from Henri's corrections (server only). No file, no rule tools. */
+  rulesFile?: string;
+}
+
+/** What the agent does with mail from a sender, as Henri taught it. */
+export const RULE_ACTIONS = ["folder", "important", "not_newsletter", "keep_in_inbox"] as const;
+export interface MailRule {
+  sender: string; // an address, or @domain for a whole domain; lower case
+  action: (typeof RULE_ACTIONS)[number];
+  folder?: string;
+  note?: string;
+  at: string;
+  removed?: true;
+}
+const MAX_RULES = 300;
+
+/** The rules in force: the latest line for each sender, minus removed ones. */
+export function currentRules(file: string): MailRule[] {
+  const by = new Map<string, MailRule>();
+  for (const r of lines<MailRule>(file)) by.set(r.sender, r);
+  return [...by.values()].filter((r) => !r.removed);
 }
 
 const addr = (a?: Addr) => (a?.emailAddress.address ?? "").toLowerCase();
@@ -189,10 +210,10 @@ export function mailTools(d: MailDeps): Tool[] {
     },
     {
       name: "mail_folders",
-      description: "List mail folders (name, id).",
+      description: "List mail folders (name, id, total and unread counts).",
       input: { properties: {} },
       async run() {
-        return (await d.mail.listFolders()).map((f) => ({ name: f.displayName, id: f.id }));
+        return (await d.mail.listFolders()).map((f) => ({ name: f.displayName, id: f.id, total: f.totalItemCount, unread: f.unreadItemCount }));
       },
     },
     {
@@ -241,6 +262,58 @@ export function mailTools(d: MailDeps): Tool[] {
       },
     },
   ];
+  if (d.rulesFile) {
+    const file = d.rulesFile;
+    tools.push(
+      {
+        name: "mail_rules",
+        description: "The sorting rules Henri has taught you (sender or @domain, action, folder, note). Read them before sorting.",
+        input: { properties: {} },
+        async run() {
+          return currentRules(file);
+        },
+      },
+      {
+        name: "mail_rule",
+        description:
+          "Save what Henri taught you about a sender, so the next sort follows it: folder (always move there), important (always label Tärkeä), not_newsletter (never sort as a newsletter), keep_in_inbox (never move). remove: true forgets the sender's rule.",
+        input: {
+          properties: {
+            sender: { type: "string", maxLength: 120, pattern: "^(@|[^@\\s]+@)[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$" },
+            action: { type: "string", enum: [...RULE_ACTIONS] },
+            folder: { type: "string", maxLength: 60 },
+            note: { type: "string", maxLength: 120 },
+            remove: { type: "boolean" },
+          },
+          required: ["sender"],
+        },
+        async run(a) {
+          const sender = String(a.sender).trim().toLowerCase();
+          const at = d.now().toISOString();
+          const rules = currentRules(file);
+          let row: MailRule;
+          if (a.remove === true) {
+            const old = rules.find((r) => r.sender === sender);
+            if (!old) return `No rule for ${sender}`;
+            row = { ...old, at, removed: true };
+          } else {
+            const action = a.action as MailRule["action"];
+            if (!RULE_ACTIONS.includes(action)) throw new ToolError(`action: one of ${RULE_ACTIONS.join(", ")}`);
+            if (!rules.some((r) => r.sender === sender) && rules.length >= MAX_RULES) throw new ToolError(`at most ${MAX_RULES} rules; remove old ones first`);
+            row = { sender, action, at };
+            if (action === "folder") {
+              if (!a.folder) throw new ToolError("folder: required for action folder");
+              row.folder = (await folderId(d, String(a.folder))).name;
+            }
+            if (a.note) row.note = String(a.note);
+          }
+          mkdirSync(dirname(file), { recursive: true });
+          appendFileSync(file, JSON.stringify(row) + "\n", { mode: 0o600 });
+          return row.removed ? `Forgot the rule for ${sender}` : `Saved: ${sender} → ${row.action}${row.folder ? ` (${row.folder})` : ""}`;
+        },
+      },
+    );
+  }
   if (d.mail.sendDraft) {
     const send = d.mail.sendDraft.bind(d.mail);
     tools.push({

@@ -238,7 +238,7 @@ export class GraphMail implements MailApi {
   }
 
   async listFolders() {
-    return (await this.call<{ value: { id: string; displayName: string }[] }>("GET", "/me/mailFolders?$top=100")).value;
+    return (await this.call<{ value: { id: string; displayName: string; totalItemCount?: number; unreadItemCount?: number }[] }>("GET", "/me/mailFolders?$top=100")).value;
   }
 
   createFolder(name: string, parentId?: string) {
