@@ -1,0 +1,52 @@
+// Assistant agent `henri`: own bot (@helperwnkdbot, Telegram account "assistant"),
+// family tool server, messaging + image reading only. Applied with
+// `openclaw config patch --file` as openclaw, after `openclaw agents add henri`.
+// Then: `openclaw agents bind --agent henri --bind telegram:assistant`.
+// Replace <HENRI_TELEGRAM_USER_ID> with the numeric Telegram user id before applying.
+// Brain: add `brain` to mcp.servers and "brain__*" to the allow lists once the
+// Brain deploy key works and ~/brain is cloned.
+{
+  channels: {
+    telegram: {
+      accounts: {
+        assistant: {
+          tokenFile: "/home/openclaw/.secrets/telegram-assistant-bot.token",
+          dmPolicy: "allowlist",
+          allowFrom: ["<HENRI_TELEGRAM_USER_ID>"],
+          groupPolicy: "allowlist",
+          groups: {},
+          joinIntro: false,
+        },
+      },
+    },
+  },
+  agents: {
+    entries: {
+      // Default model (gpt-6-luna, Sonnet fallback) is inherited from agents.defaults.
+      henri: {
+        name: "Assistant",
+        workspace: "/home/openclaw/.openclaw/workspace-henri",
+        sandbox: { mode: "all" },
+        tools: {
+          profile: "messaging",
+          alsoAllow: ["family__*", "brain__*", "view_image"],
+          deny: ["group:runtime", "group:fs", "browser", "image_generate", "sessions_spawn", "sessions_send", "mail__*"],
+          elevated: { enabled: false },
+        },
+      },
+      // Neither other agent gets the family or brain tools.
+      main: { tools: { deny: ["mail__*", "family__*", "brain__*"] } },
+      email: {
+        tools: {
+          deny: ["group:runtime", "group:fs", "browser", "image_generate", "sessions_spawn", "sessions_send", "family__*", "brain__*"],
+        },
+      },
+    },
+  },
+  mcp: {
+    servers: {
+      family: { command: "/home/openclaw/family-agent-run.sh", args: ["mcp", "family"] },
+    },
+  },
+  tools: { sandbox: { tools: { alsoAllow: ["mail__*", "family__*", "brain__*"] } } },
+}
