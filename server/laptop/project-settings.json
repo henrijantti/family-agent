@@ -1,0 +1,36 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git checkout *)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(git fetch *)",
+      "Bash(git merge *)",
+      "Bash(git push origin claude/*)",
+      "Bash(git log *)",
+      "Bash(git status *)",
+      "Bash(git diff *)",
+      "Bash(gh pr *)",
+      "Bash(gh run *)",
+      "Bash(gh repo view *)",
+      "Bash(ssh -o BatchMode=yes root@ubuntu-2cpu-4gb-fi-hel2 *)",
+      "Bash(ssh -o BatchMode=yes openclaw@ubuntu-2cpu-4gb-fi-hel2 *)",
+      "Bash(scp -q -o BatchMode=yes * root@ubuntu-2cpu-4gb-fi-hel2:/root/server-setup/*)",
+      "PowerShell(ssh -o BatchMode=yes root@ubuntu-2cpu-4gb-fi-hel2 *)",
+      "PowerShell(scp -q -o BatchMode=yes * root@ubuntu-2cpu-4gb-fi-hel2:/root/server-setup/*)"
+    ],
+    "deny": [
+      "Bash(*openclaw approvals resolve * allow*)",
+      "Bash(*openclaw update --*)",
+      "Bash(*openclaw update)",
+      "Bash(*/usr/local/bin/openclaw-install-policy*)",
+      "Bash(*cat */.secrets/*)",
+      "Bash(git push --force*)",
+      "Bash(git push -f*)",
+      "Bash(git push origin main*)",
+      "PowerShell(*openclaw approvals resolve * allow*)",
+      "PowerShell(*openclaw update --*)",
+      "PowerShell(*/usr/local/bin/openclaw-install-policy*)"
+    ]
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "autoMode": {
+    "environment": [
+      "$defaults",
+      "Henri's family-agent server is ubuntu-2cpu-4gb-fi-hel2 (Tailscale only), reached from this laptop with ssh/scp as root and run as the openclaw user. It hosts OpenClaw 2026.10.6 (agents main, email, henri) and the family-agent jobs. Scripts are copied to /root/server-setup/ and run there."
+    ],
+    "allow": [
+      "$defaults",
+      "Routine maintenance of Henri's family-agent server ubuntu-2cpu-4gb-fi-hel2 is pre-approved by Henri (messages of 2026-10-24: 'You dont need to ask me permissions to continue / complete work'): openclaw cron add/edit/rm/list for agents email and henri delivered only to Henri's own Telegram DMs; openclaw config get/set/patch/validate; openclaw plugins inspect/reload/enable for already-installed plugins; openclaw update repair; openclaw approvals resolve <id> deny; openclaw mcp doctor/probe; systemctl --user for openclaw-gateway, family-agent-tick and family-agent-backup units; git pull --ff-only in /home/openclaw/family-agent; npm ci and npm test there; read-only checks that print only counts, sizes, statuses and timestamps.",
+      "Running the family-agent read-only commands (check, myclub-check, outlook-test, week-preview, calendar_list, week_overview) on that server is allowed when output is limited to pass/fail and counts."
+    ],
+    "hard_deny": [
+      "$defaults",
+      "Never approve a pending OpenClaw approval with allow-once or allow-always on Henri's behalf; only Henri approves sends.",
+      "Never print, copy off the server, or upload the contents of /home/openclaw/.secrets or ~/.openclaw auth stores.",
+      "Never run `openclaw update` (version upgrades) or change /usr/local/bin/openclaw-install-policy without Henri's words in the current thread.",
+      "Never disable the sandbox, the mail-approval plugin, ufw, or the sshd lock-down on the server."
+    ]
+  }
+}
