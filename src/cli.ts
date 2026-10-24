@@ -21,6 +21,7 @@ import { familyTools } from "./agent/family-tools.js";
 import { brainDepsFromEnv, brainTools } from "./agent/brain.js";
 import { mailTools } from "./agent/mail-tools.js";
 import { deskTools, deskWorkerTools, wakeFromEnv } from "./agent/desk.js";
+import { weekPlan } from "./digest/week-plan.js";
 import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -447,7 +448,8 @@ async function main() {
       const group = args.includes("--group");
       if (which === "family") {
         const calendar = buildCtx(cfg, st, now).calendar;
-        tools = familyTools({ cfg, calendar, loadState: () => store().data, now: clock, group });
+        const deskFile = `${dirname(env("STATE_FILE") ?? "state/state.json")}/mail-desk.jsonl`;
+        tools = familyTools({ cfg, calendar, loadState: () => store().data, now: clock, group, deskFile: group ? undefined : deskFile });
       } else if (which === "jobs") {
         tools = jobsTools({
           cfg,
@@ -473,10 +475,11 @@ async function main() {
             draftsFile: `${dir}/mail-drafts.jsonl`,
             approvalsFile: `${dir}/mail-approvals.jsonl`,
             rulesFile: `${dir}/mail-rules.jsonl`,
+            billPdfFile: `${dir}/mail-bill-pdf.jsonl`,
             self: ea.self,
             now: clock,
           }),
-          ...deskWorkerTools({ file: `${dir}/mail-desk.jsonl`, now: clock, getMessage: (id) => mail.getMessage(id), draftsFile: `${dir}/mail-drafts.jsonl` }),
+          ...deskWorkerTools({ file: `${dir}/mail-desk.jsonl`, now: clock, getMessage: (id) => mail.getMessage(id), draftsFile: `${dir}/mail-drafts.jsonl`, billPdfFile: `${dir}/mail-bill-pdf.jsonl` }),
         ];
       } else if (which === "desk") {
         // Chief of staff's side of the mail desk: the task file only, no Outlook, no mail secrets.
@@ -490,6 +493,21 @@ async function main() {
       const res = (await handle(which, tools, { id: 1, method: "tools/call", params: { name: args[1], arguments: JSON.parse(args[2] ?? "{}") } })) as any;
       console.log(res.result?.content?.[0]?.text ?? JSON.stringify(res));
       if (res.result?.isError) process.exitCode = 1;
+      break;
+    }
+    case "week-plan": {
+      // Henri's Sunday week plan: prints it, or with --send sends it to his private chat.
+      const ctx = buildCtx(cfg, st, now);
+      const deskFile = `${dirname(env("STATE_FILE") ?? "state/state.json")}/mail-desk.jsonl`;
+      const send = args.includes("--send");
+      const text = await weekPlan(ctx, deskFile, send ? "html" : "markdown");
+      if (!send) console.log(text);
+      else {
+        const chat = env("TELEGRAM_PRIVATE_CHAT_ID");
+        if (!chat || !ctx.notifier) throw new Error("--send needs TELEGRAM_BOT_TOKEN and TELEGRAM_PRIVATE_CHAT_ID");
+        await ctx.notifier.send(chat, text);
+        log("week plan sent to Henri's private chat");
+      }
       break;
     }
     case "digest": {
@@ -513,6 +531,7 @@ async function main() {
   wilma-students           list the children on the Wilma login
   wilma-fetch [--force]    (home runner) fetch Wilma if a slot is near, save the snapshot
   digest [--week]          build and send the digest now
+  week-plan [--send]       Henri's Sunday week plan (prints; --send = his private chat)
   mcp family|brain|jobs|mail|desk  tool server on stdio for an OpenClaw agent
   tool family|brain|jobs|mail|desk <name> [json]  call one agent tool once, print the result`);
   }

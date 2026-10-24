@@ -2,7 +2,8 @@ import { execFile } from "node:child_process";
 import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
 import { dirname } from "node:path";
 import type { MailMessage } from "../sources/outlook.js";
-import { findDraft } from "./mail-tools.js";
+import { validIban, validReference } from "../sources/bill-pdf.js";
+import { findDraft, pdfBillReads } from "./mail-tools.js";
 import { Tool, ToolError } from "./mcp.js";
 
 // The mail desk: how the Chief of staff agent (`henri`) gets email work done
@@ -28,7 +29,7 @@ export const FAILURES = ["no_access", "not_found", "unclear_task", "too_many", "
 const CURRENCIES = ["EUR", "USD", "GBP", "SEK", "NOK"];
 
 const KIND_HELP =
-  "sort: run the morning sort now. bills: open bills with due date and amount. needs_reply: emails waiting for Henri's answer. " +
+  "sort: run the morning sort now. bills: open bills with due date, amount, IBAN and reference (read from the PDF when there is one). needs_reply: emails waiting for Henri's answer. " +
   "draft_reply: draft a reply to messageId following instruction (Henri approves any send in the mail bot). " +
   "newsletters: newsletter senders of the last 7 days with counts. count: how many emails in the inbox from the last 2 days, how many flagged, how many labelled Tärkeä.";
 
@@ -49,9 +50,16 @@ export interface DeskItem {
   currency?: string;
   draftId?: string;
   count?: number;
+  /** Checked against their check digits, so they can't carry words. */
+  iban?: string;
+  reference?: string;
   /** Filled in by code from Outlook, never by the agent. */
   sender?: string;
   received?: string;
+  /** Set by code: the IBAN and reference match what mail_bill_pdf read from this email's PDF. */
+  fromPdf?: boolean;
+  /** Set by code: an earlier report gave this sender's domain a different IBAN (possible bill fraud). */
+  ibanChanged?: boolean;
 }
 
 export interface DeskReport {
@@ -146,6 +154,8 @@ export interface DeskWorkerDeps extends DeskDeps {
   getMessage(id: string): Promise<MailMessage>;
   /** mail_draft_reply's record: a reported draftId must be one of these drafts. */
   draftsFile: string;
+  /** mail_bill_pdf's record, to mark items whose payment details came from the PDF. */
+  billPdfFile?: string;
 }
 
 const item: Record<string, import("./mcp.js").Prop> = {
@@ -156,7 +166,11 @@ const item: Record<string, import("./mcp.js").Prop> = {
   currency: { type: "string", enum: CURRENCIES },
   draftId: { type: "string", pattern: ID },
   count: { type: "integer" },
+  iban: { type: "string", pattern: "^[A-Z]{2}[0-9]{2}[A-Z0-9]{11,30}$", description: "no spaces" },
+  reference: { type: "string", pattern: "^(RF[0-9]{2}[A-Z0-9]{1,21}|[0-9]{4,20})$", description: "no spaces" },
 };
+
+const domain = (addr?: string) => addr?.split("@")[1];
 
 /** Tools for the Email agent's side of the desk. */
 export function deskWorkerTools(d: DeskWorkerDeps): Tool[] {
@@ -172,7 +186,7 @@ export function deskWorkerTools(d: DeskWorkerDeps): Tool[] {
     {
       name: "desk_report",
       description:
-        "Answer one desk task. Only message ids, a category, due date, amount, draftId and counts can be reported; sender and time are added from Outlook. Never try to pass on email text.",
+        "Answer one desk task. Only message ids, a category, due date, amount, IBAN, reference, draftId and counts can be reported; sender and time are added from Outlook. Never try to pass on email text.",
       input: {
         properties: {
           taskId: { type: "string", pattern: TASK_ID },
@@ -197,6 +211,9 @@ export function deskWorkerTools(d: DeskWorkerDeps): Tool[] {
             if (!rec) throw new ToolError("draftId must be a draft made with mail_draft_reply");
             if (it.messageId && rec.messageId !== it.messageId) throw new ToolError("that draft answers a different email");
           }
+          if (it.iban && !validIban(it.iban)) throw new ToolError("iban fails its check digits");
+          if (it.reference && !validReference(it.reference)) throw new ToolError("reference fails its check digit");
+          if ((it.iban || it.reference) && !it.messageId) throw new ToolError("iban and reference need the bill's messageId");
           const out: DeskItem = { ...it };
           if (it.messageId) {
             // Looking the id up in Outlook also refuses ids that aren't real messages.
@@ -206,6 +223,14 @@ export function deskWorkerTools(d: DeskWorkerDeps): Tool[] {
             const addr = m.from?.emailAddress.address?.toLowerCase();
             if (addr && /^[^\s@<>"]{1,64}@[a-z0-9.-]{1,190}$/.test(addr)) out.sender = addr;
             if (m.receivedDateTime) out.received = m.receivedDateTime;
+            if (it.iban || it.reference) {
+              const reads = pdfBillReads(d.billPdfFile, it.messageId);
+              out.fromPdf = reads.some((r) => (!it.iban || r.iban === it.iban) && (!it.reference || r.reference === it.reference));
+            }
+            if (it.iban && out.sender) {
+              const before = rows(d.file).flatMap((r) => (r.type === "report" ? r.items : []));
+              out.ibanChanged = before.some((p) => p.iban && p.iban !== it.iban && domain(p.sender) === domain(out.sender) && p.messageId !== it.messageId);
+            }
           }
           items.push(out);
         }
@@ -224,4 +249,20 @@ export function wakeFromEnv(value: string | undefined): (() => void) | undefined
   return () => {
     execFile(argv[0], argv.slice(1), { timeout: 30000 }, (err) => err && console.error(`mail desk wake failed: ${err.message}`));
   };
+}
+
+/** Bills the Email agent reported in the last `days` days, newest report per email first. For the week planner. */
+export function deskBills(file: string, now: Date, days = 21): DeskItem[] {
+  const since = now.getTime() - days * 86400000;
+  const seen = new Set<string>();
+  const out: DeskItem[] = [];
+  for (const r of rows(file).reverse()) {
+    if (r.type !== "report" || r.status !== "done" || Date.parse(r.at) < since) continue;
+    for (const it of r.items) {
+      if (it.category !== "bill" || !it.messageId || seen.has(it.messageId)) continue;
+      seen.add(it.messageId);
+      out.push(it);
+    }
+  }
+  return out;
 }
