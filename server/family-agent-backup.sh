@@ -15,7 +15,8 @@ set -euo pipefail
 umask 077
 KEEP=14
 B="$HOME/.backup"
-REPO_URL="git@github.com:henrijantti/family-agent-backup.git"
+# SSH over port 443: outbound port 22 to github.com times out from this server.
+REPO_URL="ssh://git@ssh.github.com:443/henrijantti/family-agent-backup.git"
 export PATH="$HOME/.npm-global/bin:/opt/node/bin:/usr/local/bin:/usr/bin:/bin"
 export GIT_SSH_COMMAND="ssh -i $B/deploy_key -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=$B/known_hosts"
 
@@ -29,6 +30,7 @@ set -a; . "$HOME/.secrets/gateway.env"; set +a
 openclaw backup create --output "$work/oc" --verify >/dev/null
 mv "$work"/oc/*.tar.gz "$work/payload/openclaw-backup.tar.gz"
 cp -a "$HOME/.secrets/family-agent" "$HOME/.secrets/anthropic.env" "$HOME/.secrets/gateway.env" "$work/payload/secrets/"
+cp -a "$HOME"/.secrets/telegram-*.env "$HOME"/.secrets/telegram-*.token "$work/payload/secrets/" 2>/dev/null || true
 cp -a "$HOME/family-agent/state" "$work/payload/family-agent-state"
 
 [ -d "$B/repo/.git" ] || git clone -q "$REPO_URL" "$B/repo" 2>/dev/null || { mkdir -p "$B/repo" && git -C "$B/repo" init -q && git -C "$B/repo" remote add origin "$REPO_URL"; }

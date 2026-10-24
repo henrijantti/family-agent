@@ -1,0 +1,27 @@
+// Telegram for the Email agent: one bot (@emailassistantwkndbot), DMs from Henri only,
+// no groups. Bound to agent `email` with `openclaw agents bind --agent email --bind telegram:mail`.
+// tokenFile holds the raw BotFather token (openclaw, 600); never put the token here.
+// Replace <HENRI_TELEGRAM_USER_ID> with the numeric Telegram user id before applying.
+{
+  channels: {
+    telegram: {
+      enabled: true,
+      defaultAccount: "mail",
+      dmPolicy: "allowlist",
+      allowFrom: ["<HENRI_TELEGRAM_USER_ID>"],
+      groupPolicy: "allowlist",
+      groups: {},
+      joinIntro: false,
+      accounts: {
+        mail: {
+          tokenFile: "/home/openclaw/.secrets/telegram-email-bot.token",
+          dmPolicy: "allowlist",
+          allowFrom: ["<HENRI_TELEGRAM_USER_ID>"],
+          groupPolicy: "allowlist",
+          groups: {},
+          joinIntro: false,
+        },
+      },
+    },
+  },
+}
