@@ -15,8 +15,7 @@ for f in "$SECRETS"/*; do
   [[ "$name" =~ ^[A-Z][A-Z0-9_]*$ ]] || continue
   export "$name=$(cat "$f")"
 done
-# Wilma is fetched at home; the server only ever reads the encrypted snapshot.
-export WILMA_MODE=snapshot
+# Wilma logs in live from the server (Helsinki Wilma lets the server's address in).
 export PATH="/opt/node/bin:$PATH"
 
 cd "$REPO"

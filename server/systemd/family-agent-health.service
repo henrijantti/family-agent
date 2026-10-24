@@ -1,0 +1,9 @@
+# systemd USER unit for the openclaw user: one health check (alerts Henri in Telegram).
+[Unit]
+Description=Family agent health check
+
+[Service]
+Type=oneshot
+ExecStart=%h/family-agent-health.sh
+TimeoutStartSec=3min
+Nice=10

@@ -185,6 +185,58 @@ export class GraphMail implements MailApi {
     return failed + pending.length;
   }
 
+  /** Inbox messages received in [fromIso, toIso): enough to sort, no body. Read-only. */
+  async listRange(fromIso: string, toIso: string) {
+    const q = new URLSearchParams({
+      $filter: `receivedDateTime ge ${fromIso} and receivedDateTime lt ${toIso}`,
+      $select: "id,subject,from,receivedDateTime,bodyPreview,flag,categories,internetMessageHeaders",
+      $orderby: "receivedDateTime desc",
+      $top: "100",
+    });
+    const out: MailMessage[] = [];
+    let next: string | undefined = `/me/mailFolders/inbox/messages?${q}`;
+    while (next && out.length < 50000) {
+      const page: { value: MailMessage[]; "@odata.nextLink"?: string } = await this.call("GET", next);
+      out.push(...page.value);
+      next = page["@odata.nextLink"];
+    }
+    return out;
+  }
+
+  /** Moves in JSON batches of 20, retrying throttled ones; each result has the moved mail's new id. */
+  async moveMany(ops: { id: string; folderId: string }[]) {
+    const out = new Map<string, { id: string; newId?: string; error?: string }>();
+    let pending = ops;
+    for (let attempt = 0; attempt < 4 && pending.length; attempt++) {
+      const retry: typeof ops = [];
+      let wait = 0;
+      for (let i = 0; i < pending.length; i += 20) {
+        const chunk = pending.slice(i, i + 20);
+        const res = await this.call<{ responses: { id: string; status: number; headers?: Record<string, string>; body?: { id?: string } }[] }>("POST", "/$batch", {
+          requests: chunk.map((o, n) => ({
+            id: String(n),
+            method: "POST",
+            url: `/me/messages/${o.id}/move`,
+            headers: { "content-type": "application/json" },
+            body: { destinationId: o.folderId },
+          })),
+        });
+        for (const r of res.responses) {
+          const op = chunk[Number(r.id)];
+          if (r.status < 300 && r.body?.id) out.set(op.id, { id: op.id, newId: r.body.id });
+          else if (r.status === 429 || r.status >= 500) {
+            retry.push(op);
+            wait = Math.max(wait, Number(r.headers?.["Retry-After"] ?? r.headers?.["retry-after"] ?? 5));
+          } else out.set(op.id, { id: op.id, error: String(r.status) });
+        }
+      }
+      pending = retry;
+      if (pending.length) await new Promise((ok) => setTimeout(ok, Math.min(wait, 60) * 1000));
+    }
+    for (const op of pending) out.set(op.id, { id: op.id, error: "throttled" });
+    return ops.map((o) => out.get(o.id)!);
+  }
+
   async unflag(messageId: string) {
     await this.call("PATCH", `/me/messages/${messageId}`, { flag: { flagStatus: "notFlagged" } });
   }
