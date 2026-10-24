@@ -1,0 +1,11 @@
+# systemd USER unit for the openclaw user: one encrypted backup to GitHub.
+[Unit]
+Description=Family agent nightly encrypted backup
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=%h/family-agent-backup.sh
+TimeoutStartSec=20min
+Nice=10

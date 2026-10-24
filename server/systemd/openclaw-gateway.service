@@ -1,0 +1,31 @@
+# systemd USER unit for the openclaw user (~/.config/systemd/user/).
+# Lingering is enabled for openclaw, so it starts at boot without a login.
+# Based on the unit in OpenClaw's Gateway runbook, plus secrets and rootless Docker.
+[Unit]
+Description=OpenClaw Gateway
+After=network-online.target docker.service
+Wants=network-online.target docker.service
+StartLimitBurst=10
+StartLimitIntervalSec=300
+
+[Service]
+EnvironmentFile=%h/.secrets/anthropic.env
+EnvironmentFile=%h/.secrets/gateway.env
+Environment=PATH=%h/.npm-global/bin:/opt/node/bin:/usr/local/bin:/usr/bin:/bin
+Environment=DOCKER_HOST=unix://%t/docker.sock
+Environment=OPENCLAW_NO_RESPAWN=1
+Environment=NODE_COMPILE_CACHE=/var/tmp/openclaw-compile-cache
+# 4 GB host: cap the V8 heap and leave room for Docker sandboxes.
+Environment=NODE_OPTIONS=--max-old-space-size=1536
+ExecStart=%h/.npm-global/bin/openclaw gateway --port 18789
+Restart=always
+RestartSec=5
+RestartPreventExitStatus=78
+TimeoutStopSec=330
+TimeoutStartSec=90
+SuccessExitStatus=0 143
+OOMPolicy=continue
+KillMode=mixed
+
+[Install]
+WantedBy=default.target

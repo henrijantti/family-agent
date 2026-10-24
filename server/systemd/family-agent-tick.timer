@@ -1,0 +1,12 @@
+# Replaces the cron in .github/workflows/tick.yml (disabled at cutover, 2026-10-23).
+# Every 15 minutes; the agent decides which jobs are due.
+[Unit]
+Description=Family agent tick every 15 minutes
+
+[Timer]
+OnCalendar=*:00,15,30,45
+Persistent=true
+RandomizedDelaySec=30
+
+[Install]
+WantedBy=timers.target

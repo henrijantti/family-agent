@@ -1,0 +1,69 @@
+// OpenClaw config for the family-agent server (template, no secrets).
+// Installed to /home/openclaw/.openclaw/openclaw.json by setup-openclaw.sh.
+// Secrets come from env files under /home/openclaw/.secrets/, loaded by the
+// systemd unit: ANTHROPIC_API_KEY (anthropic.env), OPENCLAW_GATEWAY_TOKEN (gateway.env).
+{
+  gateway: {
+    mode: "local",
+    // Loopback only. Tailnet access goes through `tailscale serve`, which root
+    // owns (see setup-openclaw.sh), so the openclaw user needs no Tailscale rights.
+    bind: "loopback",
+    port: 18789,
+    auth: { mode: "token", allowTailscale: false },
+    tailscale: { mode: "off" },
+    // tailscale serve proxies from 127.0.0.1 and sets X-Forwarded-For.
+    trustedProxies: ["127.0.0.1"],
+  },
+
+  session: { dmScope: "per-channel-peer" },
+
+  agents: {
+    defaults: {
+      // ChatGPT subscription first, Claude API key as fallback. The ChatGPT login
+      // lives in OpenClaw's auth store, not here: after a rebuild run, as openclaw,
+      //   openclaw models auth login --provider openai --device-code
+      // (the account must allow device-code sign-in in ChatGPT Security settings).
+      model: {
+        primary: "openai/gpt-6-luna",
+        fallbacks: ["anthropic/claude-sonnet-5-5"],
+      },
+      // Pinned: otherwise utility follows the primary provider's small model.
+      utilityModel: "anthropic/claude-haiku-5-5",
+      sandbox: {
+        mode: "all",
+        backend: "docker",
+        scope: "session",
+        docker: {
+          image: "openclaw-sandbox:bookworm-slim",
+          readOnlyRoot: true,
+          network: "none",
+          capDrop: ["ALL"],
+        },
+      },
+    },
+  },
+
+  // No embeddings key on this server: keyword-only (FTS) memory recall.
+  memory: { search: { provider: "none" } },
+
+  // No Chrome extension is paired; refuse the legacy relay handshake.
+  browser: { extensionRelay: { allowLegacyAuth: false } },
+
+  tools: {
+    elevated: { enabled: false },
+    sessions: { visibility: "agent" },
+    agentToAgent: { enabled: false },
+  },
+
+  security: {
+    // Blocks every skill and plugin install (ClawHub included). Bundled plugins still load.
+    installPolicy: {
+      enabled: true,
+      exec: {
+        source: "exec",
+        command: "/usr/local/bin/openclaw-install-policy",
+        trustedDirs: ["/usr/local/bin"],
+      },
+    },
+  },
+}

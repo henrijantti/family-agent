@@ -1,0 +1,13 @@
+# systemd USER unit for the openclaw user (~/.config/systemd/user/).
+# One tick: runs whatever family-agent job is due now (Helsinki time).
+# Oneshot, so a timer firing while a tick still runs does not start a second one.
+[Unit]
+Description=Family agent tick
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=%h/family-agent-run.sh tick
+TimeoutStartSec=15min
+Nice=5

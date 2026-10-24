@@ -1,0 +1,11 @@
+# 02:30 Helsinki (server timezone), before the 03:30 automatic-update reboot.
+[Unit]
+Description=Family agent backup at 02:30
+
+[Timer]
+OnCalendar=*-*-* 02:30:00
+Persistent=true
+RandomizedDelaySec=5min
+
+[Install]
+WantedBy=timers.target

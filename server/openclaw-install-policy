@@ -1,0 +1,5 @@
+#!/bin/bash
+# OpenClaw security.installPolicy: refuse every skill and plugin install.
+# Installed to /usr/local/bin/openclaw-install-policy (root:root 755).
+cat >/dev/null
+printf '%s\n' '{"protocolVersion":1,"decision":"block","reason":"Installs are disabled on this server. Change /usr/local/bin/openclaw-install-policy as root to allow a reviewed install."}'
