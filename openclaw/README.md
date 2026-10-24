@@ -173,8 +173,8 @@ Deploy (server thread):
    (renames `henri` to "Chief of staff", adds the `desk` server and tool policy)
 2. Copy `openclaw/workspace/AGENTS.md` and `openclaw/workspace-email/AGENTS.md` into
    the two workspaces again
-3. Cron job on agent `email`, name `mail-desk`, every 2 hours 07:00-21:00 Helsinki,
-   no delivery unless it has something: `Mail desk. Call desk_tasks. If there are none, stop without a message. Otherwise do each task and answer it with desk_report, then tell Henri in one line what the Chief of staff asked and that it is done.`
+3. Cron job on agent `email`, name `mail-desk`, every 2 hours 07:00-21:00 Helsinki
+   (OpenClaw 2026.10.6 drops only empty or `NO_REPLY` answers, so the prompt ends with that): `Mail desk. Call desk_tasks. Do each task and answer it with desk_report, then tell Henri in one line what the Chief of staff asked and that it is done. If there are no tasks, reply exactly NO_REPLY.`
 4. Optional instant pickup: set `MAIL_DESK_WAKE='["openclaw","cron","run","mail-desk"]'`
    (or the 2026.10.6 equivalent) in the env `family-agent-run.sh` loads, so a new
    task starts the cron job at once
