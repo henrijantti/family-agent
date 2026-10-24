@@ -1,0 +1,33 @@
+// Chief of staff + mail desk (2026-10-24). Apply after henri-agent.patch.json5 with
+// `openclaw config patch --file` as openclaw. The `henri` agent becomes "Chief of staff"
+// (same bot, @helperwnkdbot) and gets the `desk` server: it hands email tasks to the
+// Email agent and reads back ids, categories, senders, dates and amounts, never email
+// text. The Email agent gets its side (desk_tasks, desk_report) inside the `mail` server.
+// Agent-to-agent messaging stays off: the desk is the only link, and it is a file.
+{
+  agents: {
+    entries: {
+      henri: {
+        name: "Chief of staff",
+        tools: { alsoAllow: ["family__*", "brain__*", "desk__*", "jobs__*", "view_image"] },
+      },
+      main: { tools: { deny: ["mail__*", "family__*", "brain__*", "desk__*", "jobs__*"] } },
+      email: {
+        tools: {
+          deny: ["group:runtime", "group:fs", "browser", "image_generate", "sessions_spawn", "sessions_send", "family__*", "brain__*", "desk__*", "jobs__*"],
+        },
+      },
+    },
+  },
+  mcp: {
+    servers: {
+      // MAIL_DESK_WAKE (optional, in the wrapper's env): JSON argv that starts the
+      // Email agent's "mail-desk" cron job right after a new task, e.g.
+      // ["openclaw","cron","run","mail-desk"]. Without it the cron's schedule picks tasks up.
+      // Job tools (sync, bills; attendance later on `family`). Each refuses until its job is in agent_jobs.
+      jobs: { command: "/home/openclaw/family-agent-run.sh", args: ["mcp", "jobs"] },
+      desk: { command: "/home/openclaw/family-agent-run.sh", args: ["mcp", "desk"] },
+    },
+  },
+  tools: { sandbox: { tools: { alsoAllow: ["mail__*", "family__*", "brain__*", "desk__*", "jobs__*"] } } },
+}

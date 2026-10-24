@@ -88,7 +88,8 @@ Memory: one more agent and two small Node processes; check `free -m` after start
 A separate agent `email` for Henri's Outlook: sort, label, draft replies, flag
 bills, and send a reply only after Henri taps Allow. Instructions:
 `openclaw/workspace-email/AGENTS.md`. It never shares tools, bot or memory with
-`henri`, so email text can't steer the agent that has the calendar and Brain.
+`henri`, so email text can't steer the agent that has the calendar and Brain. The
+only link is the mail desk (below), which carries ids, categories and numbers, no text.
 
 | Server | Command | Tools |
 | --- | --- | --- |
@@ -140,46 +141,98 @@ Deploy (server thread, after Henri's OK):
 Known gap: the mail server reads state but doesn't save rotated refresh tokens.
 Microsoft keeps old ones valid, and the 15-minute tick saves its own.
 
+## Chief of staff and the mail desk (2026-10-24)
+
+Henri's design: three bots. The Chief of staff (agent `henri`, @helperwnkdbot,
+Henri only) runs his personal automation; the Family bot (agent `family`) lives in
+the family group; the Email agent keeps its own bot. Calendar and Brain are tools
+of the Chief of staff, not bots. Family finance comes later as one more agent
+under the Chief of staff, Henri only, without payment tools.
+
+The Chief of staff coordinates email without reading it (Henri chose this on
+2026-10-24): it gives the Email agent tasks and gets back structured results.
+
+| Server | Command | Tools | Agent |
+| --- | --- | --- | --- |
+| desk | `family-agent-run.sh mcp desk` | `desk_task_create`, `desk_results` | `henri` only |
+| mail | `family-agent-run.sh mcp mail` | (mail tools) + `desk_tasks`, `desk_report` | `email` only |
+
+Guarantees in code (src/agent/desk.ts):
+
+- The `desk` server has no Outlook access and no mail secrets; it reads and writes
+  `state/mail-desk.jsonl` only
+- A report is schema-checked: message ids, a category from a fixed list, ISO due
+  date, numeric amount, currency, draft id, counts. Anything else is refused
+- Sender address and received time are filled in by code from Outlook, never by
+  the agent. Subjects, bodies and sender names are never stored
+- Agent-to-agent messaging stays off; the desk file is the only link
+
+Deploy (server thread):
+
+1. `git pull`, then `openclaw config patch --file server/cos-desk.patch.json5`
+   (renames `henri` to "Chief of staff", adds the `desk` server and tool policy)
+2. Copy `openclaw/workspace/AGENTS.md` and `openclaw/workspace-email/AGENTS.md` into
+   the two workspaces again
+3. Cron job on agent `email`, name `mail-desk`, every 2 hours 07:00-21:00 Helsinki,
+   no delivery unless it has something: `Mail desk. Call desk_tasks. If there are none, stop without a message. Otherwise do each task and answer it with desk_report, then tell Henri in one line what the Chief of staff asked and that it is done.`
+4. Optional instant pickup: set `MAIL_DESK_WAKE='["openclaw","cron","run","mail-desk"]'`
+   (or the 2026.10.6 equivalent) in the env `family-agent-run.sh` loads, so a new
+   task starts the cron job at once
+5. Probe: `openclaw mcp doctor desk --probe`; in the Chief of staff chat ask
+   "montako sähköpostia odottaa vastaustani?", then check the mail bot answered the task
+
+## Family agent (at the @Family_fff_bot handover)
+
+Agent `family`, instructions `openclaw/workspace-family/AGENTS.md`, config
+`server/family-agent.patch.json5`. Tools: `family` (without `bills_list`) and
+`jobs` (without `scan_bills`); no Brain, mail or desk, so nothing private reaches
+the group. In the group only allowlisted senders can trigger it (Henri; his spouse
+once Henri gives the id) and only by @-mention or reply; bot privacy mode stays on.
+Deploy it at step 3 below, not before: until then the scripts read
+@Family_fff_bot with getUpdates. At that point the shadow and cutover digest crons
+move from agent `henri` to agent `family` (step 4).
+
 ## Moving the jobs to OpenClaw (plan)
 
 Henri chose to have the AI run the jobs. The order keeps the family group from getting
 anything twice and keeps a working fallback at each step:
 
-1. **Now: shadow.** The AI writes the digest and the week summary to Henri's DM from
-   `digest_data`; the scripts still post to the family group. Henri compares a few days
-2. **Digest cutover.** Add the new bot to the family group, point the two digest cron
-   jobs at the group (prompts below), then add `digest` and `week-ahead` to `agent_jobs`
-   in config.yaml so the script stops. The prompt ends with `digest_mark_sent`, so bills
-   and Wilma items aren't repeated. Built
-3. **Sync and bills.** Add `myclub` and `outlook` to `agent_jobs` and create the sync
-   crons below in the same step. They replace the tick's runs, never alongside. Built
-4. **Attendance.** Add `attendance-poll` and `attendance-apply` to `agent_jobs` with the
-   two crons below. The agent posts one message per child with a button per event
-   (`att|<child>|<eventId>|1` going, `|0` not going), presses come back to the agent as
-   `callback_data` and go to `attendance_record`, Monday's `attendance_apply` runs the
-   existing MyClub sign-up code. Unlike the Telegram poll, events nobody pressed are
-   left alone (the poll declined unticked ones). Last step, since it signs the boys up
-   and out in MyClub. Built
+1. **Now: shadow.** The Chief of staff (`henri`) writes the digest and the week summary
+   to Henri's DM from `digest_data`; the scripts still post to the family group. Henri
+   compares a few days
+2. **Sync and bills.** Add `myclub` and `outlook` to `agent_jobs` and create the sync
+   crons below (agent `henri`, Henri's DM) in the same step. They replace the tick's
+   runs, never alongside. Built. Needs the `jobs` server on `henri` too
+3. **Handover + attendance, one deploy.** The family group gets one bot, @Family_fff_bot,
+   run by agent `family` (design of 2026-10-24: no second bot in the group). Only the
+   attendance poll reads that bot with getUpdates, so both move together, on a Monday
+   after the 06:15 apply: stop the timer, add `attendance-poll` and `attendance-apply`
+   to `agent_jobs`, deploy `server/family-agent.patch.json5` with @Family_fff_bot's
+   token, create the two step-3 crons on agent `family`, start the timer. The agent
+   posts one message per child with a button per event (`att|<child>|<eventId>|1`
+   going, `|0` not going), presses come back as `callback_data` and go to
+   `attendance_record`, Monday's `attendance_apply` runs the existing MyClub sign-up
+   code. Unlike the Telegram poll, events nobody pressed are left alone. Built. The
+   scripted digest keeps sending with the same token (sending doesn't clash with polling)
+4. **Digest cutover.** Point the two digest crons at agent `family` in the group,
+   then add `digest` and `week-ahead` to `agent_jobs` so the script stops. The prompt
+   ends with `digest_mark_sent`, so bills and Wilma items aren't repeated. Built
 
 Each step: change config.yaml in the repo (GitHub is master), deploy, then create the
 crons. To go back, remove the jobs from `agent_jobs` and pause the crons.
 
 | Step | When (Helsinki) | Delivered to | Prompt |
 | --- | --- | --- | --- |
-| 2 | Daily 06:45 | family group | `Morning digest. Call digest_data with kind daily and write today's digest following the digest rules in AGENTS.md. Post it, then call digest_mark_sent with kind daily.` |
-| 2 | Sun 19:00 | family group | `Week summary. Call digest_data with kind week and write next week's summary following the digest rules in AGENTS.md. Post it, then call digest_mark_sent with kind week.` |
-| 3 | Daily 06:15 | Henri's DM | `MyClub sync. Call sync_myclub. If alerts is not empty, post each alert. If health is not ok, say so in one line. Otherwise reply only NO_REPLY.` |
-| 3 | Daily 06:20 | Henri's DM | `Bill scan. Call scan_bills. List each new bill in one line (biller, amount, due date, mark new billers). If none, reply only NO_REPLY.` |
-| 4 | Sun 19:00 | family group | `Practice question. Call attendance_week. For each child with events, post one message "<child>: ensi viikon treenit" with two buttons per event, "✅ <label>" (att|<child>|<eventId>|1) and "➖ <label>" (att|<child>|<eventId>|0).` |
-| 4 | Mon 06:15 | family group | `Apply practice answers. Call attendance_apply and post the results per child in Finnish. Name children nobody answered for.` |
+| 4 | Daily 06:45 | family group (`family`) | `Morning digest. Call digest_data with kind daily and write today's digest following the digest rules in AGENTS.md. Post it, then call digest_mark_sent with kind daily.` |
+| 4 | Sun 19:00 | family group (`family`) | `Week summary. Call digest_data with kind week and write next week's summary following the digest rules in AGENTS.md. Post it, then call digest_mark_sent with kind week.` |
+| 2 | Daily 06:15 | Henri's DM (`henri`) | `MyClub sync. Call sync_myclub. If alerts is not empty, post each alert. If health is not ok, say so in one line. Otherwise reply only NO_REPLY.` |
+| 2 | Daily 06:20 | Henri's DM (`henri`) | `Bill scan. Call scan_bills. List each new bill in one line (biller, amount, due date, mark new billers). If none, reply only NO_REPLY.` |
+| 3 | Sun 19:00 | family group (`family`) | `Practice question. Call attendance_week. For each child with events, post one message "<child>: ensi viikon treenit" with two buttons per event, "✅ <label>" (att|<child>|<eventId>|1) and "➖ <label>" (att|<child>|<eventId>|0).` |
+| 3 | Mon 06:15 | family group (`family`) | `Apply practice answers. Call attendance_apply and post the results per child in Finnish. Name children nobody answered for.` |
 
-The step 3 times follow config.yaml's MyClub and Outlook `runs`. Check that OpenClaw
+The step 2 times follow config.yaml's MyClub and Outlook `runs`. Check that OpenClaw
 2026.10.6 drops a `NO_REPLY` cron answer (or adjust the wording), and that inline
 buttons work in groups for the bot.
-
-5. **Bot handover.** When nothing in family-agent reads getUpdates (polls moved; the email
-   agent has its own bot and uses OpenClaw approvals), `@Family_fff_bot`'s token can move to
-   OpenClaw and the extra bot goes away
 
 ChatGPT Plus usage: two short AI runs a day for the digest, more for polls. The scripts
 used none. If the 5-hour or weekly limit is hit, OpenClaw falls back to Claude Sonnet
