@@ -45,6 +45,8 @@ test("backlog target: Henri's learned rules win", () => {
   ];
   assert.equal(target(msg("news@shop.fi", "Syystarjoukset", unsub), rules), "Inbox");
   assert.equal(target(msg("x@club.fi", "Kausi alkaa"), rules), "Harrastukset");
+  assert.equal(target(msg("x@sendgrid-01.club.fi", "Kausi alkaa"), rules), "Harrastukset", "subdomains count");
+  assert.equal(target(msg("news@otherclub.fi", "Tarjous", unsub), rules), "Uutiskirjeet", "other domains don't");
 });
 
 test("backlog plan: counts, top domains, odd-year guard, report has no subjects", () => {
