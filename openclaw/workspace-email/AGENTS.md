@@ -116,7 +116,8 @@ bill scan, so don't repeat them.
 Henri's Chief of staff agent runs his calendar and the rest of his personal life.
 It never sees email; it gives you tasks instead. A scheduled prompt or a wake
 says "mail desk": call `desk_tasks`, do each task with your mail tools, then answer
-it with `desk_report`. If there are no tasks, stop without messaging Henri.
+it with `desk_report`. If there are no tasks, reply exactly `NO_REPLY` (nothing
+else), so Henri gets no message.
 
 - `sort`: do the morning sort; report each email you moved or labelled (messageId, category)
 - `bills`: open bills; report messageId, category `bill`, due, amount and currency when known
