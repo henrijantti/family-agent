@@ -38,6 +38,7 @@ function family() {
     { messageId: "m1", biller: "PPJ", sender: "a@ppj.fi", amount: "30,40 €", dueDate: "2026-10-30", subject: "Lasku", newBiller: false, foundAt: "" },
     { messageId: "m2", biller: "Later", sender: "b@x.fi", dueDate: "2026-12-30", subject: "Lasku", newBiller: false, foundAt: "" },
   );
+  state.digestQueue.push({ child: "Oskar", kind: "bulletin", text: "Retki perjantaina", action: true });
   return { cal, tools: familyTools({ cfg: testConfig(), calendar: cal, loadState: () => structuredClone(state), now: () => NOW }) };
 }
 
@@ -133,6 +134,7 @@ test("digest_data gives the AI the week as data without marking anything sent", 
   assert.deepEqual([tue.events[0].who, tue.events[0].what, tue.events[0].start], ["Oliver", "Kiekko-Espoo harjoitus", "17:00"]);
   const daily = (await call(tools, "digest_data", { kind: "daily" })).json();
   assert.equal(daily.days.length, 1);
+  assert.deepEqual(daily.schoolNews.map((n: any) => n.text), ["Retki perjantaina"]);
   assert.ok(daily.comingUp.some((e: any) => e.what === "Kiekko-Espoo harjoitus"));
 });
 
