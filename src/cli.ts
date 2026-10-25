@@ -276,6 +276,34 @@ async function main() {
       st.save();
       break;
     }
+    case "mail-backlog": {
+      // npm run agent -- mail-backlog plan|apply|undo <year> [--force]
+      // Never saves state (the tick owns it; Microsoft keeps old refresh tokens valid).
+      const [step, y] = args;
+      const year = Number(y);
+      if (!["plan", "apply", "undo"].includes(step) || !(year >= 2000 && year <= 2100)) throw new Error("usage: mail-backlog plan|apply|undo <year> [--force]");
+      const bl = await import("./mail-backlog.js");
+      const { currentRules } = await import("./agent/mail-tools.js");
+      const dir = dirname(env("STATE_FILE") ?? "state/state.json");
+      const planFile = `${dir}/backlog/plan-${year}.json`;
+      const logFile = `${dir}/backlog/moves.jsonl`;
+      const mail = GraphMail.fromEnv(st.data);
+      if (step === "plan") {
+        const msgs = await mail.listRange(`${year}-01-01T00:00:00Z`, `${year + 1}-01-01T00:00:00Z`);
+        const p = bl.makePlan(year, msgs, currentRules(`${dir}/mail-rules.jsonl`), now, { skipDomains: cfg.outlook.wilma_folder?.senders ?? [], self: cfg.outlook.email_agent?.self ?? [] });
+        bl.savePlan(planFile, p);
+        console.log(bl.planReport(p));
+      } else if (step === "apply") {
+        const p = bl.loadPlan(planFile, now);
+        if (bl.looksOdd(p) && !args.includes("--force")) throw new Error("over 60% of the year would leave the Inbox: check the plan, then --force");
+        const r = await bl.applyPlan(mail, p, logFile, () => new Date());
+        console.log(`Vuosi ${year}: siirretty ${r.moved}, epäonnistui ${r.failed}${r.stopped ? `, keskeytetty toistuvien virheiden takia (${r.left} jäljellä)` : ""}`);
+      } else {
+        const r = await bl.undoYear(mail, year, logFile, `${dir}/backlog/undo.jsonl`);
+        console.log(`Vuosi ${year}: palautettu Saapuneisiin ${r.back}/${r.of}`);
+      }
+      break;
+    }
     case "wilma-students": {
       const ctx = buildCtx(cfg, st, now);
       const snap = await ctx.wilma!.fetch(cfg, st.data);

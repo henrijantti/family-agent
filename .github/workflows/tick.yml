@@ -28,6 +28,15 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
+      - name: Live-state guard
+        # The server is the live runner since 2026-10-23 and holds the only current
+        # state. A GitHub run would load the stale state branch and save it back.
+        # To move back to GitHub, first push the server's state, then set the repo
+        # variable LIVE_RUNNER to "github" (Settings > Secrets and variables > Actions).
+        if: vars.LIVE_RUNNER != 'github'
+        run: |
+          echo "::error::GitHub is not the live runner (repo variable LIVE_RUNNER != github). See the comment in this step."
+          exit 1
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:

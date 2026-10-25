@@ -32,7 +32,7 @@ alerts:
   exam_soon_days: 3
 
 wilma:
-  enabled: false   # ON HOLD (Henri, 2026-10-22) until the laptop runner is installed
+  enabled: true   # LIVE from the server (Henri, 2026-10-24); logs in directly, no laptop runner
   include_grades: false   # OPEN DECISION: default off (most sensitive data, never sent to Telegram)
   # 3-4 runs a day: every fresh login logs Henri out of Wilma in his browser.
   # The saved session is reused between runs to soften this.

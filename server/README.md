@@ -29,6 +29,8 @@ Helsinki) from scratch. Nothing here contains secrets.
 | `systemd/family-agent-tick.service` + `.timer` | user units; a tick every 15 min (replaced GitHub's tick.yml on 2026-10-23) |
 | `family-agent-backup.sh` | `/home/openclaw/family-agent-backup.sh`: nightly encrypted backup |
 | `systemd/family-agent-backup.service` + `.timer` | user units; backup at 02:30 Helsinki |
+| `family-agent-health.sh` + `systemd/family-agent-health.*` | every 10 min: private Telegram alert (Chief of staff bot, chat id in `~/.secrets/health-chat-id`) when the tick, gateway, backup, a cron, memory or disk fails; once per problem per 6 h |
+| `family-agent-status.sh` + `systemd/family-agent-status.*` | every 15 min: `status.json` (units, crons, memory, disk, open alerts; no secrets or content) to the `status` branch of the backup repo, for cloud sessions |
 | `email-agent.patch.json5` | `openclaw config patch --file`: agent `email`, `mail` MCP server, tool policy |
 | `email-telegram.patch.json5` | `openclaw config patch --file`: the mail bot (DM allowlist), then `agents bind --agent email --bind telegram:mail` |
 | `email-approvals.patch.json5` | `openclaw config patch --file`: route the mail-approval cards to Henri's mail-bot DM (approver + inline buttons) |
@@ -37,6 +39,7 @@ Helsinki) from scratch. Nothing here contains secrets.
 | `family-agent.patch.json5` | `openclaw config patch --file`: agent `family` in the family group. Only at the @Family_fff_bot handover (see openclaw/README.md) |
 | `save-bot-token` | `/usr/local/sbin/save-bot-token`: `ssh -t root@<server> save-bot-token <name>` saves a Telegram bot token from a hidden prompt |
 | `check.sh` | Root helper: `bash check.sh status\|logs\|doctor\|audit\|test\|mem` (redacts secrets) |
+| `laptop/` | Not for the server: Claude Code permissions for server work from the laptop (Machina). `powershell -ExecutionPolicy Bypass -File server\laptop\install.ps1` writes `.claude\settings.local.json` and merges the `autoMode` block into `~\.claude\settings.json` (backup first, JSON validated) |
 
 ## Changing config later
 

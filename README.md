@@ -14,7 +14,7 @@ Setup steps for Henri: [docs/SETUP.md](docs/SETUP.md).
 
 GitHub Actions (`.github/workflows/tick.yml`) ticks at fixed UTC times that cover both summer and winter time. Each tick works out in Helsinki time which jobs are due (see `config.yaml`) and runs them in order: MyClub, Outlook, Wilma, then the digest. State (ids already seen, the Wilma session, the rotated Outlook token, bills) is one AES-encrypted file on the `state` branch, keyed by the `STATE_KEY` secret.
 
-Wilma is the exception: its Cloudflare protection refuses GitHub's servers, so `.github/workflows/wilma.yml` runs `wilma-fetch` on a self-hosted runner on Henri's laptop (label `wilma`) about 20 minutes before each Wilma slot. It writes an encrypted snapshot to the `state-wilma` branch, and the GitHub tick reads it (`WILMA_MODE=snapshot`). A snapshot older than 3 hours counts as Wilma unavailable.
+Wilma logs in live from the server: Helsinki Wilma's Cloudflare protection refuses GitHub's servers but lets the server in, and the saved session is reused between the 3-4 runs a day. The laptop runner (`wilma.yml`) is retired. The GitHub tick, now only a disabled fallback, keeps `WILMA_MODE=snapshot`, so without a snapshot it treats Wilma as unavailable rather than trying a login that Cloudflare refuses (`wilma-fetch` and `scripts/state.sh` keep the snapshot path for that case).
 
 Calendar safety (from the hub plan): deterministic event ids from source + source id, a fingerprint in private extended properties, update only on change, delete only after an item is missing on 2 runs, and a run that wants to delete more than 5 events stops and alerts instead. Events without the agent's fingerprint are never touched.
 
