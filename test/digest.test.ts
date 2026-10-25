@@ -64,6 +64,14 @@ test("morning tick: sources then one combined digest to the family group", async
   assert.deepEqual(await tick(c), []);
 });
 
+test("bills_to none: the family digest carries no bills", async () => {
+  const { c, notifier } = ctx("2026-10-21T03:50:00Z");
+  c.cfg.outlook.bills_to = "none";
+  await tick(c);
+  assert.equal(notifier.sent.length, 1);
+  assert.doesNotMatch(notifier.sent[0].html, /Helen|64,20/);
+});
+
 test("a failed Wilma read shows as a warning, not as an empty day", async () => {
   const broken: WilmaProvider = { fetch: async () => { throw new Error("login refused"); } };
   const { c, notifier } = ctx("2026-10-21T03:50:00Z", broken);

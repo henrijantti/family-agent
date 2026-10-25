@@ -14,7 +14,7 @@ children:
 calendar:
   # Google calendar ids (Settings > the calendar > "Integrate calendar").
   # Ids are not secret, but they come from env vars so this file stays generic.
-  family_calendar_id_env: GOOGLE_FAMILY_CALENDAR_ID   # human-owned; the chat agents may add events and edit only those they added (Henri, 2026-10-25)
+  family_calendar_id_env: GOOGLE_FAMILY_CALENDAR_ID   # "Anna Henri", the couple's shared calendar (was Perhe until 2026-10-25); human-owned; the chat agents may add events and edit only those they added (Henri, 2026-10-25)
   school_calendar_id_env: GOOGLE_SCHOOL_CALENDAR_ID   # "Family: School (Wilma)", agent writes
   hobbies_calendar_id_env: GOOGLE_HOBBIES_CALENDAR_ID # "Family: Hobbies (MyClub)", agent writes
   missing_runs_before_delete: 2
@@ -96,7 +96,9 @@ outlook:
   remind_days_before: 3
   # Bills from Henri's private mail. OPEN: post them to the family group, or
   # only to Henri's private chat with the bot (set TELEGRAM_PRIVATE_CHAT_ID).
-  bills_to: private_if_set   # family | private_if_set
+  # none (2026-10-25): bills stay out of the family group (Anna is in it); the
+  # Chief of staff's 06:50 bill reminder sends them to Henri's DM.
+  bills_to: none   # family | private_if_set | none
   scan_lookback_days: 14
   # Wilma's notification emails skip the inbox (Henri: too much noise); the
   # agent keeps an Outlook rule that files them, read, in this folder.
