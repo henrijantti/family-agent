@@ -11,11 +11,37 @@ import { totp } from "../lib/totp.js";
 // is saved in state and resumed next run so Henri is logged out less often.
 
 export interface WilmaLesson { date: string; start: string; end: string; subject: string; room?: string | null }
-export interface WilmaExam { id: number; date: string; time?: string | null; subject: string; name: string; topic?: string | null }
+export interface WilmaExam {
+  id: number;
+  date: string;
+  time?: string | null;
+  subject: string;
+  name: string;
+  topic?: string | null;
+  /** "Kokeen lisätiedot" from the exam calendar: usually what to read ("kpl 4-8 s. 16-36"). */
+  notes?: string | null;
+  teacher?: string | null;
+}
 export interface WilmaHomework { date: string; subject: string; text: string }
-export interface WilmaMessage { id: number; subject: string; sender?: string | null; sentAt: string; content?: string | null }
+export interface WilmaMessage {
+  id: number;
+  subject: string;
+  sender?: string | null;
+  sentAt: string;
+  /** The message's text with its replies, when read (kept from earlier reads). */
+  content?: string | null;
+  /** Replies when the text was read: more replies in the list means read it again. */
+  replies?: number;
+}
 export interface WilmaNews { id: number; title: string; published?: string | null; content?: string | null; url?: string }
-export interface WilmaNote { date: string; subject: string; type: string }
+export interface WilmaNote {
+  date: string;
+  subject: string;
+  type: string;
+  /** The teacher's own words from the "Huomioita" column (homework missed, praise, behaviour). */
+  note?: string | null;
+  teacher?: string | null;
+}
 
 export interface WilmaStudent {
   name: string; // display name after config mapping
@@ -34,14 +60,14 @@ export interface WilmaSnapshot {
   students: WilmaStudent[];
 }
 
-export interface WilmaFetchOptions {
-  /** Also read the text of messages sent in the last N days (the weekly summary's "needs action"). */
-  bodyDays?: number;
+export interface WilmaProvider {
+  fetch(cfg: Config, state: StateData): Promise<WilmaSnapshot>;
 }
 
-export interface WilmaProvider {
-  fetch(cfg: Config, state: StateData, opts?: WilmaFetchOptions): Promise<WilmaSnapshot>;
-}
+/** Message texts are this long at most, kept from run to run in the last snapshot. */
+const TEXT_MAX = 8000;
+/** Messages this recent always have their text (the chat agents read and draft replies to them). */
+const TEXT_DAYS = 14;
 
 export class FixtureWilma implements WilmaProvider {
   constructor(private path: string) {}
@@ -77,8 +103,8 @@ export class SnapshotWilma implements WilmaProvider {
 }
 
 export class LiveWilma implements WilmaProvider {
-  async fetch(cfg: Config, state: StateData, opts: WilmaFetchOptions = {}): Promise<WilmaSnapshot> {
-    const { WilmaClient } = await import("@wilm-ai/wilma-client");
+  async fetch(cfg: Config, state: StateData): Promise<WilmaSnapshot> {
+    const { WilmaClient, addExamTimes } = await import("@wilm-ai/wilma-client");
     const baseUrl = normaliseTenant(requireEnv("WILMA_TENANT"));
     const profile = { baseUrl, username: requireEnv("WILMA_USERNAME"), password: requireEnv("WILMA_PASSWORD") };
     const totpSecret = env("WILMA_TOTP_SECRET");
@@ -91,48 +117,73 @@ export class LiveWilma implements WilmaProvider {
     state.wilma.session = client.exportSession();
 
     const today = localParts(new Date()).date;
+    const prev = (state.wilma.lastSnapshot as WilmaSnapshot | undefined)?.students ?? [];
+    const prevMsg = new Map(prev.flatMap((s) => s.messages.map((m) => [m.id, m] as const)));
+    const prevNews = new Map(prev.flatMap((s) => s.news.map((n) => [n.id, n] as const)));
     const students: WilmaStudent[] = [];
     for (const info of await client.students()) {
       const kid = client.forStudent(info.studentNumber);
-      const [overview, exams, lessons, messages, news, notes] = await Promise.all([
+      const [overview, calendar, lessons, messages, news, notes] = await Promise.all([
         kid.overview.get(),
-        kid.exams.upcoming(),
+        kid.exams.calendarOrEmpty(),
         kid.schedule.list({ from: today, to: addDays(today, 8) }),
         kid.messages.list("inbox"),
         kid.news.list(),
-        kid.attendance.list({ from: addDays(today, -7), to: today }),
+        kid.attendance.list({ from: addDays(today, -14), to: today }),
       ]);
-      // Full text only for items not seen before (to spot "reply/form/payment"),
-      // and for the weekly summary the week's messages.
-      const since = opts.bodyDays ? Date.now() - opts.bodyDays * 86400000 : Infinity;
-      const newMsgs = messages.filter((m) => !state.wilma.seenMessages.includes(m.wilmaId) || m.sentAt.getTime() >= since).slice(0, 10);
-      const msgBodies = new Map<number, string | null | undefined>();
-      for (const m of newMsgs) msgBodies.set(m.wilmaId, (await kid.messages.get(m.wilmaId)).content);
-      const newNews = news.filter((n) => !state.wilma.seenNews.includes(n.wilmaId)).slice(0, 10);
+      // The front page's exams with the exam calendar's start time, notes and teacher.
+      // addExamTimes finds each exam's calendar entry and copies its time; the time is
+      // swapped for the entry's index so the same matching gives the whole entry.
+      const exams = addExamTimes(overview.upcomingExams, calendar.map((c, i) => ({ ...c, time: String(i) }))).map((e) => {
+        const c = e.time == null ? undefined : calendar[Number(e.time)];
+        return { ...e, time: c?.time ?? null, notes: c?.notes ?? null, teacher: c?.teacher ?? e.teacher };
+      });
+      // Full text for items not seen before (to spot "reply/form/payment"), and for
+      // recent messages without it yet or with new replies; earlier texts are kept.
+      const recent = Date.now() - TEXT_DAYS * 86400000;
+      const toRead = messages
+        .slice(0, 30)
+        .filter((m) => {
+          const p = prevMsg.get(m.wilmaId);
+          return !state.wilma.seenMessages.includes(m.wilmaId) || (m.sentAt.getTime() >= recent && (p?.content == null || (p.replies ?? 0) !== (m.replyCount ?? 0)));
+        })
+        .slice(0, 10);
+      const msgBodies = new Map<number, string>();
+      for (const m of toRead) {
+        const full = await kid.messages.get(m.wilmaId);
+        const replies = (full.replies ?? []).map((r) => `— ${r.senderName ?? "?"}, ${localParts(r.sentAt).date}:\n${r.content}`);
+        msgBodies.set(m.wilmaId, [full.content ?? "", ...replies].filter(Boolean).join("\n\n").slice(0, TEXT_MAX));
+      }
+      // Bulletins: new ones, and recent ones whose text no run has read yet.
+      const newNews = news
+        .filter((n) => !n.content && prevNews.get(n.wilmaId)?.content == null)
+        .filter((n) => !state.wilma.seenNews.includes(n.wilmaId) || (n.published?.getTime() ?? 0) >= recent)
+        .slice(0, 10);
       const newsBodies = new Map<number, string | null | undefined>();
-      for (const n of newNews) newsBodies.set(n.wilmaId, n.content ?? (await kid.news.get(n.wilmaId)).content);
+      for (const n of newNews) newsBodies.set(n.wilmaId, (await kid.news.get(n.wilmaId)).content);
 
       students.push({
         name: childName(cfg, info.name),
         number: info.studentNumber,
         lessons: lessons.map((l) => ({ date: l.date, start: l.start, end: l.end, subject: l.subject, room: l.room })),
-        exams: exams.map((e) => ({ id: e.examId, date: e.date, time: e.time, subject: e.subject, name: e.name, topic: e.topic })),
+        exams: exams.map((e) => ({ id: e.examId, date: e.date, time: e.time, subject: e.subject, name: e.name, topic: e.topic, notes: e.notes, teacher: e.teacher })),
         homework: overview.homework.map((h) => ({ date: h.date, subject: h.subject, text: h.homework })),
         messages: messages.slice(0, 30).map((m) => ({
           id: m.wilmaId,
           subject: m.subject,
           sender: m.senderName,
           sentAt: m.sentAt.toISOString(),
-          content: msgBodies.get(m.wilmaId),
+          content: msgBodies.get(m.wilmaId) ?? prevMsg.get(m.wilmaId)?.content ?? null,
+          replies: msgBodies.has(m.wilmaId) ? (m.replyCount ?? 0) : prevMsg.get(m.wilmaId)?.replies,
         })),
         news: news.slice(0, 30).map((n) => ({
           id: n.wilmaId,
           title: n.title,
           published: n.published?.toISOString() ?? null,
-          content: newsBodies.get(n.wilmaId) ?? n.content,
+          content: (newsBodies.get(n.wilmaId) ?? n.content ?? prevNews.get(n.wilmaId)?.content ?? null)?.slice(0, TEXT_MAX) ?? null,
           url: `${baseUrl}/news/${n.wilmaId}`,
         })),
-        notes: notes.map((n) => ({ date: n.date, subject: n.subject, type: n.typeLabel })),
+        notes: notes.map((n) => ({ date: n.date, subject: n.subject, type: n.typeLabel, note: n.note ?? null, teacher: n.teacher })),
         // Grades are never fetched unless include_grades is on; even then they stay out of Telegram.
       });
     }
@@ -213,6 +264,7 @@ export function wilmaEvents(snap: WilmaSnapshot, cfg: Config, today: string): De
         title,
         start: timed ? { dateTime: localIso(ex.date, ex.time!), timeZone: cfg.timezone } : { date: ex.date },
         end: timed ? { dateTime: localIso(ex.date, addMinutes(ex.time!, 75)), timeZone: cfg.timezone } : { date: addDays(ex.date, 1) },
+        description: [ex.notes ? `Kokeen lisätiedot: ${ex.notes}` : "", ex.teacher ? `Opettaja: ${ex.teacher}` : ""].filter(Boolean).join("\n") || undefined,
         url: `${snap.baseUrl}/exams/calendar`,
         reminderMinutes: timed ? 18 * 60 : 6 * 60, // the evening before
       });

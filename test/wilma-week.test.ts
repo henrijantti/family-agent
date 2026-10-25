@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { testConfig } from "./config.js";
+import { familyTools } from "../src/agent/family-tools.js";
 import { wilmaWeek } from "../src/digest/wilma-week.js";
 import { Ctx, tick } from "../src/jobs.js";
 import { emptyState } from "../src/lib/state.js";
@@ -47,22 +48,54 @@ test("wilma week: Wilma text is escaped, never HTML", async () => {
 test("sunday Wilma run sends the week summary to the family group, other runs don't", async () => {
   process.env.TELEGRAM_FAMILY_CHAT_ID = "fam";
   const notifier = new ConsoleNotifier(false);
-  const opts: { bodyDays?: number }[] = [];
   const fixture = new FixtureWilma(`${FIX}wilma.json`);
   const c: Ctx = {
     cfg: testConfig(),
     state: emptyState(),
     now: new Date("2026-10-25T16:50:00Z"), // Sun 18:50 Helsinki
-    wilma: { fetch: (cfg, st, o) => (opts.push(o ?? {}), fixture.fetch(cfg)) },
+    wilma: fixture,
     notifier,
     log: () => {},
   };
   assert.deepEqual(await tick(c), ["wilma"]);
-  assert.deepEqual(opts, [{ bodyDays: 7 }]);
   assert.equal(notifier.sent.length, 3);
   assert.ok(notifier.sent.every((m) => m.chatId === "fam" && m.html.startsWith("📚")));
   c.now = new Date("2026-10-27T10:05:00Z"); // Tue 12:05: alerts run, no summary
   notifier.sent = [];
   await tick(c);
   assert.ok(!notifier.sent.some((m) => m.html.startsWith("📚")));
+});
+
+test("wilma week: exam reading material and the teacher's comment on a lesson note", async () => {
+  const [aino, eero] = wilmaWeek(await snap(), "2026-10-21");
+  assert.match(aino, /• pe 23\.10\. <b>Matematiikka<\/b>\n chapters 3-4\n 📖 kpl 4-8 s\. 16-36/);
+  const [, eeroWeek] = wilmaWeek(await snap(), "2026-10-25");
+  assert.match(eeroWeek, /• ti 20\.10\. Unohtanut varusteet\n Liikunta\n “liikuntavaatteet kotona”/);
+  assert.ok(eero.startsWith("📚"));
+});
+
+test("school_info answers exams with what to read and lesson notes with comments, per child", async () => {
+  const cfg = testConfig();
+  const state = emptyState();
+  const c: Ctx = { cfg, state, now: new Date("2026-10-21T10:05:00Z"), wilma: new FixtureWilma(`${FIX}wilma.json`), log: () => {} };
+  await tick(c, ["wilma"]);
+  const tools = familyTools({ cfg, loadState: () => structuredClone(state), now: () => new Date("2026-10-21T15:00:00Z"), group: true });
+  const tool = tools.find((t) => t.name === "school_info")!;
+  const aino = (await tool.run({ child: "aino" })) as any;
+  assert.equal(aino.children.length, 1);
+  assert.deepEqual(aino.children[0].exams[0], {
+    date: "2026-10-23", time: "08:15", subject: "Matematiikka", name: "Koe", topic: "chapters 3-4", examNotes: "kpl 4-8 s. 16-36", teacher: "Satu Pietinen",
+  });
+  assert.deepEqual(aino.children[0].messages.map((m: any) => m.subject), ["Syysretki", "Lupalappu palautettava perjantaihin mennessä"]);
+  assert.ok(!JSON.stringify(aino).includes("Tervetuloa retkelle"), "texts come one at a time from school_message");
+  const msg = tools.find((t) => t.name === "school_message")!;
+  assert.deepEqual(await msg.run({ id: 9002 }), {
+    kind: "message", children: ["Aino"], subject: "Lupalappu palautettava perjantaihin mennessä", sender: "Opettaja Virtanen", sentAt: "2026-10-20T15:00:00Z",
+    text: "Palauttakaa allekirjoitettu lupalappu 24.10. mennessä.",
+  });
+  assert.deepEqual(((await msg.run({ id: 7002, kind: "bulletin" })) as any).children, ["Aino", "Eero"]);
+  await assert.rejects(msg.run({ id: 1 }), /no message 1/);
+  const eero = (await tool.run({ child: "Eero", days: 7 })) as any;
+  assert.deepEqual(eero.children[0].lessonNotes, [{ date: "2026-10-20", subject: "Liikunta", type: "Unohtanut varusteet", comment: "liikuntavaatteet kotona", teacher: "AlBo" }]);
+  await assert.rejects(tool.run({ child: "Ville" }), /children: Aino, Eero/);
 });

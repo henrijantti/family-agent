@@ -372,6 +372,7 @@ async function main() {
         w.seenMessages = [...new Set([...w.seenMessages, ...st.messages.map((m) => m.id)])].slice(-500);
         w.seenNews = [...new Set([...w.seenNews, ...st.news.map((n) => n.id)])].slice(-500);
       }
+      session.data.wilma.lastSnapshot = snap; // the next fetch keeps the message texts from it
       const slot = key.startsWith("forced") ? undefined : key.split(" ")[1];
       if (slot) session.data.lastRun[`wilma-fetch@${slot}`] = key;
       const out = env("WILMA_SNAPSHOT_FILE") ?? "state/wilma-snapshot.json";
@@ -641,7 +642,7 @@ async function main() {
         const fresh = store();
         const ctx = buildCtx(cfg, fresh, now);
         if (!ctx.wilma) throw new Error("Wilma is off or its secrets are missing");
-        const snap = await ctx.wilma.fetch(cfg, fresh.data, { bodyDays: 7 });
+        const snap = await ctx.wilma.fetch(cfg, fresh.data);
         fresh.save(); // the refreshed Wilma session
         if (args.includes("--send")) await sendWilmaWeek(ctx, snap, { silent: true });
         else await sendWilmaWeek({ ...ctx, notifier: new ConsoleNotifier() }, snap);
