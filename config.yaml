@@ -105,8 +105,8 @@ outlook:
   wilma_folder: { name: Wilma, senders: [inschool.fi] }
   # OpenClaw Email agent (Henri, 2026-10-23): reads, sorts and drafts; sends a
   # reply only after Henri taps Allow in Telegram (openclaw/README.md).
-  # send stays false until Mail.Send is added to the Entra app and
-  # "outlook-login" is run again on the server.
+  # send: on since 2026-10-24 (Mail.Send granted, first send verified). Each
+  # send still waits for Henri's Allow tap in Telegram (mail-approval plugin).
   email_agent:
-    send: false
+    send: true
     self: [henri.jantti@outlook.com]
