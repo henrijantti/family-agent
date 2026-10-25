@@ -109,7 +109,7 @@ async function ownEvent(d: FamilyDeps, which: Writable, id: string): Promise<{ c
 const calendarProp = {
   type: "string" as const,
   enum: ["family", "school", "hobbies"],
-  description: "family = the shared Perhe calendar (appointments, family plans), school = school/Wilma things, hobbies = sports and clubs",
+  description: "family = Henri and Anna's shared calendar (appointments, family plans, adults' events), school = school/Wilma things, hobbies = sports and clubs",
 };
 const fields = {
   title: { type: "string" as const, maxLength: 200, description: 'Finnish, child first, e.g. "Oskar: hammaslääkäri"' },
@@ -161,7 +161,7 @@ export function familyTools(d: FamilyDeps): Tool[] {
     {
       name: "calendar_add",
       description:
-        "Add an event to the family (Perhe), school or hobbies calendar. Returns the existing event instead if one with the same title and start is already there.",
+        "Add an event to the family, school or hobbies calendar. Returns the existing event instead if one with the same title and start is already there.",
       input: { properties: { calendar: calendarProp, ...fields }, required: ["calendar", "title", "date"] },
       async run(a) {
         const which = a.calendar as Writable;

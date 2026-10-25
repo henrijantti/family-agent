@@ -14,7 +14,7 @@ children:
 calendar:
   # Google calendar ids (Settings > the calendar > "Integrate calendar").
   # Ids are not secret, but they come from env vars so this file stays generic.
-  family_calendar_id_env: GOOGLE_FAMILY_CALENDAR_ID   # human-owned; the chat agents may add events and edit only those they added (Henri, 2026-10-25)
+  family_calendar_id_env: GOOGLE_FAMILY_CALENDAR_ID   # "Anna Henri", the couple's shared calendar (was Perhe until 2026-10-25); human-owned; the chat agents may add events and edit only those they added (Henri, 2026-10-25)
   school_calendar_id_env: GOOGLE_SCHOOL_CALENDAR_ID   # "Family: School (Wilma)", agent writes
   hobbies_calendar_id_env: GOOGLE_HOBBIES_CALENDAR_ID # "Family: Hobbies (MyClub)", agent writes
   missing_runs_before_delete: 2
