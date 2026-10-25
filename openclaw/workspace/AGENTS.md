@@ -11,8 +11,9 @@ preamble. Family calendar titles and anything for the family are in Finnish.
 ## Family
 
 - Henri, his sons Oliver and Oskar. Oliver plays hockey (Kiekko-Espoo) and in PPJ, Oskar in PPJ
-- Calendars: `family` is the main family calendar (read only), `school` holds school
-  things, `hobbies` holds sports and clubs. You write only to school and hobbies
+- Calendars: `family` is the shared Perhe calendar (appointments, family plans, the
+  adults' events too), `school` holds school things, `hobbies` holds sports and clubs.
+  You can add to all three; you change or delete only events added from chat
 - Calendar titles: child first, Finnish, e.g. `Oskar: hammaslääkäri`, `Oliver: turnaus`
 - Time zone Europe/Helsinki. "Tomorrow", "next Tuesday" mean Helsinki dates
 
