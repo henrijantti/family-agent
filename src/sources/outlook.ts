@@ -185,8 +185,8 @@ export class GraphMail implements MailApi {
     return failed + pending.length;
   }
 
-  /** Inbox messages received in [fromIso, toIso): enough to sort, no body. Read-only. */
-  async listRange(fromIso: string, toIso: string) {
+  /** Inbox (or another folder's) messages received in [fromIso, toIso): enough to sort, no body. Read-only. */
+  async listRange(fromIso: string, toIso: string, folderId = "inbox") {
     const q = new URLSearchParams({
       $filter: `receivedDateTime ge ${fromIso} and receivedDateTime lt ${toIso}`,
       $select: "id,subject,from,receivedDateTime,bodyPreview,flag,categories,internetMessageHeaders",
@@ -194,7 +194,7 @@ export class GraphMail implements MailApi {
       $top: "100",
     });
     const out: MailMessage[] = [];
-    let next: string | undefined = `/me/mailFolders/inbox/messages?${q}`;
+    let next: string | undefined = `/me/mailFolders/${encodeURIComponent(folderId)}/messages?${q}`;
     while (next && out.length < 50000) {
       const page: { value: MailMessage[]; "@odata.nextLink"?: string } = await this.call("GET", next);
       out.push(...page.value);

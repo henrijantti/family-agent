@@ -325,6 +325,28 @@ async function main() {
       }
       break;
     }
+    case "mail-unsubscribe": {
+      // npm run agent -- mail-unsubscribe plan <names file> [folder=Uutiskirjeet] | apply
+      // Never saves state (the tick owns it; Microsoft keeps old refresh tokens valid).
+      const [step, file, folderName = "Uutiskirjeet"] = args;
+      if (!(step === "plan" && file) && step !== "apply") throw new Error("usage: mail-unsubscribe plan <names file> [folder] | apply");
+      const un = await import("./mail-unsubscribe.js");
+      const dir = `${dirname(env("STATE_FILE") ?? "state/state.json")}/unsubscribe`;
+      if (step === "plan") {
+        const mail = GraphMail.fromEnv(st.data);
+        const folder = (await mail.listFolders()).find((f) => f.displayName.toLowerCase() === folderName.toLowerCase());
+        if (!folder) throw new Error(`no folder ${folderName}`);
+        const since = new Date(now.getTime() - 365 * 86400000).toISOString().replace(/\.\d{3}Z$/, "Z");
+        const msgs = await mail.listRange(since, now.toISOString().replace(/\.\d{3}Z$/, "Z"), folder.id);
+        const p = un.makePlan(msgs, un.readNeedles(file), folderName, now);
+        un.savePlan(`${dir}/plan.json`, p);
+        console.log(un.planReport(p));
+      } else {
+        const p = un.loadPlan(`${dir}/plan.json`, now);
+        console.log(un.applyReport(p, await un.applyPlan(p, `${dir}/log.jsonl`, () => new Date())));
+      }
+      break;
+    }
     case "wilma-students": {
       const ctx = buildCtx(cfg, st, now);
       const snap = await ctx.wilma!.fetch(cfg, st.data);
