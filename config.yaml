@@ -14,7 +14,7 @@ children:
 calendar:
   # Google calendar ids (Settings > the calendar > "Integrate calendar").
   # Ids are not secret, but they come from env vars so this file stays generic.
-  family_calendar_id_env: GOOGLE_FAMILY_CALENDAR_ID   # human-owned, agent reads only
+  family_calendar_id_env: GOOGLE_FAMILY_CALENDAR_ID   # human-owned; the chat agents may add events and edit only those they added (Henri, 2026-10-25)
   school_calendar_id_env: GOOGLE_SCHOOL_CALENDAR_ID   # "Family: School (Wilma)", agent writes
   hobbies_calendar_id_env: GOOGLE_HOBBIES_CALENDAR_ID # "Family: Hobbies (MyClub)", agent writes
   missing_runs_before_delete: 2
@@ -58,6 +58,11 @@ myclub:
 # in MyClub and declines the rest, then posts what it did. A poll nobody
 # answered changes nothing. `live: false` = report only, until the MyClub
 # sign-up step has been checked against the real pages.
+# Jobs the OpenClaw agents run instead of the 15-minute tick (openclaw/README.md
+# "Moving the jobs to OpenClaw"). Step 3, 2026-10-25: attendance moved to agent
+# `family` with inline buttons in the family group.
+agent_jobs: [attendance-poll, attendance-apply]
+
 attendance:
   enabled: true
   children: [Oliver, Oskar]

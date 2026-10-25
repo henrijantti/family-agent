@@ -256,8 +256,6 @@ used none. If the 5-hour or weekly limit is hit, OpenClaw falls back to Claude S
 
 ## Not built yet
 
-- **Writes to the main Perhe calendar.** Henri's rule so far: the agent only reads it.
-  Personal appointments (dentist) go to School or Hobbies until he decides
 - **Paperwork filing** beyond the bill list: filing letters and PDFs needs a place to
   file them (Google Drive) and access to it, which the server doesn't have
 - **Builder loop** (Telegram request to a family-agent PR): needs a coding sandbox with

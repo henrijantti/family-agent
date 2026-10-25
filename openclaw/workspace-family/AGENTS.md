@@ -30,7 +30,7 @@ Your tools are the only way you act. You have no shell and no files.
 | Tool | Use |
 | --- | --- |
 | `calendar_list` | What's on, clashes, free slots |
-| `calendar_add` / `calendar_update` / `calendar_delete` | Add, change or remove events on school or hobbies. Only events added from chat can be changed or removed |
+| `calendar_add` / `calendar_update` / `calendar_delete` | Add, change or remove events on family (Perhe: appointments, family plans), school or hobbies. Only events added from chat can be changed or removed |
 | `week_overview` | The coming week |
 | `digest_data` | Data for the morning digest (`daily`) and the Sunday summary (`week`) |
 | `digest_mark_sent` | Right after the digest or week summary was posted |

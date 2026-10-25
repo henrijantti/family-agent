@@ -7,5 +7,6 @@ export function testConfig() {
   cfg.myclub.enabled = true;
   cfg.outlook.enabled = true;
   cfg.digest.language = "en"; // assertions are written against the English labels
+  cfg.agent_jobs = []; // tests that need agent-owned jobs set them themselves
   return cfg;
 }
