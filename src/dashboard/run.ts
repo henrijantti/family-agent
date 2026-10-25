@@ -1,7 +1,4 @@
 import { createHash } from "node:crypto";
-import { mkdirSync, renameSync, writeFileSync } from "node:fs";
-import { dirname } from "node:path";
-import { env } from "../config.js";
 import { collectHub, familyChat, type Ctx } from "../jobs.js";
 import { localParts } from "../lib/time.js";
 import type { MyClubSnapshot } from "../sources/myclub.js";
@@ -13,10 +10,6 @@ import { screenshot } from "./shot.js";
 // the page; only when its content differs from the last picture is it rendered
 // and the pinned message edited in place (an edit notifies nobody). The first
 // run, or a run after someone deleted the message, sends a new one and pins it.
-//
-// Optional HTML version: DASHBOARD_HTML_FILE is where the page is written on
-// every change (the server serves it to the tailnet with `tailscale serve`),
-// and DASHBOARD_URL puts an "Avaa HTML" button under the picture.
 
 export type Shooter = (html: string) => Promise<Buffer>;
 
@@ -50,19 +43,11 @@ export async function runDashboard(ctx: Ctx, opts: { force?: boolean; shoot?: Sh
   if (prev && !prev.pinned) prev.pinned = await pin(ctx, chat, prev.messageId);
   if (!opts.force && prev?.hash === d.hash) return "unchanged";
   const png = await (opts.shoot ?? ((h) => screenshot(h)))(d.html);
-  const file = env("DASHBOARD_HTML_FILE");
-  if (file) {
-    mkdirSync(dirname(file), { recursive: true });
-    writeFileSync(`${file}.tmp`, d.html);
-    renameSync(`${file}.tmp`, file); // never serve a half-written page
-  }
-  const url = env("DASHBOARD_URL");
-  const link = url ? { text: "Avaa HTML", url } : undefined;
   const caption = `Perheen viikko · päivitetty ${d.updated}`;
   const at = ctx.now.toISOString();
   if (prev) {
     try {
-      await ctx.notifier.editPhoto(chat, prev.messageId, png, caption, link);
+      await ctx.notifier.editPhoto(chat, prev.messageId, png, caption);
       ctx.state.dashboard = { ...prev, hash: d.hash, at };
       ctx.log(`dashboard: updated pinned message ${prev.messageId}`);
       return "edited";
@@ -72,7 +57,7 @@ export async function runDashboard(ctx: Ctx, opts: { force?: boolean; shoot?: Sh
       ctx.log(`dashboard: message ${prev.messageId} is gone, sending a new one`);
     }
   }
-  const { messageId } = await ctx.notifier.photo(chat, png, caption, link);
+  const { messageId } = await ctx.notifier.photo(chat, png, caption);
   ctx.state.dashboard = { chatId: chat, messageId, hash: d.hash, at, pinned: await pin(ctx, chat, messageId) };
   ctx.log(`dashboard: sent message ${messageId}`);
   return "sent";

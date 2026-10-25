@@ -1,7 +1,4 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { test } from "node:test";
 import { testConfig } from "./config.js";
 import { FakeCalendar } from "../src/calendar/fake.js";
@@ -123,20 +120,4 @@ test("runDashboard: a failed pin is retried on later runs until it works", async
   assert.equal(await runDashboard(c, { shoot }), "unchanged");
   assert.equal(c.state.dashboard!.pinned, true);
   assert.ok(notifier.photos[0].pinned);
-});
-
-test("runDashboard: with DASHBOARD_URL and DASHBOARD_HTML_FILE the page is saved and linked under the picture", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "fa-dash-"));
-  process.env.DASHBOARD_HTML_FILE = join(dir, "perhe/index.html");
-  process.env.DASHBOARD_URL = "https://server.example.ts.net/perhe/";
-  try {
-    const { c, notifier } = ctx(localIso(TODAY, "10:00"));
-    await runDashboard(c, { shoot: async () => Buffer.from("png") });
-    assert.deepEqual(notifier.photos[0].link, { text: "Avaa HTML", url: "https://server.example.ts.net/perhe/" });
-    assert.match(readFileSync(process.env.DASHBOARD_HTML_FILE, "utf8"), /<h1>Maanantai 26\.10\.<\/h1>/);
-  } finally {
-    delete process.env.DASHBOARD_HTML_FILE;
-    delete process.env.DASHBOARD_URL;
-    rmSync(dir, { recursive: true, force: true });
-  }
 });
