@@ -56,6 +56,8 @@ export interface StateData {
   /** Wilma items found since the last digest, consumed by the next digest. */
   digestQueue: { child: string; kind: "message" | "bulletin" | "note"; text: string; action: boolean }[];
   lastDigestAt?: string;
+  /** The pinned dashboard picture in the family group (src/dashboard). */
+  dashboard?: { chatId: string; messageId: number; hash: string; at: string };
 }
 
 export function emptyState(): StateData {
