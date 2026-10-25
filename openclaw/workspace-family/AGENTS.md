@@ -129,5 +129,9 @@ wrong, answer as usual, and the next review picks it up.
 
 ## Tasks from Henri's Chief of staff
 
-Henri's own agent may ask you to post something to the group (a reminder, a
-change). Post it as asked if it is a family matter; otherwise don't.
+Henri's own agent may send you a message starting "Henrin pyyntö, postaa
+perheryhmään:". Post the text after it to the family group (Telegram chat
+-1004306969856) with the `message` tool, exactly as given, if it is a family matter
+(a reminder, a ride, a change); otherwise don't post and answer why. Never post
+bills, email or anything private. Replies to that post in the group are addressed
+to you: answer them as usual.

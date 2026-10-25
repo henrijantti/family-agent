@@ -175,3 +175,18 @@ test("holiday_plan lists the next school holidays with the weekends and calendar
   assert.ok(!xmas.freeDays.includes("2026-12-27"));
   assert.deepEqual(res.holidays[1].withWeekends, { from: "2027-02-20", to: "2027-02-28", days: 9 });
 });
+
+test("a snoozed reminder stays quiet, then is told once more", async () => {
+  const { clock, tools } = setup();
+  const r = (await call(tools, "reminder_add", { kind: "other", title: "Soita vakuutusyhtiöön", due: "2026-10-27" })).json();
+  assert.equal((await call(tools, "reminders_due", { mark: true })).json().length, 1);
+  await call(tools, "reminder_snooze", { id: r.id, days: 3 });
+  clock.at = new Date("2026-10-27T08:00:00Z");
+  assert.equal((await call(tools, "reminders_due", { mark: true })).json().length, 0);
+  clock.at = new Date("2026-10-28T08:00:00Z");
+  const again = (await call(tools, "reminders_due", { mark: true })).json();
+  assert.equal(again[0].stage, "snoozed2026-10-28");
+  assert.equal((await call(tools, "reminders_due", { mark: true })).json().length, 0);
+  clock.at = new Date("2026-11-04T08:00:00Z");
+  assert.equal((await call(tools, "reminders_due", { mark: true })).json()[0].stage, "over1");
+});

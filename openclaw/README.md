@@ -177,7 +177,7 @@ Guarantees in code (src/agent/desk.ts):
   (Henri's week plan shows a warning)
 - Sender address and received time are filled in by code from Outlook, never by
   the agent. Subjects, bodies and sender names are never stored
-- Agent-to-agent messaging stays off; the desk file is the only link
+- The Email agent has no agent-to-agent messaging; the desk file is its only link (since 2026-10-25 only `henri` -> `family` sends are allowed, send-only)
 
 Deploy (server thread):
 
@@ -387,7 +387,9 @@ Deploy (server thread, needs Henri's OK for the new agent and cron):
 Henri's picks from the 25.10 brainstorm, all as tools of the Chief of staff (no new
 agent): photos and PDFs to the calendar, family papers, household reminders (car,
 home, documents, contracts), birthdays with gift ideas in the Brain, holiday
-planning and Sunday letters to the boys. Instructions: `openclaw/workspace/AGENTS.md`.
+planning, Sunday letters to the boys, a proactive morning with one-tap buttons, and
+asking the family bot to post in the group (one-way `sessions_send`, send-only; the
+Email agent stays outside agent-to-agent, the mail desk is still its only link). Instructions: `openclaw/workspace/AGENTS.md`.
 The family bot reads photos and PDFs too (`openclaw/workspace-family/AGENTS.md`).
 
 | Tools (in the `family` server, not in `--group`) | Code |
@@ -423,16 +425,21 @@ Deploy (server thread):
 
 | Name | When | Prompt |
 | --- | --- | --- |
-| `household-reminders` | Daily 08:00 | `Household reminders. Call reminders_due with mark true. Post each item as AGENTS.md "Household reminders" says; for a birthday run its giftIdeas search and list the ideas. If the list is empty, reply only NO_REPLY.` |
+| `morning-actions` | Daily 07:05 | `Morning actions. Follow AGENTS.md "Morning actions": call digest_data with kind daily, reminders_due with mark true and school_info, then send one message with buttons for what needs Henri's decision (clashes, bills due within 3 days, exams within 3 days, due reminders; for a birthday run its giftIdeas search). If nothing needs a decision, reply only NO_REPLY.` |
 | `letters-to-boys` | Sun 20:15 | `Letters to the boys. Follow AGENTS.md "Letters to the boys (Sunday)": look at the past week, write two questions per boy, capture them to the Brain inbox, then send them to Henri.` |
 
-5. Drive for papers (Henri, once): in Google Cloud project "family-agent", APIs >
+   Then disable the 06:50 "Bill reminders" cron: morning-actions lists the same bills
+   (due within 3 days) with a button. Re-enable it if morning-actions is turned off
+5. Delegation test: in the Chief of staff chat "kysy perheryhmässä onko kukaan nähnyt
+   Oskarin hanskoja" (Henri says when). The family bot posts it. If sessions_send is
+   refused (sandbox clamp), say so and leave the delegation off
+6. Drive for papers (Henri, once): in Google Cloud project "family-agent", APIs >
    Credentials > Create OAuth client ID, type "TVs and Limited Input devices"; the
    OAuth consent screen in Testing with janttiho@gmail.com as test user. Save the id
    and secret from the laptop with `ssh -t root@<server> save-secret GOOGLE_OAUTH_CLIENT_ID` (and `GOOGLE_OAUTH_CLIENT_SECRET`), run
    `~/family-agent-run.sh drive-login` and enter the code at google.com/device. A
    Testing-mode refresh token expires after 7 days; publish the app (no review needed
    for drive.file) to keep it
-6. Smoke test in the Chief of staff chat: "katsastus 20.11. joka vuosi", "mitä
+7. Smoke test in the Chief of staff chat: "katsastus 20.11. joka vuosi", "mitä
    huoltoja on tulossa?", a photo of a receipt with "tallenna tämä", a PDF of a game
    schedule, "mitä tehdään hiihtolomalla?"

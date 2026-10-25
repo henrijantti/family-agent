@@ -52,6 +52,8 @@ export interface Reminder {
   born?: number;
   paperId?: string;
   calendarEventId?: string;
+  /** Henri pressed "later": quiet until this day, then told once more. */
+  snoozeUntil?: string;
   status: "open" | "done" | "removed";
   /** Reminder stages already reported, as "<due>:<stage>". */
   notified: string[];
@@ -331,6 +333,7 @@ export function homeTools(d: HomeDeps): Tool[] {
           while (next <= today(d)) next = addMonths(next, r.everyMonths);
           r.due = next;
           r.notified = [];
+          delete r.snoozeUntil;
           if (r.calendarEventId) await putOnCalendar(d, r);
           return { status: "next", reminder: view(d, r) };
         });
@@ -364,14 +367,34 @@ export function homeTools(d: HomeDeps): Tool[] {
           }
           const out = [];
           for (const r of data.reminders.filter((x) => x.status === "open")) {
-            const s = stage(daysBetween(t, r.due), r.remindDays);
+            if (r.snoozeUntil && t < r.snoozeUntil) continue;
+            const s = r.snoozeUntil ? `snoozed${r.snoozeUntil}` : stage(daysBetween(t, r.due), r.remindDays);
             if (!s || r.notified.includes(`${r.due}:${s}`)) continue;
             out.push({ ...view(d, r), stage: s, giftIdeas: r.kind === "birthday" ? `brain_search "Lahjaidea: ${r.person ?? r.title}"` : undefined });
-            if (a.mark) r.notified.push(`${r.due}:${s}`);
+            if (a.mark) {
+              r.notified.push(`${r.due}:${s}`);
+              // The snoozed notice stands in for today's ordinary stage, so it isn't told twice.
+              if (r.snoozeUntil) r.notified.push(`${r.due}:${stage(daysBetween(t, r.due), r.remindDays)}`);
+              delete r.snoozeUntil;
+            }
           }
           return out.sort((x, y) => x.due.localeCompare(y.due));
         };
         return a.mark ? change(d, body) : body(load(d));
+      },
+    },
+    {
+      name: "reminder_snooze",
+      description: "Henri pressed \"later\" on a reminder: keep it quiet for some days, then remind once more (and the usual stages after that).",
+      input: { properties: { id: { type: "string", maxLength: 40 }, days: { type: "integer", description: "1-30, default 3" } }, required: ["id"] },
+      async run(a) {
+        const days = (a.days as number | undefined) ?? 3;
+        if (days < 1 || days > 30) throw new ToolError("days must be 1-30");
+        return change(d, async (data) => {
+          const r = find(data, a.id as string);
+          r.snoozeUntil = addDays(today(d), days);
+          return { status: "snoozed", until: r.snoozeUntil, reminder: view(d, r) };
+        });
       },
     },
     {
