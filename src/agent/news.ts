@@ -1,4 +1,4 @@
-import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { appendFileSync, chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import * as cheerio from "cheerio";
 import { withLock } from "../lib/lock.js";
@@ -78,7 +78,7 @@ export function articleUrl(raw: string, source: Source): string | undefined {
   const d = DOMAINS[source];
   if (u.protocol !== "https:" || u.username || u.password || u.port) return undefined;
   if (u.hostname !== d && !u.hostname.endsWith(`.${d}`)) return undefined;
-  for (const k of [...u.searchParams.keys()]) if (/^(utm_|ref$|cmpid$)/i.test(k)) u.searchParams.delete(k);
+  for (const k of [...u.searchParams.keys()]) if (/^(utm_|syn-|ref$|cmpid$)/i.test(k)) u.searchParams.delete(k);
   u.hash = "";
   return u.toString();
 }
@@ -173,7 +173,9 @@ export function checkLine(text: string, at: string): string {
 
 export function newsTools(d: NewsDeps): Tool[] {
   const feeds = d.feeds ?? FEEDS;
-  mkdirSync(d.dir, { recursive: true });
+  mkdirSync(d.dir, { recursive: true, mode: 0o700 });
+  // Files made before 600 was set (2026-10-25) are tightened too.
+  for (const f of ["batch.json", "sent.jsonl"]) if (existsSync(join(d.dir, f))) chmodSync(join(d.dir, f), 0o600);
   const batchFile = join(d.dir, "batch.json");
 
   const items: Tool = {
@@ -214,7 +216,7 @@ export function newsTools(d: NewsDeps): Tool[] {
         return { source: s, ok: rs.some((r) => !r.error), items: shown.filter((x) => x.source === s).length, errors: rs.filter((r) => r.error).map((r) => `${r.f.section}: ${r.error}`) };
       });
       const batch: Batch = { at: now.toISOString(), since: since.toISOString(), missing: status.filter((s) => !s.ok).map((s) => s.source), items: shown.map(({ id, source, url }) => ({ id, source, url })) };
-      writeFileSync(batchFile, JSON.stringify(batch, null, 1));
+      writeFileSync(batchFile, JSON.stringify(batch, null, 1), { mode: 0o600 });
 
       return {
         since: batch.since,
@@ -278,7 +280,7 @@ export function newsTools(d: NewsDeps): Tool[] {
     const foot = batch.missing.length ? [`<i>Ei saatu tänään: ${batch.missing.join(", ")}</i>`] : [];
     await d.sender.send([head, ...body, ...foot].join("\n\n"));
 
-    appendFileSync(join(d.dir, "sent.jsonl"), JSON.stringify({ at: now.toISOString(), date: today, fetched: batch.at, urls: lines.map((l) => l.it.url), seen: batch.items.map((x) => x.url) } satisfies SentLine) + "\n");
+    appendFileSync(join(d.dir, "sent.jsonl"), JSON.stringify({ at: now.toISOString(), date: today, fetched: batch.at, urls: lines.map((l) => l.it.url), seen: batch.items.map((x) => x.url) } satisfies SentLine) + "\n", { mode: 0o600 });
     return `sent ${lines.length} items to Henri`;
   }
 
