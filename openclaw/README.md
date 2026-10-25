@@ -202,7 +202,9 @@ code: no `bills_list`, no `scan_bills`, `digest_data` without `billsToday`, and 
 `digest_mark_sent` doesn't use up bill reminders. No Brain, mail or desk, so nothing
 private reaches the group. Bill reminders go to Henri through the Chief of staff
 instead (step 4 cron). In the group only allowlisted senders can trigger it (Henri; his spouse
-once Henri gives the id) and only by @-mention or reply; bot privacy mode stays on.
+once Henri gives the id). Since 2026-10-25 it reads every group message (`requireMention:
+false`) and answers only when addressed or when a message names a date worth adding
+(AGENTS.md "Messages not addressed to you"); otherwise it answers `NO_REPLY`.
 Deploy it at step 3 below, not before: until then the scripts read
 @Family_fff_bot with getUpdates. At that point the shadow and cutover digest crons
 move from agent `henri` to agent `family` (step 4).
@@ -254,8 +256,9 @@ Found live at the step 3 handover (2026-10-25):
   claim, so the press ends in "This action is no longer available". Plain `label` +
   `value` buttons reach the agent as `callback_data: <value>`
 - The bot in privacy mode gets button presses and replies to its own messages, but not
-  plain @-mentions. It is a group admin (no rights) so mentions arrive; `requireMention`
-  keeps it quiet otherwise
+  plain @-mentions. It is a group admin (no rights) so all group messages arrive;
+  `requireMention: false` (2026-10-25) passes them all to the agent, which stays quiet
+  with `NO_REPLY` unless addressed
 - Making it admin turned the group into a supergroup with a new chat id. OpenClaw moved
   its `groups` entry itself; `TELEGRAM_FAMILY_CHAT_ID` and the two step 3 crons were
   changed by hand

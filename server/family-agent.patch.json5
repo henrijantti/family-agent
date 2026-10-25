@@ -20,8 +20,9 @@
           // Only these people can make the bot act in the group.
           groupAllowFrom: ["<HENRI_TELEGRAM_USER_ID>", "<SPOUSE_TELEGRAM_USER_ID>"],
           groups: {
-            // "Family group"; answers only when @-mentioned or replied to.
-            "<FAMILY_GROUP_CHAT_ID>": { requireMention: true },
+            // "Family group". The bot reads every message (Henri, 2026-10-25) and AGENTS.md
+            // decides when it answers. To go back: requireMention: true.
+            "<FAMILY_GROUP_CHAT_ID>": { requireMention: false },
           },
           joinIntro: false,
         },
