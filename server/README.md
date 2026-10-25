@@ -29,7 +29,7 @@ Helsinki) from scratch. Nothing here contains secrets.
 | `systemd/family-agent-tick.service` + `.timer` | user units; a tick every 15 min (replaced GitHub's tick.yml on 2026-10-23) |
 | `family-agent-backup.sh` | `/home/openclaw/family-agent-backup.sh`: nightly encrypted backup |
 | `systemd/family-agent-backup.service` + `.timer` | user units; backup at 02:30 Helsinki |
-| `family-agent-health.sh` + `systemd/family-agent-health.*` | every 10 min: private Telegram alert (Chief of staff bot, chat id in `~/.secrets/health-chat-id`) when the tick, gateway, backup, a cron, memory or disk fails; once per problem per 6 h |
+| `family-agent-health.sh` + `systemd/family-agent-health.*` | every 10 min: private Telegram alert (Chief of staff bot, chat id in `~/.secrets/health-chat-id`) when the tick, gateway, Claude Code Remote Control (if enabled), backup, a cron, memory or disk fails; once per problem per 6 h |
 | `family-agent-status.sh` + `systemd/family-agent-status.*` | every 15 min: `status.json` (units, crons, memory, disk, open alerts; no secrets or content) to the `status` branch of the backup repo, for cloud sessions |
 | `systemd/claude-remote-control.service` | user unit: Claude Code Remote Control as "family-agent server" in `~/family-agent` (live jobs checkout), restarts after 30 s; since 2026-10-25 |
 | `email-agent.patch.json5` | `openclaw config patch --file`: agent `email`, `mail` MCP server, tool policy |
@@ -60,6 +60,13 @@ is now the live state; the `state` branch on GitHub is frozen at the cutover.
 To move back to GitHub: stop the timer, push the server's state.json to the
 `state` branch, then `gh workflow enable tick.yml`. Never run both at once:
 they share one Telegram bot and one state.
+
+After a change to a source reader (`src/sources/*`), run
+`~/family-agent-run.sh sync-plan wilma` (or `myclub`) before any forced tick.
+It writes nothing and lists what the run would create, mark missing or delete.
+Any "missing" or "delete" line you did not expect means the reader lost items:
+stop there. Deletes also wait until an event has been missing for
+`calendar.missing_hours_before_delete` (24 h), so a bad run can be fixed first.
 
 ## Family dashboard (pinned picture)
 

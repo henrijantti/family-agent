@@ -3,7 +3,7 @@ import { Config, env, isMock, loadConfig } from "./config.js";
 import { FakeCalendar } from "./calendar/fake.js";
 import { GoogleCalendar } from "./calendar/google.js";
 import { eventId } from "./calendar/sync.js";
-import { Ctx, JobName, runDigest, sendWilmaWeek, tick, wilmaFetchDue } from "./jobs.js";
+import { Ctx, JobName, runDigest, sendWilmaWeek, syncPlan, tick, wilmaFetchDue } from "./jobs.js";
 import { StateStore, type StateData } from "./lib/state.js";
 import { addDays, fromLocal, localIso, localParts, toMinutes } from "./lib/time.js";
 import { ConsoleNotifier, TelegramBot } from "./notify/telegram.js";
@@ -349,6 +349,19 @@ async function main() {
       }
       break;
     }
+    case "sync-plan": {
+      // npm run agent -- sync-plan wilma|myclub: what the next run would do to the
+      // calendar. Writes nothing (state included), so run it before a forced tick
+      // after any source reader change.
+      const source = args[0];
+      if (source !== "wilma" && source !== "myclub") throw new Error("usage: sync-plan wilma|myclub");
+      const r = await syncPlan(buildCtx(cfg, st, now), source);
+      console.log(`${source} plan: +${r.created} ~${r.updated} =${r.unchanged} missing ${r.markedMissing} delete ${r.deleted}${r.abortedDeletes ? ` (would stop: ${r.abortedDeletes} over the limit)` : ""}`);
+      for (const c of r.changes.filter((c) => c.kind !== "cancelled")) console.log(`  ${c.kind}: ${c.title} (${c.when})`);
+      for (const d of r.deletions) console.log(`  delete: ${d}`);
+      for (const w of r.warnings) console.log(`  warning: ${w}`);
+      break;
+    }
     case "wilma-students": {
       const ctx = buildCtx(cfg, st, now);
       const snap = await ctx.wilma!.fetch(cfg, st.data);
@@ -666,6 +679,7 @@ async function main() {
   telegram-test            send a hello to the family group
   outlook-login            device-code sign-in; token stored encrypted in state
   outlook-test             read the last 3 days of inbox
+  sync-plan wilma|myclub          what the next run would change in its calendar; writes nothing
   outlook-triage [days] [--dry]  label invoices, unsubscribe candidates, important mail
   outlook-draft <id> <file> save a reply draft (never sends)
   wilma-students           list the children on the Wilma login

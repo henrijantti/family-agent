@@ -52,6 +52,10 @@ unit_ok() { # last run of a oneshot unit succeeded (or it never ran)
   [ -z "$r" ] || [ "$r" = success ]
 }
 gateway_up() { [ "$(systemctl --user is-active openclaw-gateway 2>/dev/null)" = active ]; }
+remote_up() { # Claude Code Remote Control, how Claude reaches the server without the laptop
+  [ "$(systemctl --user is-enabled claude-remote-control 2>/dev/null)" != enabled ] && return 0
+  [ "$(systemctl --user is-active claude-remote-control 2>/dev/null)" = active ]
+}
 mem_ok() { [ "$(awk '/MemAvailable/ {print int($2/1024)}' /proc/meminfo)" -ge "$MIN_FREE_MB" ]; }
 disk_ok() { [ "$(df --output=pcent / | tail -1 | tr -dc 0-9)" -le "$MAX_DISK_PCT" ]; }
 tick_recent() { # the tick ran in the last 40 minutes
@@ -77,6 +81,7 @@ check tick "Perheagentin ajo epäonnistui (viimeisin ajo päättyi virheeseen)" 
 check tick-stale "Perheagentti ei ole ajanut 40 minuuttiin" tick_recent
 check dreaming "Perhebotin viikkoläpikäynnin tietojen haku epäonnistui (sunnuntain dreaming)" unit_ok family-agent-dreaming.service
 check gateway "OpenClaw-palvelu ei ole käynnissä (botit eivät vastaa)" gateway_up
+check remote "Clauden etäyhteys palvelimelle (Claude Code) ei ole käynnissä, joten palvelinta ei voi hoitaa ilman läppäriä" remote_up
 check backup "Yön varmuuskopio ei onnistunut" backup_recent
 check crons "Jokin ajastettu tehtävä (esim. aamukooste) päättyi virheeseen, tai tehtävälistaa ei voi lukea" crons_ok
 check memory "Palvelimen muisti on vähissä (alle $MIN_FREE_MB Mt vapaana)" mem_ok
