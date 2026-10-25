@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
@@ -37,6 +37,7 @@ const ok = async (url: string) => (url === KL.url ? KL_XML : FT_XML);
 
 test("news: article links must be https on the publisher's domain, tracking dropped", () => {
   assert.equal(articleUrl("https://www.kauppalehti.fi/a/1?utm_source=x&id=2", "KL"), "https://www.kauppalehti.fi/a/1?id=2");
+  assert.equal(articleUrl("https://www.ft.com/content/abc?syn-25a6b1a6=1", "FT"), "https://www.ft.com/content/abc");
   assert.equal(articleUrl("http://www.kauppalehti.fi/a/1", "KL"), undefined);
   assert.equal(articleUrl("https://kauppalehti.fi.evil.test/a", "KL"), undefined);
   assert.equal(articleUrl("https://user@www.ft.com/a", "FT"), undefined);
@@ -82,6 +83,7 @@ test("news: items since the last day, publish adds code-made links once a day", 
   const again = await call(s.tools, "news_publish", { items: [{ id: "n1", text: "x" }] });
   assert.ok(again.error && /already sent/.test(again.text));
   const log = readFileSync(join(s.dir, "sent.jsonl"), "utf8").trim().split("\n");
+  for (const f of ["sent.jsonl", "batch.json"]) assert.equal(statSync(join(s.dir, f)).mode & 0o777, 0o600, f);
   assert.equal(log.length, 1);
 
   // Next day: what Henri was offered doesn't come back.
