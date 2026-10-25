@@ -358,6 +358,7 @@ async function main() {
       const r = await syncPlan(buildCtx(cfg, st, now), source);
       console.log(`${source} plan: +${r.created} ~${r.updated} =${r.unchanged} missing ${r.markedMissing} delete ${r.deleted}${r.abortedDeletes ? ` (would stop: ${r.abortedDeletes} over the limit)` : ""}`);
       for (const c of r.changes.filter((c) => c.kind !== "cancelled")) console.log(`  ${c.kind}: ${c.title} (${c.when})`);
+      for (const m of r.missing) console.log(`  missing: ${m}`);
       for (const d of r.deletions) console.log(`  delete: ${d}`);
       for (const w of r.warnings) console.log(`  warning: ${w}`);
       break;

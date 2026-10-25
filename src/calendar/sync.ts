@@ -39,6 +39,8 @@ export interface SyncResult {
   warnings: string[];
   /** Titles and times of the events this run deleted, or would delete when dryRun. */
   deletions: string[];
+  /** Titles and times of the events marked missing (not deleted yet). */
+  missing: string[];
 }
 
 export function eventId(source: string, sourceId: string): string {
@@ -85,7 +87,7 @@ export function describeWhen(t: EventTime): string {
 export async function syncSource(api: CalendarApi, desired: DesiredEvent[], opts: SyncOptions): Promise<SyncResult> {
   const nowDate = opts.now ?? new Date();
   const now = nowDate.toISOString();
-  const r: SyncResult = { created: 0, updated: 0, unchanged: 0, deleted: 0, markedMissing: 0, abortedDeletes: 0, changes: [], warnings: [], deletions: [] };
+  const r: SyncResult = { created: 0, updated: 0, unchanged: 0, deleted: 0, markedMissing: 0, abortedDeletes: 0, changes: [], warnings: [], deletions: [], missing: [] };
   const write = opts.dryRun
     ? { insert: async () => {}, update: async () => {}, delete: async () => {} }
     : { insert: (c: string, e: CalendarEvent) => api.insert(c, e), update: (c: string, id: string, e: CalendarEvent) => api.update(c, id, e), delete: (c: string, id: string) => api.delete(c, id) };
@@ -148,6 +150,7 @@ export async function syncSource(api: CalendarApi, desired: DesiredEvent[], opts
       p.missingSince = since;
       await write.update(opts.calendarId, e.id, e);
       r.markedMissing++;
+      r.missing.push(`${e.summary ?? "(untitled)"} ${describeWhen(e.start)}`);
     }
   }
   if (toDelete.length > opts.maxDeletes) {

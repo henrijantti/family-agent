@@ -114,6 +114,7 @@ test("with an hours grace, forced runs in quick succession never delete", async 
     const r = await syncSource(cal, [ev("1", "2026-10-23")], { ...graced, now: new Date(opts.now.getTime() + min * 60_000) });
     assert.equal(r.deleted, 0);
     assert.equal(r.markedMissing, 1);
+    assert.deepEqual(r.missing, ["Aino: exam 2 2026-10-30"]);
   }
   // Fixed reader: the item comes back and the clock resets.
   await syncSource(cal, [ev("1", "2026-10-23"), ev("2", "2026-10-30")], { ...graced, now: new Date(opts.now.getTime() + 20 * 60_000) });
