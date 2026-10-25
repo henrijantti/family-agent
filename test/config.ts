@@ -8,5 +8,6 @@ export function testConfig() {
   cfg.outlook.enabled = true;
   cfg.digest.language = "en"; // assertions are written against the English labels
   cfg.agent_jobs = []; // tests that need agent-owned jobs set them themselves
+  if (cfg.dashboard) delete cfg.dashboard.drive_file_id; // never upload to Henri's Drive from tests
   return cfg;
 }

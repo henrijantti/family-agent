@@ -34,7 +34,7 @@ export interface Config {
   wilma: { enabled: boolean; include_grades: boolean; runs: RunSlot[]; bulletin_events: boolean };
   myclub: { enabled: boolean; runs: RunSlot[]; horizon_weeks: number; mode: "auto" | "ics" | "pages"; base_url: string };
   /** Pinned dashboard picture in the family group, refreshed by the tick when it changes. */
-  dashboard?: { enabled: boolean };
+  dashboard?: { enabled: boolean; /** Henri's Drive file his Claude artifact shows. */ drive_file_id?: string };
   /** Jobs the OpenClaw agent runs instead of the tick (see openclaw/README.md). */
   agent_jobs?: string[];
   attendance?: { enabled: boolean; children: string[]; poll: RunSlot; apply: RunSlot; live: boolean; clubs?: { host: string; child: string }[] };

@@ -80,16 +80,21 @@ function ctx(now: string): { c: Ctx; notifier: ConsoleNotifier } {
 test("runDashboard: sends and pins once, then edits only when the content changes", async () => {
   const { c, notifier } = ctx(localIso(TODAY, "10:00"));
   let shots = 0;
+  const uploads: string[] = [];
+  const upload = async (html: string) => void uploads.push(html);
   const shoot = async () => Buffer.from(`png${++shots}`);
-  assert.equal(await runDashboard(c, { shoot }), "sent");
+  assert.equal(await runDashboard(c, { shoot, upload }), "sent");
+  assert.equal(uploads.length, 1, "Henri's Drive copy gets the same page");
+  assert.match(uploads[0], /<h1>Maanantai 26\.10\.<\/h1>/);
   assert.equal(notifier.photos.length, 1);
   assert.ok(notifier.photos[0].pinned);
   assert.match(notifier.photos[0].caption, /päivitetty ma 10:00/);
   const id = c.state.dashboard!.messageId;
   // Fifteen minutes later nothing changed: no picture, no edit.
   c.now = new Date(localIso(TODAY, "10:15"));
-  assert.equal(await runDashboard(c, { shoot }), "unchanged");
+  assert.equal(await runDashboard(c, { shoot, upload }), "unchanged");
   assert.equal(shots, 1);
+  assert.equal(uploads.length, 1);
   // A new event: the same pinned message is edited.
   await c.calendar!.insert("family", { id: "b", summary: "Anna: Jooga", start: { dateTime: localIso(addDays(TODAY, 1), "19:00") }, end: { dateTime: localIso(addDays(TODAY, 1), "20:00") } });
   assert.equal(await runDashboard(c, { shoot }), "edited");
@@ -120,4 +125,16 @@ test("runDashboard: a failed pin is retried on later runs until it works", async
   assert.equal(await runDashboard(c, { shoot }), "unchanged");
   assert.equal(c.state.dashboard!.pinned, true);
   assert.ok(notifier.photos[0].pinned);
+});
+
+test("runDashboard: a failed Drive copy still updates the picture", async () => {
+  const { c, notifier } = ctx(localIso(TODAY, "10:00"));
+  const logs: string[] = [];
+  c.log = (s) => logs.push(s);
+  const upload = async () => {
+    throw new Error("Google Drive upload 403: insufficient permissions");
+  };
+  assert.equal(await runDashboard(c, { shoot: async () => Buffer.from("png"), upload }), "sent");
+  assert.equal(notifier.photos.length, 1);
+  assert.ok(logs.some((l) => /Drive copy failed: .*403/.test(l)));
 });

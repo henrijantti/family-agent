@@ -4,12 +4,15 @@ import { localParts } from "../lib/time.js";
 import type { MyClubSnapshot } from "../sources/myclub.js";
 import type { WilmaSnapshot } from "../sources/wilma.js";
 import { dashboardModel, renderDashboard } from "./build.js";
+import { driveUploader, type DashboardUpload } from "./drive.js";
 import { screenshot } from "./shot.js";
 
 // Keeps one pinned picture in the family group up to date. Every tick builds
 // the page; only when its content differs from the last picture is it rendered
 // and the pinned message edited in place (an edit notifies nobody). The first
 // run, or a run after someone deleted the message, sends a new one and pins it.
+// With config dashboard.drive_file_id the same page also goes to Henri's Google Drive
+// file that his Claude artifact shows (drive.ts).
 
 export type Shooter = (html: string) => Promise<Buffer>;
 
@@ -34,7 +37,7 @@ export async function buildDashboard(ctx: Ctx) {
   };
 }
 
-export async function runDashboard(ctx: Ctx, opts: { force?: boolean; shoot?: Shooter } = {}): Promise<"unchanged" | "edited" | "sent"> {
+export async function runDashboard(ctx: Ctx, opts: { force?: boolean; shoot?: Shooter; upload?: DashboardUpload } = {}): Promise<"unchanged" | "edited" | "sent"> {
   const chat = familyChat();
   if (!chat || !ctx.notifier?.photo || !ctx.notifier.editPhoto) throw new Error("dashboard needs TELEGRAM_BOT_TOKEN and TELEGRAM_FAMILY_CHAT_ID");
   const d = await buildDashboard(ctx);
@@ -43,6 +46,15 @@ export async function runDashboard(ctx: Ctx, opts: { force?: boolean; shoot?: Sh
   if (prev && !prev.pinned) prev.pinned = await pin(ctx, chat, prev.messageId);
   if (!opts.force && prev?.hash === d.hash) return "unchanged";
   const png = await (opts.shoot ?? ((h) => screenshot(h)))(d.html);
+  const driveFile = ctx.cfg.dashboard?.drive_file_id;
+  const upload = opts.upload ?? (driveFile ? driveUploader(driveFile) : undefined);
+  if (upload) {
+    // Henri's artifact copy; a failure here never holds back the family's picture.
+    await upload(d.html).then(
+      () => ctx.log("dashboard: Drive copy updated"),
+      (e) => ctx.log(`dashboard: Drive copy failed: ${e instanceof Error ? e.message : e}`),
+    );
+  }
   const caption = `Perheen viikko · päivitetty ${d.updated}`;
   const at = ctx.now.toISOString();
   if (prev) {

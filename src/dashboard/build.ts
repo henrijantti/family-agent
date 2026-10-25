@@ -170,7 +170,7 @@ const KUNTO = `
 --shadow-xs:0 1px 2px rgba(25,27,43,.04),0 6px 24px -12px rgba(25,27,43,.10)}
 *{box-sizing:border-box;margin:0;padding:0}
 html,body{background:var(--app)}
-body{width:600px;padding:20px 16px 18px;font-family:Manrope,system-ui,sans-serif;color:var(--ink);font-size:14px;line-height:20px;
+body{max-width:600px;margin:0 auto;padding:20px 16px 18px;font-family:Manrope,system-ui,sans-serif;color:var(--ink);font-size:14px;line-height:20px;
 -webkit-font-smoothing:antialiased;font-variant-numeric:tabular-nums}
 .label{font-size:11px;line-height:14px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-subtle)}
 .head{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;margin:0 4px 16px}

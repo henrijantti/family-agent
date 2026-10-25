@@ -65,6 +65,11 @@ myclub:
 # first one with `dashboard --send`.
 dashboard:
   enabled: false
+  # Henri's copy in Claude (artifact "Perheen viikko"): the page also goes to this
+  # Drive file, "Perhe-dashboard.html" in janttiho@gmail.com's Drive, shared with
+  # the service account as editor (2026-10-25). Needs the Drive API enabled in the
+  # Google Cloud project.
+  drive_file_id: 1yq_LTx-NVSEy37UB4rs_T8CdaYGtGF84
 
 # Jobs the OpenClaw agents run instead of the 15-minute tick (openclaw/README.md
 # "Moving the jobs to OpenClaw"). Step 3, 2026-10-25: attendance moved to agent
