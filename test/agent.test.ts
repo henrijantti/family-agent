@@ -154,6 +154,17 @@ test("digest_data in the family group's copy has no bills", async () => {
   assert.ok(!family(true).tools.some((t) => t.name === "bills_list"));
 });
 
+test("week_plan: Henri's copy posts ready text with his bills; the family group's copy has no week_plan", async () => {
+  const { tools } = family();
+  const r = await call(tools, "week_plan", {});
+  assert.ok(!r.error, r.text);
+  assert.match(r.text, /^🗓 \*\*Viikkosuunnitelma, vk \d+\*\*/);
+  assert.match(r.text, /• \*\*PPJ\*\* 30,40 €/);
+  assert.match(r.text, /\*\*Oliver\*\* · Kiekko-Espoo harjoitus/);
+  assert.doesNotMatch(r.text, /Later/);
+  assert.ok(!family(true).tools.some((t) => t.name === "week_plan"));
+});
+
 // ---------- Brain vault ----------
 
 function git(cwd: string, ...args: string[]) {

@@ -273,6 +273,24 @@ export class GraphMail implements MailApi {
     return this.call<MailMessage>("GET", `/me/messages/${encodeURIComponent(id)}?${q}`);
   }
 
+  /** File attachments of one message: id, type and size only (names are the sender's text). */
+  async listAttachments(messageId: string) {
+    const r = await this.call<{ value: { id: string; contentType?: string; size?: number; isInline?: boolean; "@odata.type"?: string }[] }>(
+      "GET",
+      `/me/messages/${encodeURIComponent(messageId)}/attachments?$select=id,contentType,size,isInline`,
+    );
+    return r.value
+      .filter((a) => !a["@odata.type"] || a["@odata.type"] === "#microsoft.graph.fileAttachment")
+      .map((a) => ({ id: a.id, contentType: a.contentType ?? "", size: a.size ?? 0, isInline: !!a.isInline }));
+  }
+
+  /** One file attachment's bytes. */
+  async attachmentBytes(messageId: string, attachmentId: string): Promise<Uint8Array> {
+    const a = await this.call<{ contentBytes?: string }>("GET", `/me/messages/${encodeURIComponent(messageId)}/attachments/${encodeURIComponent(attachmentId)}`);
+    if (!a.contentBytes) throw new Error("attachment has no content");
+    return new Uint8Array(Buffer.from(a.contentBytes, "base64"));
+  }
+
   async setCategories(id: string, categories: string[]) {
     await this.call("PATCH", `/me/messages/${encodeURIComponent(id)}`, { categories });
   }
