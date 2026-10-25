@@ -77,6 +77,46 @@ crons_ok() { # the cron list is readable and no enabled job's last runs failed
   [ "$bad" = 0 ]
 }
 
+# Self-healing (Henri 2026-10-25): a stuck Telegram reader was fixed by hand with a
+# gateway restart. OpenClaw's own health snapshot reports a stuck inbound lane
+# (deliveryQueues.ingressPressure: a claimed row not refreshed for 30 min, or 8 failed
+# attempts) and unhealthy channel accounts. Two runs in a row (10 min apart) restart the
+# gateway once, at most once an hour, and tell Henri after. A repeat within the hour
+# is an ordinary alert. A health read that fails or doesn't parse counts as healthy:
+# the gateway check covers a gateway that is down.
+telegram_stuck() { # prints how many stuck lanes / unhealthy Telegram accounts, empty when unknown
+  local out
+  # shellcheck source=/dev/null
+  out="$(set -a; . "$HOME/.secrets/gateway.env"; set +a; timeout 60 openclaw health --json 2>/dev/null)" || return 0
+  printf '%s' "$out" | jq -r '([.deliveryQueues.ingressPressure[]? | select(.channelId == "telegram")] | length)
+    + ([(.channels.telegram // {}) | .. | objects | select(has("healthState")) | select(.healthState != "healthy" and .healthState != "starting")] | length)' 2>/dev/null
+}
+heal_telegram() {
+  local n strike="$STATE/telegram-strike" last="$STATE/telegram-restart"
+  n="$(telegram_stuck)"
+  if [ -z "$n" ] || [ "$n" = 0 ]; then rm -f "$strike"; ok telegram; return; fi
+  if [ ! -f "$strike" ]; then touch "$strike"; return; fi # first sighting: wait one run
+  if [ -f "$last" ] && [ -z "$(find "$last" -mmin +60)" ]; then
+    problem telegram "Telegram-viestit ovat jumissa, eikä OpenClawin uudelleenkäynnistys tunti sitten auttanut"
+    return
+  fi
+  if [ "$DRY" = 1 ]; then printf -- '--- would restart openclaw-gateway (%s stuck)\n' "$n"; return; fi
+  touch "$last"; rm -f "$strike"
+  systemctl --user restart openclaw-gateway
+  local up=0
+  for _ in $(seq 1 24); do
+    sleep 5
+    # shellcheck source=/dev/null
+    if (set -a; . "$HOME/.secrets/gateway.env"; set +a; timeout 20 openclaw cron list >/dev/null 2>&1); then up=1; break; fi
+  done
+  if [ "$up" = 1 ]; then
+    send "$(printf '🔧 Korjasin itse\n\nTelegram-viestit jäivät jumiin, joten käynnistin OpenClawin uudelleen klo %s. Jumiin jääneet viestit käsitellään nyt.' "$(date +%H.%M)")"
+  else
+    problem telegram "Telegram-viestit jäivät jumiin, ja OpenClaw ei käynnistynyt uudelleen 2 minuutissa"
+  fi
+}
+
+gateway_up && heal_telegram
 check tick "Perheagentin ajo epäonnistui (viimeisin ajo päättyi virheeseen)" unit_ok family-agent-tick.service
 check tick-stale "Perheagentti ei ole ajanut 40 minuuttiin" tick_recent
 check dreaming "Perhebotin viikkoläpikäynnin tietojen haku epäonnistui (sunnuntain dreaming)" unit_ok family-agent-dreaming.service
