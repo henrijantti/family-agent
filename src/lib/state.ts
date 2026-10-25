@@ -57,7 +57,7 @@ export interface StateData {
   digestQueue: { child: string; kind: "message" | "bulletin" | "note"; text: string; action: boolean }[];
   lastDigestAt?: string;
   /** The pinned dashboard picture in the family group (src/dashboard). */
-  dashboard?: { chatId: string; messageId: number; hash: string; at: string };
+  dashboard?: { chatId: string; messageId: number; hash: string; at: string; pinned?: boolean };
 }
 
 export function emptyState(): StateData {

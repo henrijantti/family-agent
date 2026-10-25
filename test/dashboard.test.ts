@@ -102,3 +102,22 @@ test("runDashboard: sends and pins once, then edits only when the content change
   assert.notEqual(c.state.dashboard!.messageId, undefined);
   assert.ok(notifier.photos[0].pinned);
 });
+
+test("runDashboard: a failed pin is retried on later runs until it works", async () => {
+  const { c, notifier } = ctx(localIso(TODAY, "10:00"));
+  let allowed = false;
+  const realPin = notifier.pin.bind(notifier);
+  notifier.pin = async (chat, id) => {
+    if (!allowed) throw new Error("Telegram pinChatMessage: Bad Request: not enough rights to manage pinned messages in the chat");
+    return realPin(chat, id);
+  };
+  const shoot = async () => Buffer.from("png");
+  assert.equal(await runDashboard(c, { shoot }), "sent");
+  assert.equal(c.state.dashboard!.pinned, false);
+  assert.equal(await runDashboard(c, { shoot }), "unchanged");
+  assert.equal(c.state.dashboard!.pinned, false);
+  allowed = true; // Henri gave the bot "Pin messages"
+  assert.equal(await runDashboard(c, { shoot }), "unchanged");
+  assert.equal(c.state.dashboard!.pinned, true);
+  assert.ok(notifier.photos[0].pinned);
+});

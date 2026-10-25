@@ -39,6 +39,8 @@ export async function runDashboard(ctx: Ctx, opts: { force?: boolean; shoot?: Sh
   if (!chat || !ctx.notifier?.photo || !ctx.notifier.editPhoto) throw new Error("dashboard needs TELEGRAM_BOT_TOKEN and TELEGRAM_FAMILY_CHAT_ID");
   const d = await buildDashboard(ctx);
   const prev = ctx.state.dashboard?.chatId === chat ? ctx.state.dashboard : undefined;
+  // A pin that failed (no admin right yet, a Telegram hiccup) is retried every run.
+  if (prev && !prev.pinned) prev.pinned = await pin(ctx, chat, prev.messageId);
   if (!opts.force && prev?.hash === d.hash) return "unchanged";
   const png = await (opts.shoot ?? ((h) => screenshot(h)))(d.html);
   const caption = `Perheen viikko · päivitetty ${d.updated}`;
@@ -56,12 +58,18 @@ export async function runDashboard(ctx: Ctx, opts: { force?: boolean; shoot?: Sh
     }
   }
   const { messageId } = await ctx.notifier.photo(chat, png, caption);
-  ctx.state.dashboard = { chatId: chat, messageId, hash: d.hash, at };
-  try {
-    await ctx.notifier.pin?.(chat, messageId);
-  } catch (e) {
-    ctx.log(`dashboard: sent but could not pin (is the bot an admin with "Pin messages"?): ${e instanceof Error ? e.message : e}`);
-  }
-  ctx.log(`dashboard: sent and pinned message ${messageId}`);
+  ctx.state.dashboard = { chatId: chat, messageId, hash: d.hash, at, pinned: await pin(ctx, chat, messageId) };
+  ctx.log(`dashboard: sent message ${messageId}`);
   return "sent";
+}
+
+async function pin(ctx: Ctx, chat: string, messageId: number): Promise<boolean> {
+  try {
+    await ctx.notifier!.pin?.(chat, messageId);
+    ctx.log(`dashboard: pinned message ${messageId}`);
+    return true;
+  } catch (e) {
+    ctx.log(`dashboard: could not pin message ${messageId} (is the bot an admin with "Pin messages"?): ${e instanceof Error ? e.message : e}`);
+    return false;
+  }
 }
