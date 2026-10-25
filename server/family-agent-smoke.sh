@@ -2,7 +2,7 @@
 # Post-deploy test questions (Henri 2026-10-25), run as openclaw after every deploy,
 # once the gateway answers again. Installed to /home/openclaw/family-agent-smoke.sh.
 #
-# Asks each agent a few read-only questions in its own throwaway session (not Henri's
+# Asks henri and email a few read-only questions in throwaway sessions (not Henri's
 # DM, not the family group) and checks the reply has the expected shape, which shows
 # the agent runs and its tools answer. Prints one line per question and exits 1 when
 # any fails. --notify also sends Henri one private Telegram message (Chief of staff
@@ -13,12 +13,12 @@ NOTIFY=0; [ "${1:-}" = "--notify" ] && NOTIFY=1
 RUN="smoke-$(date +%Y%m%d%H%M%S)"
 RULE="Tämä on palvelimen automaattinen testikysymys deployn jälkeen. Älä lähetä viestejä kenellekään, älä käytä message- tai sessions_send-työkalua, älä muuta mitään. Vastaa vain tähän yhdellä rivillä."
 
-# agent | question | regex the reply must match
+# agent | question | regex the reply must match. No family case: the family agent
+# has the `message` tool for the group, and only the prompt would keep it from posting.
 CASES=(
   "henri|Kutsu reminder_list ja vastaa muodossa: MUISTUTUKSIA <lukumäärä>|MUISTUTUKSIA [0-9]+"
   "henri|Kutsu holiday_plan ja vastaa muodossa: SEURAAVA LOMA <loman nimi>|SEURAAVA LOMA [^ ]+"
   "henri|Lue perheen kalenterista huomisen tapahtumat ja vastaa muodossa: TAPAHTUMIA <lukumäärä>|TAPAHTUMIA [0-9]+"
-  "family|Lue perheen kalenterista huomisen tapahtumat ja vastaa muodossa: PERHEBOT <lukumäärä>|PERHEBOT [0-9]+"
   "email|Listaa saapuneet viestit lukemalla postilaatikkoa ja vastaa muodossa: POSTIA <viestien lukumäärä>|POSTIA [0-9]+"
 )
 
@@ -27,7 +27,7 @@ for c in "${CASES[@]}"; do
   IFS='|' read -r agent q want <<< "$c"
   # shellcheck source=/dev/null
   out="$(set -a; . "$HOME/.secrets/gateway.env"; set +a; timeout 240 openclaw agent --agent "$agent" --session-id "$RUN-$agent" --message "$RULE $q" --json 2>/dev/null)"
-  reply="$(printf '%s' "$out" | jq -r '[.. | objects | (.text? // empty) | strings] | join(" ")' 2>/dev/null | tr '\n' ' ' | cut -c1-300)"
+  reply="$(printf '%s' "$out" | jq -r '[.. | objects | (.text? // empty) | strings] | unique | join(" ")' 2>/dev/null | tr '\n' ' ' | cut -c1-300)"
   if printf '%s' "$reply" | grep -Eq "$want"; then
     printf 'OK   %-7s %s\n' "$agent" "$reply"
   else
