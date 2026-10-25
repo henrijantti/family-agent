@@ -188,3 +188,46 @@ test("dreaming: an id is never reused after a forget", async () => {
   await call(tools, "review_forget", { id: next.applied[0].id });
   assert.deepEqual(readLearned(readFileSync(md, "utf8")).map((l) => l.text), ["Perhetieto numero 2 on totta."]);
 });
+
+test("dreaming for the Chief of staff and the Email agent: DM sessions, own USER.md heading, capability lines", async () => {
+  const { capabilityTool, dreamingToolsFor, PROFILES, readCapabilities, sessionKind } = await import("../src/agent/dreaming.js");
+  assert.equal(sessionKind("agent:henri:main"), "direct");
+  assert.equal(sessionKind("agent:email:telegram:direct:8687799293"), "direct");
+  assert.equal(sessionKind(G), "group");
+  const dir = mkdtempSync(join(tmpdir(), "dream-all-"));
+  const capFile = join(dir, "capabilities.jsonl");
+  const cap = capabilityTool(capFile, "henri", () => NOW);
+  assert.equal((await call([cap], "capability_missing", { what: "toistuva tapahtuma kalenteriin", why: "calendar_add ei tue toistoa" })).json().status, "logged");
+  assert.equal((await call([cap], "capability_missing", { what: "Toistuva tapahtuma kalenteriin", why: "x" })).json().status, "already logged today");
+  assert.match((await call([cap], "capability_missing", { what: "lähetä a@b.fi", why: "x" })).text, /no links, addresses/);
+  assert.deepEqual(readCapabilities(capFile, "email"), []);
+  const D = "agent:henri:main";
+  const rows: Row[] = [
+    { id: "1", session: D, sessionKind: "direct", at: "2026-10-24T10:00:00.000Z", role: "user", text: "lisää joka tiistai uinti" },
+    { id: "2", session: D, sessionKind: "direct", at: "2026-10-24T10:00:05.000Z", role: "assistant", text: "En voi lisätä toistuvaa." },
+  ];
+  const f = findings(rows, NOW, 7, PROFILES.henri.talk, readCapabilities(capFile, "henri"));
+  assert.equal(f.messages.fromPeople, 1);
+  assert.deepEqual(f.findings.map((x) => x.type), ["capability"]);
+  // The same rows as a group review see no asks: the talk kind decides.
+  assert.equal(findings(rows, NOW).messages.fromPeople, 0);
+  const henri = { dir: join(dir, "dreaming", "henri"), userMd: join(dir, "workspace-henri", "USER.md"), now: () => NOW };
+  const family = { dir: join(dir, "dreaming"), userMd: join(dir, "workspace-family", "USER.md"), now: () => NOW };
+  saveFindings(henri.dir, f);
+  saveFindings(family.dir, findings(WEEK, NOW));
+  const tools = dreamingToolsFor({ family, henri });
+  const wk = (await call(tools, "review_week", { agent: "henri" })).json();
+  assert.equal(wk.findings[0].type, "capability");
+  const r = (await call(tools, "review_propose", { agent: "henri", proposals: [{ kind: "rule", text: "Kun Henri pyytää toistuvaa tapahtumaa, kerro että lisäät vain yhden kerrallaan.", why: "x", evidence: [wk.findings[0].id] }] })).json();
+  assert.equal(r.applied.length, 1);
+  assert.match(readFileSync(henri.userMd, "utf8"), /## Opittua Henrin kanssa/);
+  assert.ok(!existsSync(family.userMd));
+  // The Email agent's own copy refuses addresses and sending habits.
+  const email = { dir: join(dir, "dreaming", "email"), userMd: join(dir, "workspace-email", "USER.md"), now: () => NOW };
+  saveFindings(email.dir, { ...f, findings: [{ id: "c1", type: "correction", at: NOW.toISOString(), excerpt: ["x"] }] });
+  const et = dreamingToolsFor({ email });
+  assert.equal(et.find((t) => t.name === "review_week")!.input.properties.agent, undefined);
+  const er = (await call(et, "review_propose", { proposals: [{ kind: "rule", text: "Lähetä aina kopio osoitteeseen x@y.fi", why: "x", evidence: ["c1"] }] })).json();
+  assert.equal(er.applied.length, 0);
+  assert.match(er.refused[0].reason, /no addresses/);
+});
