@@ -33,8 +33,11 @@ alerts:
 
 wilma:
   enabled: true   # LIVE from the server (Henri, 2026-10-24); logs in directly, no laptop runner
+  # Login = Anna's guardian account since 2026-10-25 (it sees both Oliver and
+  # Oskar; Henri's saw only Oliver). A changed WILMA_USERNAME drops the old
+  # session and re-learns silently (switchWilmaAccount).
   include_grades: false   # OPEN DECISION: default off (most sensitive data, never sent to Telegram)
-  # 3-4 runs a day: every fresh login logs Henri out of Wilma in his browser.
+  # 3-4 runs a day: every fresh login logs the account owner (Anna) out of Wilma in her browser.
   # The saved session is reused between runs to soften this.
   runs:
     - { days: [mon, tue, wed, thu, fri], time: "06:30" }

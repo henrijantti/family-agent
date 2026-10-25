@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { Config, childName, env, requireEnv } from "../config.js";
 import type { DesiredEvent } from "../calendar/types.js";
@@ -77,6 +78,7 @@ export class LiveWilma implements WilmaProvider {
     const profile = { baseUrl, username: requireEnv("WILMA_USERNAME"), password: requireEnv("WILMA_PASSWORD") };
     const totpSecret = env("WILMA_TOTP_SECRET");
     const onMfa = totpSecret ? async () => totp(totpSecret) : undefined;
+    switchWilmaAccount(state, baseUrl, profile.username);
 
     let client = state.wilma.session ? WilmaClient.resume(profile, state.wilma.session, onMfa) : null;
     client ??= await WilmaClient.login(profile, onMfa);
@@ -129,6 +131,26 @@ export class LiveWilma implements WilmaProvider {
     }
     return { fetchedAt: new Date().toISOString(), baseUrl, students };
   }
+}
+
+/**
+ * A new Wilma login (e.g. Henri's account swapped for Anna's, 2026-10-25) must
+ * not resume the old account's session, and its messages would all look new.
+ * Forget the session and seen items so the next run learns silently.
+ */
+export function switchWilmaAccount(state: StateData, baseUrl: string, username: string): boolean {
+  const account = createHash("sha256").update(`${baseUrl}|${username.toLowerCase()}`).digest("hex").slice(0, 16);
+  const w = state.wilma;
+  if (w.account === account) return false;
+  const had = w.account !== undefined || !!w.session; // a session saved before this field existed counts as another login
+  w.account = account;
+  if (!had) return false;
+  delete w.session;
+  w.seenMessages = [];
+  w.seenNews = [];
+  w.seenNotes = [];
+  w.exams = {};
+  return true;
 }
 
 export function normaliseTenant(t: string): string {

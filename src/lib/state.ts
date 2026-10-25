@@ -35,6 +35,8 @@ export interface StateData {
   changes: ChangeRecord[];
   health: Record<string, { ok: boolean; at: string; error?: string; lastCount?: number }>;
   wilma: {
+    /** Short hash of tenant + username the session and seen lists belong to. */
+    account?: string;
     session?: string;
     seenMessages: number[];
     seenNews: number[];
