@@ -1,0 +1,20 @@
+// The Chief of staff is strictly send-only toward other agents (2026-10-25, after #53):
+// it may ask the family bot with sessions_send, but no session listing, history or
+// search, not even of its own sessions. Apply after home-tools.patch.json5 with
+// `openclaw config patch --file server/henri-send-only.patch.json5`.
+// Arrays replace on patch: this is the live deny list after #53 plus the three tools.
+{
+  agents: {
+    entries: {
+      henri: {
+        tools: {
+          deny: [
+            "group:runtime", "group:fs", "browser", "image_generate", "sessions_spawn",
+            "sessions_list", "sessions_history", "sessions_search",
+            "mail__*", "familygroup__*", "jobsgroup__*", "news__*",
+          ],
+        },
+      },
+    },
+  },
+}
