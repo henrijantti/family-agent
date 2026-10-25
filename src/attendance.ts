@@ -1,7 +1,7 @@
 import type { Config } from "./config.js";
 import { childName, env } from "./config.js";
 import type { Ctx } from "./jobs.js";
-import { addDays, dayOf, localParts } from "./lib/time.js";
+import { addDays, localParts } from "./lib/time.js";
 import { esc } from "./notify/telegram.js";
 import type { MyClubEvent, MyClubSnapshot } from "./sources/myclub.js";
 
@@ -87,10 +87,15 @@ export function weekEvents(snap: MyClubSnapshot, cfg: Config, child: string, now
     .sort((a, b) => (eventDate(a) + eventTime(a)).localeCompare(eventDate(b) + eventTime(b)));
 }
 
+const FI_DAYS = ["su", "ma", "ti", "ke", "to", "pe", "la"];
+
+/** "su 1.11. klo 9.30 Futsal - Sininen": shown in the family group, so in Finnish. */
 export function optionLabel(e: MyClubEvent): string {
   const d = eventDate(e);
   const [, m, day] = d.split("-");
-  return `${dayOf(d)} ${Number(day)}.${Number(m)}.${eventTime(e)} ${e.title}`.slice(0, 100);
+  const t = eventTime(e).trim();
+  const time = t ? ` klo ${Number(t.slice(0, 2))}.${t.slice(3)}` : "";
+  return `${FI_DAYS[new Date(`${d}T12:00:00Z`).getUTCDay()]} ${Number(day)}.${Number(m)}.${time} ${e.title}`.slice(0, 100);
 }
 
 const CLUB_NAMES: Record<string, string> = { ppj: "PPJ", "kiekko-espoo": "Kiekko-Espoo", viimahockey: "Viima" };
