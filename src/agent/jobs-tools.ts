@@ -136,7 +136,8 @@ export function jobsTools(d: JobsDeps): Tool[] {
     },
     {
       name: "attendance_record",
-      description: "Store one answer from a button press (att|child|eventId|1 or 0). The last press for an event wins.",
+      description:
+        "Store one answer from a button press (att|child|eventId|1 or 0) and sign the child up (or out) in MyClub at once, then refresh the Hobbies calendar. The last press for an event wins.",
       input: {
         properties: {
           child: { type: "string", maxLength: 40 },
@@ -147,13 +148,28 @@ export function jobsTools(d: JobsDeps): Tool[] {
       },
       async run(a) {
         owned(d, "attendance-poll");
-        return withState(d, async (st) => {
+        return withState(d, async (st, ctx) => {
           const poll = st.data.myclub.agentPoll;
           if (!poll || poll.status !== "open") throw new ToolError("no open practice question; this week's answers were already applied");
           const offered = poll.options[a.child as string]?.find((o) => o.eventId === a.eventId);
           if (!offered) throw new ToolError(`event ${a.eventId} was not offered for ${a.child}`);
-          poll.votes[key(a.child as string, a.eventId as string)] = a.going as boolean;
-          return { child: a.child, event: offered.label, going: a.going };
+          const going = a.going as boolean;
+          poll.votes[key(a.child as string, a.eventId as string)] = going;
+          // Sign up at once (Henri, 2026-10-25), so the calendar, week summary and dashboard
+          // show the answer tonight instead of after Monday's apply. The apply repeats it harmlessly.
+          const writer: AttendanceWriter = ctx.attendanceWriter ?? new DryRunWriter();
+          let myclub: string;
+          try {
+            myclub = await writer.set(offered, a.child as string, going);
+          } catch (e) {
+            myclub = `failed: ${(e as Error).message}`;
+          }
+          const declined = new Set(st.data.myclub.declined ?? []);
+          if (going) declined.delete(offered.eventId);
+          else declined.add(offered.eventId);
+          st.data.myclub.declined = [...declined].slice(-200);
+          if (writer.live && !myclub.startsWith("failed")) await runMyClub(ctx);
+          return { child: a.child, event: offered.label, going, myclub };
         });
       },
     },
