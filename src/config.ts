@@ -6,6 +6,8 @@ export interface RunSlot {
   days: Day[];
   time: string;
   alerts?: boolean;
+  /** Wilma only: also send the week's summary per child (src/digest/wilma-week.ts). */
+  weekly?: boolean;
 }
 
 export interface Child {

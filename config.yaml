@@ -43,7 +43,7 @@ wilma:
     - { days: [mon, tue, wed, thu, fri], time: "06:30" }
     - { days: [mon, tue, wed, thu, fri], time: "12:00", alerts: true }
     - { days: [mon, tue, wed, thu, fri], time: "16:00", alerts: true }
-    - { days: [sun], time: "18:45" }
+    - { days: [sun], time: "18:45", weekly: true }   # weekly: the week's Wilma summary per child to the family group (Henri, 2026-10-25)
   bulletin_events: true   # dated bulletin items go to the School calendar as tentative
 
 myclub:

@@ -3,7 +3,7 @@ import { Config, env, isMock, loadConfig } from "./config.js";
 import { FakeCalendar } from "./calendar/fake.js";
 import { GoogleCalendar } from "./calendar/google.js";
 import { eventId } from "./calendar/sync.js";
-import { Ctx, JobName, runDigest, tick, wilmaFetchDue } from "./jobs.js";
+import { Ctx, JobName, runDigest, sendWilmaWeek, tick, wilmaFetchDue } from "./jobs.js";
 import { StateStore, type StateData } from "./lib/state.js";
 import { addDays, fromLocal, localIso, localParts, toMinutes } from "./lib/time.js";
 import { ConsoleNotifier, TelegramBot } from "./notify/telegram.js";
@@ -634,6 +634,20 @@ async function main() {
       else log(`dashboard written${html ? ` ${html}` : ""}${png ? ` ${png}` : ""} (content hash ${d.hash})`);
       break;
     }
+    case "wilma-week": {
+      // The Sunday Wilma summary from a fresh Wilma read: prints it, or with --send
+      // sends it to the family group without a notification sound (a test any time of day).
+      await withLock(env("STATE_FILE") ?? "state/state.json", async () => {
+        const fresh = store();
+        const ctx = buildCtx(cfg, fresh, now);
+        if (!ctx.wilma) throw new Error("Wilma is off or its secrets are missing");
+        const snap = await ctx.wilma.fetch(cfg, fresh.data, { bodyDays: 7 });
+        fresh.save(); // the refreshed Wilma session
+        if (args.includes("--send")) await sendWilmaWeek(ctx, snap, { silent: true });
+        else await sendWilmaWeek({ ...ctx, notifier: new ConsoleNotifier() }, snap);
+      });
+      break;
+    }
     case "digest": {
       const ctx = buildCtx(cfg, st, now);
       await runDigest(ctx, args.includes("--week"));
@@ -656,6 +670,7 @@ async function main() {
   wilma-students           list the children on the Wilma login
   wilma-fetch [--force]    (home runner) fetch Wilma if a slot is near, save the snapshot
   digest [--week]          build and send the digest now
+  wilma-week [--send]      Sunday's Wilma summary per child (prints; --send = family group, silent)
   week-plan [--send]       Henri's Sunday week plan (prints; --send = his private chat)
   dreaming export [--days N]  this week's family-bot findings for the weekly review (reads agent family only)
   mcp family|brain|jobs|mail|desk|dreaming|news  tool server on stdio for an OpenClaw agent
