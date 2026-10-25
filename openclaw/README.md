@@ -9,7 +9,7 @@ gateway. The agent's sandbox stays as it is (no network, no secrets, no shell).
 
 | Server | Command | Tools |
 | --- | --- | --- |
-| family | `family-agent-run.sh mcp family` | `calendar_list`, `calendar_add`, `calendar_update`, `calendar_delete`, `week_overview`, `digest_data`, `bills_list`, `week_plan` (not in the `--group` copy) |
+| family | `family-agent-run.sh mcp family` | `calendar_list`, `calendar_add`, `calendar_update`, `calendar_delete`, `week_overview`, `digest_data`, `school_info`, `school_message`, `bills_list`, `week_plan` (not in the `--group` copy) |
 | brain | `family-agent-run.sh mcp brain` | `brain_capture`, `brain_index`, `brain_read`, `brain_search`, `brain_inbox`, `brain_lint`, `brain_propose` |
 | jobs | `family-agent-run.sh mcp jobs` | `sync_myclub`, `scan_bills`, `digest_mark_sent`, `attendance_week`, `attendance_record`, `attendance_apply` (each refuses until its job is in `agent_jobs`, see below) |
 

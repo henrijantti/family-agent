@@ -11,7 +11,7 @@
         { "date": "2026-10-22", "start": "09:00", "end": "14:45", "subject": "Englanti", "room": "110" }
       ],
       "exams": [
-        { "id": 501, "date": "2026-10-23", "time": "08:15", "subject": "Matematiikka", "name": "Koe", "topic": "chapters 3-4" },
+        { "id": 501, "date": "2026-10-23", "time": "08:15", "subject": "Matematiikka", "name": "Koe", "topic": "chapters 3-4", "notes": "kpl 4-8 s. 16-36", "teacher": "Satu Pietinen" },
         { "id": 502, "date": "2026-11-04", "time": null, "subject": "Biologia", "name": "Koe", "topic": null }
       ],
       "homework": [
@@ -39,7 +39,7 @@
       "news": [
         { "id": 7002, "title": "Vanhempainilta", "published": "2026-10-20T08:00:00Z", "content": "Vanhempainilta to 6.11. klo 18-19.30 auditoriossa.", "url": "https://example.inschool.fi/news/7002" }
       ],
-      "notes": [ { "date": "2026-10-20", "subject": "Liikunta", "type": "Unohtanut varusteet" } ]
+      "notes": [ { "date": "2026-10-20", "subject": "Liikunta", "type": "Unohtanut varusteet", "note": "liikuntavaatteet kotona", "teacher": "AlBo" } ]
     }
   ]
 }

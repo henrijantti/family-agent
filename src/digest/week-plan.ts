@@ -136,7 +136,7 @@ export function buildWeekPlan(inp: WeekPlanInput): string {
   exams.sort((x, y) => x.date.localeCompare(y.date));
   section(
     `📝 ${b("Kokeet")}`,
-    exams.map((x) => `• ${b(short(x.date))} ${b(x.child)} · ${t(x.subject || x.name)}${x.topic ? `\n ${t(x.topic.slice(0, 120))}` : ""}`),
+    exams.map((x) => `• ${b(short(x.date))} ${b(x.child)} · ${t(x.subject || x.name)}${x.topic ? `\n ${t(x.topic.slice(0, 120))}` : ""}${x.notes ? `\n 📖 ${t(x.notes.slice(0, 200))}` : ""}`),
   );
 
   // 3. Driving clashes

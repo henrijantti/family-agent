@@ -641,7 +641,7 @@ async function main() {
         const fresh = store();
         const ctx = buildCtx(cfg, fresh, now);
         if (!ctx.wilma) throw new Error("Wilma is off or its secrets are missing");
-        const snap = await ctx.wilma.fetch(cfg, fresh.data, { bodyDays: 7 });
+        const snap = await ctx.wilma.fetch(cfg, fresh.data);
         fresh.save(); // the refreshed Wilma session
         if (args.includes("--send")) await sendWilmaWeek(ctx, snap, { silent: true });
         else await sendWilmaWeek({ ...ctx, notifier: new ConsoleNotifier() }, snap);

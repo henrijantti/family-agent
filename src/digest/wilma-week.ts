@@ -7,8 +7,8 @@ import { isoWeek } from "./week-plan.js";
 // 2026-10-25): per child the week's messages, bulletins, lesson notes
 // (merkinnät) and homework, and next week's exams. Built here from the
 // snapshot, never by a model: Wilma text is untrusted, so it is only escaped
-// and cut short. Lesson notes show the kind and subject, never the teacher's
-// words, and grades are never fetched for it.
+// and cut short. Lesson notes carry the teacher's comment and exams what to
+// read (Henri, 2026-10-25: the group is him and Anna). Grades never.
 //
 // Henri's layout: plain bullets, one empty line between items and sections.
 
@@ -78,9 +78,19 @@ export function wilmaWeek(snap: WilmaSnapshot, today: string): string[] {
     const exams = st.exams.filter((x) => next(x.date)).sort(byDate);
     const body = render([
       ...mailSections(msgs.filter((i) => !isShared(i)), news.filter((i) => !isShared(i))),
-      ["🏷 <b>Merkinnät</b>", notes.slice(0, 20).map((n) => `• ${short(n.date)} ${esc(cut(n.type, 60))}\n ${esc(cut(n.subject, 60))}`)],
+      ["🏷 <b>Merkinnät</b>", notes.slice(0, 20).map((n) => `• ${short(n.date)} ${esc(cut(n.type, 60))}\n ${esc(cut(n.subject, 60))}${n.note ? `\n “${esc(cut(n.note, 200))}”` : ""}`)],
       ["📖 <b>Läksyt</b>", homework.slice(0, 15).map((h) => `• ${short(h.date)} <b>${esc(cut(h.subject, 60))}</b>\n ${esc(cut(h.text, 160))}`)],
-      ["📝 <b>Kokeet ensi viikolla</b>", exams.map((x) => `• ${short(x.date)} <b>${esc(cut(x.subject || x.name, 60))}</b>${x.topic ? `\n ${esc(cut(x.topic, 120))}` : ""}`)],
+      [
+        "📝 <b>Kokeet ensi viikolla</b>",
+        exams.map((x) =>
+          [
+            `• ${short(x.date)} <b>${esc(cut(x.subject || x.name, 60))}</b>`,
+            x.name && x.name !== x.subject && !/^(koe|exam)$/i.test(x.name) ? ` ${esc(cut(x.name, 80))}` : "",
+            x.topic ? ` ${esc(cut(x.topic, 120))}` : "",
+            x.notes ? ` 📖 ${esc(cut(x.notes, 200))}` : "",
+          ].filter(Boolean).join("\n"),
+        ),
+      ],
     ]);
     out.push([header(st.name), ...(body.length ? body : ["Ei uutta Wilmassa tällä viikolla."])].join("\n\n"));
   }

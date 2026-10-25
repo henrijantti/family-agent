@@ -82,7 +82,7 @@ export async function runWilma(ctx: Ctx, slot?: RunSlot) {
   const today = localParts(ctx.now).date;
   let snap: WilmaSnapshot;
   try {
-    snap = await ctx.wilma.fetch(ctx.cfg, ctx.state, slot?.weekly ? { bodyDays: 7 } : {});
+    snap = await ctx.wilma.fetch(ctx.cfg, ctx.state);
     if (!snap.students.length) throw new Error("no children found on the Wilma login");
     ok(ctx, "Wilma", snap.students.length);
   } catch (e) {
@@ -92,11 +92,10 @@ export async function runWilma(ctx: Ctx, slot?: RunSlot) {
   const warnings = await syncInto(ctx, "school", "wilma", wilmaEvents(snap, ctx.cfg, today), 120);
   const diff = wilmaDiff(snap, ctx.state, ctx.cfg, today);
   ctx.state.digestQueue.push(...diff.fresh);
-  // Compact copy for the digest: no message bodies, no grades.
-  ctx.state.wilma.lastSnapshot = {
-    ...snap,
-    students: snap.students.map((s) => ({ ...s, messages: [], news: [], notes: [] })),
-  } satisfies WilmaSnapshot;
+  // For the digest and the chat agents' school_info / school_message, and the
+  // next run keeps the message texts from it. Henri (2026-10-25): the bots may
+  // read messages and the teachers' words in lesson notes. Never grades.
+  ctx.state.wilma.lastSnapshot = snap;
   if (slot?.alerts) {
     const urgent = [
       ...diff.fresh.filter((f) => f.action).map((f) => `${f.child}: ${f.text} (Wilma, needs action)`),
