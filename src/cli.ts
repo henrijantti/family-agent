@@ -21,6 +21,7 @@ import { familyTools } from "./agent/family-tools.js";
 import { brainDepsFromEnv, brainTools } from "./agent/brain.js";
 import { mailTools } from "./agent/mail-tools.js";
 import { deskTools, deskWorkerTools, wakeFromEnv } from "./agent/desk.js";
+import { newsTools, httpFetcher } from "./agent/news.js";
 import { dreamingTools, exportRows, findings, openclawRunner, saveFindings } from "./agent/dreaming.js";
 import { weekPlan } from "./digest/week-plan.js";
 import { buildDashboard, runDashboard } from "./dashboard/run.js";
@@ -30,6 +31,7 @@ import { fileURLToPath } from "node:url";
 
 const log = (s: string) => console.log(`[${new Date().toISOString()}] ${s}`);
 /** Environment the mail tool server keeps; everything else (Telegram, Google, MyClub, STATE_KEY) is dropped. */
+const NEWS_ENV = ["PATH", "HOME", "LANG", "TZ", "NODE_OPTIONS", "NODE_EXTRA_CA_CERTS", "HTTPS_PROXY", "HTTP_PROXY", "NO_PROXY", "FAMILY_AGENT_NOW"];
 const MAIL_ENV = ["PATH", "HOME", "LANG", "TZ", "NODE_OPTIONS", "NODE_EXTRA_CA_CERTS", "HTTPS_PROXY", "HTTP_PROXY", "NO_PROXY", "FAMILY_AGENT_NOW", "OUTLOOK_CLIENT_ID", "OUTLOOK_REFRESH_TOKEN"];
 const FIX = fileURLToPath(new URL("../test/fixtures/", import.meta.url));
 
@@ -559,7 +561,17 @@ async function main() {
       } else if (which === "dreaming") {
         // Chief of staff's weekly review of the family bot: this week's findings, and the family workspace's USER.md block.
         tools = dreamingTools(dreamingDeps(clock));
-      } else throw new Error("usage: mcp family|brain|jobs|mail|desk|dreaming");
+      } else if (which === "news") {
+        // Henri's morning news brief: public feeds in, one message to his Chief of staff chat out.
+        // Feed text is untrusted, so this process keeps no other secret in its environment.
+        const home = env("HOME") ?? "/home/openclaw";
+        const token = readFileSync(env("NEWS_TOKEN_FILE") ?? `${home}/.secrets/telegram-assistant-bot.token`, "utf8").trim();
+        const chat = readFileSync(env("NEWS_CHAT_FILE") ?? `${home}/.secrets/health-chat-id`, "utf8").trim();
+        const dir = `${dirname(env("STATE_FILE") ?? "state/state.json")}/news`;
+        for (const k of Object.keys(process.env)) if (!NEWS_ENV.includes(k)) delete process.env[k];
+        const bot = new TelegramBot(token);
+        tools = newsTools({ dir, fetch: httpFetcher, sender: { send: (html) => bot.send(chat, html) }, now: clock });
+      } else throw new Error("usage: mcp family|brain|jobs|mail|desk|dreaming|news");
       if (cmd === "mcp") {
         serve(`family-agent-${which}`, tools);
         return;
@@ -646,8 +658,8 @@ async function main() {
   digest [--week]          build and send the digest now
   week-plan [--send]       Henri's Sunday week plan (prints; --send = his private chat)
   dreaming export [--days N]  this week's family-bot findings for the weekly review (reads agent family only)
-  mcp family|brain|jobs|mail|desk|dreaming  tool server on stdio for an OpenClaw agent
-  tool family|brain|jobs|mail|desk <name> [json]  call one agent tool once, print the result`);
+  mcp family|brain|jobs|mail|desk|dreaming|news  tool server on stdio for an OpenClaw agent
+  tool family|brain|jobs|mail|desk|news <name> [json]  call one agent tool once, print the result`);
   }
 }
 
