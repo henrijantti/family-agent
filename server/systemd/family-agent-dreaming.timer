@@ -1,0 +1,10 @@
+# Sunday 20:40 Helsinki (server timezone): 20 minutes before the review cron (21:00).
+[Unit]
+Description=Family bot weekly review export, Sunday 20:40
+
+[Timer]
+OnCalendar=Sun *-*-* 20:40:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target

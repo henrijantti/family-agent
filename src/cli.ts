@@ -21,6 +21,7 @@ import { familyTools } from "./agent/family-tools.js";
 import { brainDepsFromEnv, brainTools } from "./agent/brain.js";
 import { mailTools } from "./agent/mail-tools.js";
 import { deskTools, deskWorkerTools, wakeFromEnv } from "./agent/desk.js";
+import { dreamingTools, exportRows, findings, openclawRunner, saveFindings } from "./agent/dreaming.js";
 import { weekPlan } from "./digest/week-plan.js";
 import { buildDashboard, runDashboard } from "./dashboard/run.js";
 import { screenshot } from "./dashboard/shot.js";
@@ -35,6 +36,15 @@ const FIX = fileURLToPath(new URL("../test/fixtures/", import.meta.url));
 function store() {
   if (env("GITHUB_ACTIONS") && !env("STATE_KEY")) throw new Error("STATE_KEY secret is not set; the agent will not run without encrypted state");
   return new StateStore(env("STATE_FILE") ?? "state/state.json", env("STATE_KEY"));
+}
+
+/** Where the weekly review keeps its files, and the family bot's USER.md it writes to. */
+function dreamingDeps(now: () => Date) {
+  return {
+    dir: `${dirname(env("STATE_FILE") ?? "state/state.json")}/dreaming`,
+    userMd: env("DREAMING_USER_MD") ?? `${process.env.HOME}/.openclaw/workspace-family/USER.md`,
+    now,
+  };
 }
 
 function buildCtx(cfg: Config, state: StateStore, now: Date): Ctx {
@@ -546,7 +556,10 @@ async function main() {
         // Chief of staff's side of the mail desk: the task file only, no Outlook, no mail secrets.
         const dir = dirname(env("STATE_FILE") ?? "state/state.json");
         tools = deskTools({ file: `${dir}/mail-desk.jsonl`, now: clock, wake: wakeFromEnv(env("MAIL_DESK_WAKE")) });
-      } else throw new Error("usage: mcp family|brain|jobs|mail|desk");
+      } else if (which === "dreaming") {
+        // Chief of staff's weekly review of the family bot: this week's findings, and the family workspace's USER.md block.
+        tools = dreamingTools(dreamingDeps(clock));
+      } else throw new Error("usage: mcp family|brain|jobs|mail|desk|dreaming");
       if (cmd === "mcp") {
         serve(`family-agent-${which}`, tools);
         return;
@@ -569,6 +582,21 @@ async function main() {
         await ctx.notifier.send(chat, text);
         log("week plan sent to Henri's private chat");
       }
+      break;
+    }
+    case "dreaming": {
+      // dreaming export [--days N]   reads agent family's sessions through the gateway, saves this week's findings
+      if (args[0] !== "export") throw new Error("usage: dreaming export [--days N]");
+      const days = args.includes("--days") ? Number(args[args.indexOf("--days") + 1]) : 7;
+      const bin = env("OPENCLAW_CLI") ?? `${process.env.HOME}/openclaw-cli.sh`;
+      const rows = await exportRows({ openclaw: openclawRunner(bin), now: () => now, days });
+      const f = findings(rows, now, days);
+      saveFindings(dreamingDeps(() => now).dir, f);
+      const by = (t: string) => f.findings.filter((x) => x.type === t).length;
+      log(
+        `dreaming ${f.week}: ${rows.length} rows, ${f.messages.fromPeople} asks, ${f.messages.replies} replies, ${f.buttons.presses} button presses; ` +
+          `unanswered ${by("unanswered")}, corrections ${by("correction")}, repeated ${by("repeated")}, tool errors ${by("tool_error")}`,
+      );
       break;
     }
     case "dashboard": {
@@ -617,7 +645,8 @@ async function main() {
   wilma-fetch [--force]    (home runner) fetch Wilma if a slot is near, save the snapshot
   digest [--week]          build and send the digest now
   week-plan [--send]       Henri's Sunday week plan (prints; --send = his private chat)
-  mcp family|brain|jobs|mail|desk  tool server on stdio for an OpenClaw agent
+  dreaming export [--days N]  this week's family-bot findings for the weekly review (reads agent family only)
+  mcp family|brain|jobs|mail|desk|dreaming  tool server on stdio for an OpenClaw agent
   tool family|brain|jobs|mail|desk <name> [json]  call one agent tool once, print the result`);
   }
 }

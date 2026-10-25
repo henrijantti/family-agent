@@ -75,6 +75,7 @@ crons_ok() { # the cron list is readable and no enabled job's last runs failed
 
 check tick "Perheagentin ajo epäonnistui (viimeisin ajo päättyi virheeseen)" unit_ok family-agent-tick.service
 check tick-stale "Perheagentti ei ole ajanut 40 minuuttiin" tick_recent
+check dreaming "Perhebotin viikkoläpikäynnin tietojen haku epäonnistui (sunnuntain dreaming)" unit_ok family-agent-dreaming.service
 check gateway "OpenClaw-palvelu ei ole käynnissä (botit eivät vastaa)" gateway_up
 check backup "Yön varmuuskopio ei onnistunut" backup_recent
 check crons "Jokin ajastettu tehtävä (esim. aamukooste) päättyi virheeseen, tai tehtävälistaa ei voi lukea" crons_ok

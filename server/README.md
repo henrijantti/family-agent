@@ -37,6 +37,8 @@ Helsinki) from scratch. Nothing here contains secrets.
 | `email-approvals.patch.json5` | `openclaw config patch --file`: route the mail-approval cards to Henri's mail-bot DM (approver + inline buttons) |
 | `henri-agent.patch.json5` | `openclaw config patch --file`: agent `henri`, the assistant bot, `family` MCP server, tool denies for the other agents |
 | `cos-desk.patch.json5` | `openclaw config patch --file`: `henri` becomes "Chief of staff", `desk` MCP server (mail desk), denies for the others |
+| `dreaming.patch.json5` | `openclaw config patch --file`: `dreaming` MCP server for the Chief of staff (family bot's weekly review), denies for the others, OpenClaw's own memory dreaming off |
+| `systemd/family-agent-dreaming.service` + `.timer` | user units; Sunday 20:40 `family-agent-run.sh dreaming export`: the family bot's week as findings for the 21:00 review cron (openclaw/README.md) |
 | `family-agent.patch.json5` | `openclaw config patch --file`: agent `family` in the family group. Only at the @Family_fff_bot handover (see openclaw/README.md) |
 | `save-bot-token` | `/usr/local/sbin/save-bot-token`: `ssh -t root@<server> save-bot-token <name>` saves a Telegram bot token from a hidden prompt |
 | `check.sh` | Root helper: `bash check.sh status\|logs\|doctor\|audit\|test\|mem` (redacts secrets) |

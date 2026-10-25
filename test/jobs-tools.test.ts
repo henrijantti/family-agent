@@ -94,7 +94,8 @@ test("attendance: week question, button answers, Monday apply uses only explicit
   const r = (await call(tools, "attendance_apply")).json();
   assert.equal(r.applied, true);
   assert.equal(r.live, true);
-  assert.deepEqual(calls, [["Oliver", "a1", true], ["Oliver", "a2", false]]);
+  // Each press signs up at once; Monday's apply repeats the final answers.
+  assert.deepEqual(calls, [["Oliver", "a1", false], ["Oliver", "a1", true], ["Oliver", "a2", false], ["Oliver", "a1", true], ["Oliver", "a2", false]]);
   assert.deepEqual(r.unanswered, ["Oskar"]);
   const st = read();
   assert.deepEqual(st.myclub.declined, ["a2"]);
@@ -103,7 +104,7 @@ test("attendance: week question, button answers, Monday apply uses only explicit
   // Applied once only, and late presses are refused.
   assert.equal((await call(tools, "attendance_apply")).json().applied, false);
   assert.ok((await call(tools, "attendance_record", { child: "Oliver", eventId: "a2", going: true })).error);
-  assert.equal(calls.length, 2);
+  assert.equal(calls.length, 5);
 });
 
 test("the state lock runs one writer at a time and takes over a stale lock", async () => {
