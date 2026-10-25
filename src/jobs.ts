@@ -3,6 +3,7 @@ import { Config, RunSlot, env } from "./config.js";
 import type { CalendarApi } from "./calendar/types.js";
 import { syncSource } from "./calendar/sync.js";
 import { HubEvent, billsMessage, buildDigest, toHubEvent } from "./digest/build.js";
+import { wilmaWeek } from "./digest/wilma-week.js";
 import type { StateData } from "./lib/state.js";
 import { addDays, fromLocal, inRange, localParts, toMinutes } from "./lib/time.js";
 import { Notifier, esc } from "./notify/telegram.js";
@@ -81,7 +82,7 @@ export async function runWilma(ctx: Ctx, slot?: RunSlot) {
   const today = localParts(ctx.now).date;
   let snap: WilmaSnapshot;
   try {
-    snap = await ctx.wilma.fetch(ctx.cfg, ctx.state);
+    snap = await ctx.wilma.fetch(ctx.cfg, ctx.state, slot?.weekly ? { bodyDays: 7 } : {});
     if (!snap.students.length) throw new Error("no children found on the Wilma login");
     ok(ctx, "Wilma", snap.students.length);
   } catch (e) {
@@ -104,6 +105,15 @@ export async function runWilma(ctx: Ctx, slot?: RunSlot) {
     ];
     await sendAlert(ctx, [...urgent, ...warnings]);
   } else if (warnings.length) await sendAlert(ctx, warnings);
+  if (slot?.weekly) await sendWilmaWeek(ctx, snap);
+}
+
+/** The week's Wilma summary, one message per child, to the family group. */
+export async function sendWilmaWeek(ctx: Ctx, snap: WilmaSnapshot, opts: { silent?: boolean } = {}) {
+  const msgs = wilmaWeek(snap, localParts(ctx.now).date);
+  if (!ctx.notifier || !familyChat()) return ctx.log("TELEGRAM_FAMILY_CHAT_ID not set; Wilma week not sent");
+  for (const m of msgs) await ctx.notifier.send(familyChat()!, m, opts);
+  ctx.log(`Wilma week sent: ${msgs.length} message(s)`);
 }
 
 export async function runMyClub(ctx: Ctx) {

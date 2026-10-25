@@ -5,7 +5,7 @@ import { requireEnv } from "../config.js";
 // poll, so the bot never has to read the group's conversation.
 
 export interface Notifier {
-  send(chatId: string, html: string): Promise<void>;
+  send(chatId: string, html: string, opts?: { silent?: boolean }): Promise<void>;
   /** Multiple-choice, non-anonymous poll. */
   poll?(chatId: string, question: string, options: string[]): Promise<{ messageId: number }>;
   /** Closes the poll and returns the voter count per option. */
@@ -80,9 +80,9 @@ export class TelegramBot implements Notifier {
     await this.api("pinChatMessage", { chat_id: chatId, message_id: messageId, disable_notification: true });
   }
 
-  async send(chatId: string, html: string) {
+  async send(chatId: string, html: string, opts: { silent?: boolean } = {}) {
     for (const part of chunk(html)) {
-      await this.api("sendMessage", { chat_id: chatId, text: part, parse_mode: "HTML", disable_web_page_preview: true });
+      await this.api("sendMessage", { chat_id: chatId, text: part, parse_mode: "HTML", disable_web_page_preview: true, disable_notification: !!opts.silent });
     }
   }
 

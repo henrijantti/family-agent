@@ -34,8 +34,13 @@ export interface WilmaSnapshot {
   students: WilmaStudent[];
 }
 
+export interface WilmaFetchOptions {
+  /** Also read the text of messages sent in the last N days (the weekly summary's "needs action"). */
+  bodyDays?: number;
+}
+
 export interface WilmaProvider {
-  fetch(cfg: Config, state: StateData): Promise<WilmaSnapshot>;
+  fetch(cfg: Config, state: StateData, opts?: WilmaFetchOptions): Promise<WilmaSnapshot>;
 }
 
 export class FixtureWilma implements WilmaProvider {
@@ -72,7 +77,7 @@ export class SnapshotWilma implements WilmaProvider {
 }
 
 export class LiveWilma implements WilmaProvider {
-  async fetch(cfg: Config, state: StateData): Promise<WilmaSnapshot> {
+  async fetch(cfg: Config, state: StateData, opts: WilmaFetchOptions = {}): Promise<WilmaSnapshot> {
     const { WilmaClient } = await import("@wilm-ai/wilma-client");
     const baseUrl = normaliseTenant(requireEnv("WILMA_TENANT"));
     const profile = { baseUrl, username: requireEnv("WILMA_USERNAME"), password: requireEnv("WILMA_PASSWORD") };
@@ -97,8 +102,10 @@ export class LiveWilma implements WilmaProvider {
         kid.news.list(),
         kid.attendance.list({ from: addDays(today, -7), to: today }),
       ]);
-      // Full text only for items not seen before (to spot "reply/form/payment").
-      const newMsgs = messages.filter((m) => !state.wilma.seenMessages.includes(m.wilmaId)).slice(0, 10);
+      // Full text only for items not seen before (to spot "reply/form/payment"),
+      // and for the weekly summary the week's messages.
+      const since = opts.bodyDays ? Date.now() - opts.bodyDays * 86400000 : Infinity;
+      const newMsgs = messages.filter((m) => !state.wilma.seenMessages.includes(m.wilmaId) || m.sentAt.getTime() >= since).slice(0, 10);
       const msgBodies = new Map<number, string | null | undefined>();
       for (const m of newMsgs) msgBodies.set(m.wilmaId, (await kid.messages.get(m.wilmaId)).content);
       const newNews = news.filter((n) => !state.wilma.seenNews.includes(n.wilmaId)).slice(0, 10);
