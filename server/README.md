@@ -73,6 +73,11 @@ needs headless Chromium on the server. To switch it on (server thread):
 4. `~/family-agent-run.sh dashboard --send` posts and pins the first one (the group sees
    one "pinned a photo" line), then set `dashboard.enabled: true` in config.yaml
 5. Memory: Chromium runs about 1–2 s per changed picture, a few times a day
+6. Optional "Avaa HTML" button (tailnet devices only, never funnel): secret files
+   `DASHBOARD_HTML_FILE` = `/home/openclaw/dashboard/index.html` and `DASHBOARD_URL` =
+   `https://<magicdns>/perhe/`, then as root
+   `tailscale serve --bg --yes --https=443 --set-path=/perhe /home/openclaw/dashboard/`.
+   The next changed picture writes the page and adds the button
 
 ## Backups
 
