@@ -64,7 +64,7 @@ myclub:
 # messages". Off until the server thread has installed Chromium and sent the
 # first one with `dashboard --send`.
 dashboard:
-  enabled: false
+  enabled: true    # on 2026-10-25: first picture sent; the tick retries the pin until the bot may pin
   # Henri's copy in Claude (artifact "Perheen viikko"): the page also goes to this
   # Drive file, "Perhe-dashboard.html" in janttiho@gmail.com's Drive, shared with
   # the service account as editor (2026-10-25). Needs the Drive API enabled in the
