@@ -1,0 +1,24 @@
+// Photos and PDFs to calendar, family papers, household reminders, holidays and
+// letters (Henri 2026-10-25). Apply as openclaw with
+// `openclaw config patch --file server/home-tools.patch.json5`.
+// The new tools (reminder_*, paper_*, holiday_plan) are in the `family` server, which
+// only the Chief of staff has (the family group's copy leaves them out), so no tool
+// policy change is needed for them. This patch only lets the Chief of staff and the
+// family bot read PDFs with OpenClaw's built-in `pdf` tool: it is in no tool profile,
+// and sandboxed sessions need it in the sandbox list too (default list has view_image only).
+// Arrays replace on patch, so each list repeats what is live (news patch, 2026-10-25)
+// plus "pdf". Check the live lists before applying.
+{
+  agents: {
+    entries: {
+      henri: { tools: { alsoAllow: ["family__*", "brain__*", "desk__*", "jobs__*", "dreaming__*", "view_image", "pdf"] } },
+      family: {
+        tools: {
+          alsoAllow: ["familygroup__*", "jobsgroup__*", "view_image", "pdf"],
+          sandbox: { tools: { alsoAllow: ["message", "familygroup__*", "jobsgroup__*", "pdf"] } },
+        },
+      },
+    },
+  },
+  tools: { sandbox: { tools: { alsoAllow: ["mail__*", "family__*", "brain__*", "desk__*", "jobs__*", "familygroup__*", "jobsgroup__*", "dreaming__*", "news__*", "pdf"] } } },
+}

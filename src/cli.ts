@@ -15,6 +15,8 @@ import { encrypt } from "./lib/state.js";
 import { triage, triageReport } from "./outlook-triage.js";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { handle, serve, Tool } from "./agent/mcp.js";
+import { homeTools } from "./agent/home.js";
+import { driveCredsFromEnv, driveLogin, userDrive } from "./lib/drive-user.js";
 import { jobsTools } from "./agent/jobs-tools.js";
 import { withLock } from "./lib/lock.js";
 import { familyTools } from "./agent/family-tools.js";
@@ -524,6 +526,12 @@ async function main() {
         const calendar = buildCtx(cfg, st, now).calendar;
         const deskFile = `${dirname(env("STATE_FILE") ?? "state/state.json")}/mail-desk.jsonl`;
         tools = familyTools({ cfg, calendar, loadState: () => store().data, now: clock, group, deskFile: group ? undefined : deskFile });
+        // Henri's household register (reminders, papers, holidays): never in the family group's copy.
+        if (!group) {
+          const creds = driveCredsFromEnv();
+          const home = `${dirname(env("STATE_FILE") ?? "state/state.json")}/home.json`;
+          tools.push(...homeTools({ cfg, calendar, file: home, mediaDir: env("OPENCLAW_INBOUND_DIR"), drive: creds ? userDrive(creds) : undefined, now: clock }));
+        }
       } else if (which === "jobs") {
         tools = jobsTools({
           cfg,
@@ -580,6 +588,18 @@ async function main() {
       const res = (await handle(which, tools, { id: 1, method: "tools/call", params: { name: args[1], arguments: JSON.parse(args[2] ?? "{}") } })) as any;
       console.log(res.result?.content?.[0]?.text ?? JSON.stringify(res));
       if (res.result?.isError) process.exitCode = 1;
+      break;
+    }
+    case "drive-login": {
+      // Signs Henri's Google Drive in for family papers (drive.file scope only). The
+      // refresh token goes straight to the wrapper's secret file and is never printed.
+      const id = env("GOOGLE_OAUTH_CLIENT_ID");
+      const secret = env("GOOGLE_OAUTH_CLIENT_SECRET");
+      if (!id || !secret) throw new Error("save GOOGLE_OAUTH_CLIENT_ID and GOOGLE_OAUTH_CLIENT_SECRET first (save-secret)");
+      const token = await driveLogin(id, secret, (s) => console.log(s));
+      const file = `${env("HOME") ?? "/home/openclaw"}/.secrets/family-agent/GOOGLE_DRIVE_REFRESH_TOKEN`;
+      writeFileSync(file, token, { mode: 0o600 });
+      log(`Drive signed in; token saved to ${file} (${token.length} characters)`);
       break;
     }
     case "week-plan": {
@@ -673,6 +693,7 @@ async function main() {
   digest [--week]          build and send the digest now
   wilma-week [--send]      Sunday's Wilma summary per child (prints; --send = family group, silent)
   week-plan [--send]       Henri's Sunday week plan (prints; --send = his private chat)
+  drive-login              sign Henri's Google Drive in for family papers (device code)
   dreaming export [--days N]  this week's family-bot findings for the weekly review (reads agent family only)
   mcp family|brain|jobs|mail|desk|dreaming|news  tool server on stdio for an OpenClaw agent
   tool family|brain|jobs|mail|desk|news <name> [json]  call one agent tool once, print the result`);

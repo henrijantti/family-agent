@@ -381,3 +381,58 @@ Deploy (server thread, needs Henri's OK for the new agent and cron):
   file them (Google Drive) and access to it, which the server doesn't have
 - **Builder loop** (Telegram request to a family-agent PR): needs a coding sandbox with
   network and a GitHub credential limited to branches. Left out on purpose for now
+
+## Household tools for the Chief of staff (2026-10-25)
+
+Henri's picks from the 25.10 brainstorm, all as tools of the Chief of staff (no new
+agent): photos and PDFs to the calendar, family papers, household reminders (car,
+home, documents, contracts), birthdays with gift ideas in the Brain, holiday
+planning and Sunday letters to the boys. Instructions: `openclaw/workspace/AGENTS.md`.
+The family bot reads photos and PDFs too (`openclaw/workspace-family/AGENTS.md`).
+
+| Tools (in the `family` server, not in `--group`) | Code |
+| --- | --- |
+| `reminder_add`, `reminder_list`, `reminder_update`, `reminder_done`, `reminder_remove`, `reminders_due` | src/agent/home.ts |
+| `paper_save`, `paper_list` | src/agent/home.ts, src/lib/drive-user.ts |
+| `holiday_plan` (config `school_holidays`, Helsinki schools) | src/agent/home.ts |
+
+Guarantees in code:
+
+- Data in `state/home.json` (lock, mode 600) and papers in `state/papers/<year>/`, both
+  in the nightly encrypted backup. Nothing here sends a message
+- Every reminder gets an all-day event on the Anna Henri calendar tagged as a chat
+  event, so the sync never touches it and the chat can move or remove it. Removing
+  is Google's cancel
+- `paper_save` reads only a `media://inbound/<file>` reference: a plain file name in
+  OpenClaw's inbound folder (`OPENCLAW_INBOUND_DIR`, default `~/.openclaw/media/inbound`),
+  no paths, no symlinks, at most 20 MB, and only PDF, JPEG, PNG, WebP or HEIC by
+  their first bytes. The same file twice is saved once
+- Drive: Henri's own account with the `drive.file` scope only (the app sees only the
+  "Perheen paperit" folder and files it made). A service account can't create files
+  (no storage quota). Until signed in, papers stay on the server and the tool says so
+
+Deploy (server thread):
+
+1. `git pull --ff-only && npm test`, then `openclaw config patch --file server/home-tools.patch.json5`
+   (check the live `alsoAllow` lists first)
+2. Copy `openclaw/workspace/AGENTS.md` to `~/.openclaw/workspace-henri/` and
+   `openclaw/workspace-family/AGENTS.md` to `~/.openclaw/workspace-family/`
+3. Restart the gateway, wait until `cron list` answers, `openclaw mcp doctor family --probe`
+   (lists the 9 new tools) and `familygroup --probe` (none of them)
+4. Cron jobs on agent `henri`, delivered to Henri's DM, times Helsinki:
+
+| Name | When | Prompt |
+| --- | --- | --- |
+| `household-reminders` | Daily 08:00 | `Household reminders. Call reminders_due with mark true. Post each item as AGENTS.md "Household reminders" says; for a birthday run its giftIdeas search and list the ideas. If the list is empty, reply only NO_REPLY.` |
+| `letters-to-boys` | Sun 20:15 | `Letters to the boys. Follow AGENTS.md "Letters to the boys (Sunday)": look at the past week, write two questions per boy, capture them to the Brain inbox, then send them to Henri.` |
+
+5. Drive for papers (Henri, once): in Google Cloud project "family-agent", APIs >
+   Credentials > Create OAuth client ID, type "TVs and Limited Input devices"; the
+   OAuth consent screen in Testing with janttiho@gmail.com as test user. Save the id
+   and secret from the laptop with `ssh -t root@<server> save-secret GOOGLE_OAUTH_CLIENT_ID` (and `GOOGLE_OAUTH_CLIENT_SECRET`), run
+   `~/family-agent-run.sh drive-login` and enter the code at google.com/device. A
+   Testing-mode refresh token expires after 7 days; publish the app (no review needed
+   for drive.file) to keep it
+6. Smoke test in the Chief of staff chat: "katsastus 20.11. joka vuosi", "mitä
+   huoltoja on tulossa?", a photo of a receipt with "tallenna tämä", a PDF of a game
+   schedule, "mitä tehdään hiihtolomalla?"

@@ -39,6 +39,8 @@ export interface Config {
   dashboard?: { enabled: boolean; /** Henri's Drive file his Claude artifact shows. */ drive_file_id?: string };
   /** Jobs the OpenClaw agent runs instead of the tick (see openclaw/README.md). */
   agent_jobs?: string[];
+  /** School holidays (Helsinki schools), for the Chief of staff's trip planning. */
+  school_holidays?: { name: string; from: string; to: string }[];
   attendance?: { enabled: boolean; children: string[]; poll: RunSlot; apply: RunSlot; live: boolean; clubs?: { host: string; child: string }[] };
   outlook: {
     enabled: boolean;
