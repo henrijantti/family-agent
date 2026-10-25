@@ -36,6 +36,9 @@
           // The group copies of the family and jobs servers (--group): no bills in digest_data,
           // no bills_list, no scan_bills. Enforced in code, not by tool names.
           alsoAllow: ["familygroup__*", "jobsgroup__*", "view_image"],
+          // The sandbox's own list replaces the global one: `message` posts the attendance
+          // buttons, and the two group servers must be named again (found live 2026-10-25).
+          sandbox: { tools: { alsoAllow: ["message", "familygroup__*", "jobsgroup__*"] } },
           // No Brain, mail, desk or Henri's copies: nothing private to Henri can reach the group.
           deny: [
             "group:runtime", "group:fs", "browser", "image_generate", "sessions_spawn", "sessions_send",
