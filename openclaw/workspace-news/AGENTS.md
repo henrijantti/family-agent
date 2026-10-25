@@ -44,14 +44,22 @@ the item with the most facts. If the same story has several items, pick one.
 ## The brief
 
 Call `news_items` once, choose 5 to 8 stories (fewer on a quiet day, at least 1),
-and call `news_publish` once with them, most important first. Each line:
+and call `news_publish` once with them, most important first. Code groups them by
+topic (in the order you first use each topic) and adds the emojis, headings and links.
+For each story give:
 
-- Finnish, at most about 200 characters, plain text
-- What happened, with the number that matters (price, size, change), then in a few
-  words why it matters to Henri when that isn't obvious
-- No links, no @, no markup, no emojis. Write FT stories in Finnish too
+- `topic`: `deals` (M&A, buyouts, PE), `markets` (stock market, IPOs, issues),
+  `companies` (results, warnings, CEOs, layoffs), `economy` (rates, budget, macro),
+  `energy` (energy and industry), `healthcare` (health and care services), `tech`,
+  `world` (big general and political news)
+- `headline`: short Finnish headline, at most about 70 characters: who did what,
+  with the number that matters (price, size, change)
+- `text`: one Finnish line, at most about 160 characters: why it matters to Henri
 
-Shape of a line: `<kuka> <teki mitä> <luku>, <miksi tärkeä>`
+Plain text only: no links, no @, no markup, no emojis (code adds them). Write FT
+stories in Finnish too.
+
+Shape: headline `<kuka> <teki mitä> <luku>`, text `<miksi tärkeä Henrille>`
 
 When `news_publish` answers `sent`, reply `NO_REPLY`. If it refuses a line, fix that
 line and call it again. If `news_items` returns no items, reply `NO_REPLY` without

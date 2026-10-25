@@ -60,27 +60,30 @@ test("news: items since the last day, publish adds code-made links once a day", 
   assert.deepEqual(j.items.map((x: any) => x.title), ["Nokia ostaa ohjelmistoyhtiön", "Private equity bids for Nordic care group"]);
   assert.ok(j.sources.every((x: any) => x.source === "HS" || x.ok));
 
-  const bad = await call(s.tools, "news_publish", { items: [{ id: "n1", text: "Katso https://evil.test" }] });
+  const bad = await call(s.tools, "news_publish", { items: [{ id: "n1", topic: "deals", headline: "Otsikko", text: "Katso https://evil.test" }] });
   assert.ok(bad.error && /no links/.test(bad.text));
-  assert.ok((await call(s.tools, "news_publish", { items: [{ id: "n9", text: "x" }] })).error);
-  assert.ok((await call(s.tools, "news_publish", { items: [{ id: "n1", text: "<b>x</b>" }] })).error);
+  assert.ok((await call(s.tools, "news_publish", { items: [{ id: "n9", topic: "deals", headline: "Otsikko", text: "x" }] })).error);
+  assert.ok((await call(s.tools, "news_publish", { items: [{ id: "n1", topic: "deals", headline: "Otsikko", text: "<b>x</b>" }] })).error);
 
   const pub = await call(s.tools, "news_publish", {
     items: [
-      { id: "n2", text: "PE-rahastot kiertävät pohjoismaista hoivakonsernia, kiinnostava sektorille" },
-      { id: "n1", text: "Nokia ostaa ohjelmistoyhtiön 2 mrd eurolla" },
+      { id: "n2", topic: "healthcare", headline: "PE-rahastot kiertävät hoivakonsernia", text: "PE-rahastot kiertävät pohjoismaista hoivakonsernia, kiinnostava sektorille" },
+      { id: "n1", topic: "deals", headline: "Nokia ostaa ohjelmistoyhtiön 2 mrd €", text: "Iso kotimainen kauppa" },
     ],
   });
   assert.equal(pub.error, false, pub.text);
   assert.equal(s.sent.length, 1);
   const msg = s.sent[0];
-  assert.ok(msg.startsWith("<b>Uutiset ma 26.10.</b>"));
+  assert.ok(msg.startsWith("📰 <b>Aamun uutiset ma 26.10.</b>"));
+  assert.ok(msg.indexOf("🏥 <b>TERVEYS- JA HOIVAPALVELUT</b>") < msg.indexOf("🤝 <b>YRITYSKAUPAT JA PÄÄOMASIJOITUS</b>"));
+  assert.ok(msg.includes("▸ <b>Nokia ostaa ohjelmistoyhtiön 2 mrd €</b>\nIso kotimainen kauppa · <a href="));
+  assert.match((await call(s.tools, "news_publish", { items: [{ id: "n1", topic: "sports", headline: "x", text: "x" }] })).text, /must be one of/);
   assert.ok(msg.indexOf("hoivakonsernia") < msg.indexOf("Nokia"));
   assert.ok(msg.includes('<a href="https://www.ft.com/content/abc">FT</a>'));
-  assert.ok(msg.includes("<i>Ei saatu tänään: HS</i>"));
   assert.ok(!msg.includes("evil"));
+  assert.ok(msg.includes("<i>⚠️ Ei saatu tänään: HS</i>"));
 
-  const again = await call(s.tools, "news_publish", { items: [{ id: "n1", text: "x" }] });
+  const again = await call(s.tools, "news_publish", { items: [{ id: "n1", topic: "deals", headline: "Otsikko", text: "x" }] });
   assert.ok(again.error && /already sent/.test(again.text));
   const log = readFileSync(join(s.dir, "sent.jsonl"), "utf8").trim().split("\n");
   for (const f of ["sent.jsonl", "batch.json"]) assert.equal(statSync(join(s.dir, f)).mode & 0o777, 0o600, f);
@@ -105,11 +108,11 @@ test("news: a blocked feed is reported missing, never retried around", async () 
 
 test("news: publish needs a fresh list and 1 to 8 items", async () => {
   const s = setup(ok);
-  assert.ok((await call(s.tools, "news_publish", { items: [{ id: "n1", text: "x" }] })).error);
+  assert.ok((await call(s.tools, "news_publish", { items: [{ id: "n1", topic: "deals", headline: "Otsikko", text: "x" }] })).error);
   await call(s.tools, "news_items", {});
   assert.ok((await call(s.tools, "news_publish", { items: [] })).error);
   s.setNow("2026-10-26T12:00:00Z");
-  assert.ok(/old/.test((await call(s.tools, "news_publish", { items: [{ id: "n1", text: "x" }] })).text));
+  assert.ok(/old/.test((await call(s.tools, "news_publish", { items: [{ id: "n1", topic: "deals", headline: "Otsikko", text: "x" }] })).text));
 });
 
 test("news: lines are one plain line", () => {
@@ -122,7 +125,7 @@ test("news: the next brief starts at the last fetch, not the send", async () => 
   const s = setup(async (url) => (url === KL.url ? xml : FT_XML), "2026-10-26T05:15:00Z");
   await call(s.tools, "news_items", {});
   s.setNow("2026-10-26T05:20:00Z");
-  assert.equal((await call(s.tools, "news_publish", { items: [{ id: "n1", text: "Nokia ostaa" }] })).error, false);
+  assert.equal((await call(s.tools, "news_publish", { items: [{ id: "n1", topic: "deals", headline: "Otsikko", text: "Nokia ostaa" }] })).error, false);
   // Published between the fetch and the send: still comes next time.
   xml = rss(`<item><title>Myöhäinen</title><link>https://www.kauppalehti.fi/a/late</link><pubDate>Mon, 26 Oct 2026 05:17:00 GMT</pubDate></item>`);
   s.setNow("2026-10-27T05:15:00Z");
@@ -132,7 +135,7 @@ test("news: the next brief starts at the last fetch, not the send", async () => 
 test("news: two overlapping publishes send once", async () => {
   const s = setup(ok);
   await call(s.tools, "news_items", {});
-  const r = await Promise.all([1, 2].map(() => call(s.tools, "news_publish", { items: [{ id: "n1", text: "Nokia ostaa" }] })));
+  const r = await Promise.all([1, 2].map(() => call(s.tools, "news_publish", { items: [{ id: "n1", topic: "deals", headline: "Otsikko", text: "Nokia ostaa" }] })));
   assert.equal(s.sent.length, 1);
   assert.deepEqual(r.map((x) => x.error).sort(), [false, true]);
 });

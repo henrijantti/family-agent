@@ -41,7 +41,21 @@ export const FEEDS: Feed[] = [
 ];
 
 export const MAX_ITEMS = 8;
-const MAX_LINE = 240;
+const MAX_HEADLINE = 90;
+const MAX_LINE = 200;
+
+/** Themes the agent tags each story with. Emoji and heading come from code, so the agent writes plain text only. */
+export const TOPICS = {
+  deals: { emoji: "🤝", title: "Yrityskaupat ja pääomasijoitus" },
+  markets: { emoji: "📈", title: "Markkinat ja listautumiset" },
+  companies: { emoji: "🏢", title: "Yritykset" },
+  economy: { emoji: "🏦", title: "Talous ja korot" },
+  energy: { emoji: "⚡", title: "Energia ja teollisuus" },
+  healthcare: { emoji: "🏥", title: "Terveys- ja hoivapalvelut" },
+  tech: { emoji: "💻", title: "Teknologia" },
+  world: { emoji: "🌍", title: "Maailma ja politiikka" },
+} as const;
+export type Topic = keyof typeof TOPICS;
 const MAX_TITLE = 200;
 const MAX_LEAD = 350;
 const MAX_SHOWN = 150;
@@ -230,7 +244,8 @@ export function newsTools(d: NewsDeps): Tool[] {
   const publish: Tool = {
     name: "news_publish",
     description:
-      `Sends Henri today's brief: ${MAX_ITEMS} items at most, in your order, each an id from news_items and one plain Finnish line (no links, code adds them). Once a day.`,
+      `Sends Henri today's brief: ${MAX_ITEMS} items at most, most important first. Each is an id from news_items, a topic, a short Finnish headline and one plain Finnish line on why it matters. ` +
+      "Code adds the emojis, theme headings and links, and groups stories by topic in the order the topics first appear. Once a day.",
     input: {
       properties: {
         items: {
@@ -240,9 +255,11 @@ export function newsTools(d: NewsDeps): Tool[] {
             type: "object",
             properties: {
               id: { type: "string", pattern: "^n[0-9]{1,3}$", description: "id from news_items" },
-              text: { type: "string", maxLength: MAX_LINE, description: "One line in Finnish: what happened and why it matters to Henri" },
+              topic: { type: "string", enum: Object.keys(TOPICS), description: "Theme the story is grouped under" },
+              headline: { type: "string", maxLength: MAX_HEADLINE, description: "Short Finnish headline: who did what, with the key number" },
+              text: { type: "string", maxLength: MAX_LINE, description: "One line in Finnish: why it matters to Henri" },
             },
-            required: ["id", "text"],
+            required: ["id", "topic", "headline", "text"],
           },
         },
       },
@@ -255,7 +272,7 @@ export function newsTools(d: NewsDeps): Tool[] {
   };
 
   async function send(args: Record<string, unknown>) {
-    const chosen = args.items as { id: string; text: string }[];
+    const chosen = args.items as { id: string; topic: Topic; headline: string; text: string }[];
     if (chosen.length < 1 || chosen.length > MAX_ITEMS) throw new ToolError(`pick 1 to ${MAX_ITEMS} items`);
     if (!existsSync(batchFile)) throw new ToolError("call news_items first");
     const batch = JSON.parse(readFileSync(batchFile, "utf8")) as Batch;
@@ -270,14 +287,21 @@ export function newsTools(d: NewsDeps): Tool[] {
       if (!it) throw new ToolError(`items[${i}].id ${c.id} is not in today's list`);
       if (ids.has(c.id)) throw new ToolError(`items[${i}].id ${c.id} is listed twice`);
       ids.add(c.id);
-      return { text: checkLine(c.text, `items[${i}].text`), it };
+      return { topic: c.topic, headline: checkLine(c.headline, `items[${i}].headline`), text: checkLine(c.text, `items[${i}].text`), it };
     });
 
     const p = localParts(now);
     const [, m, day] = p.date.split("-");
-    const head = `<b>Uutiset ${WEEKDAY_FI[p.day]} ${Number(day)}.${Number(m)}.</b>`;
-    const body = lines.map((l) => `• ${esc(l.text)} <a href="${esc(l.it.url)}">${l.it.source}</a>`);
-    const foot = batch.missing.length ? [`<i>Ei saatu tänään: ${batch.missing.join(", ")}</i>`] : [];
+    const head = `📰 <b>Aamun uutiset ${WEEKDAY_FI[p.day]} ${Number(day)}.${Number(m)}.</b>`;
+    // Themes in the order the agent first used them (its most important story leads), stories in its order within each.
+    const order = [...new Set(lines.map((l) => l.topic))];
+    const body = order.map((t) =>
+      [
+        `${TOPICS[t].emoji} <b>${TOPICS[t].title.toUpperCase()}</b>`,
+        ...lines.filter((l) => l.topic === t).map((l) => `▸ <b>${esc(l.headline)}</b>\n${esc(l.text)} · <a href="${esc(l.it.url)}">${l.it.source}</a>`),
+      ].join("\n\n"),
+    );
+    const foot = batch.missing.length ? [`<i>⚠️ Ei saatu tänään: ${batch.missing.join(", ")}</i>`] : [];
     await d.sender.send([head, ...body, ...foot].join("\n\n"));
 
     appendFileSync(join(d.dir, "sent.jsonl"), JSON.stringify({ at: now.toISOString(), date: today, fetched: batch.at, urls: lines.map((l) => l.it.url), seen: batch.items.map((x) => x.url) } satisfies SentLine) + "\n", { mode: 0o600 });
