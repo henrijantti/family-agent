@@ -55,7 +55,7 @@ test("MCP: initialize, tools/list, notifications get no reply, unknown method er
 
 test("MCP: arguments are validated, unknown keys refused", async () => {
   const { tools } = family();
-  assert.match((await call(tools, "calendar_add", { calendar: "family", title: "x", date: "2026-10-28" })).text, /must be one of school, hobbies/);
+  assert.match((await call(tools, "calendar_add", { calendar: "perhe", title: "x", date: "2026-10-28" })).text, /must be one of family, school, hobbies/);
   assert.match((await call(tools, "calendar_add", { calendar: "school", title: "x", date: "28.10." })).text, /wrong format/);
   assert.match((await call(tools, "calendar_add", { calendar: "school", title: "x", date: "2026-10-28", sudo: true })).text, /unknown argument sudo/);
   assert.match((await call(tools, "calendar_list", { from: "2026-01-01", to: "2026-12-31" })).text, /at most 62 days/);

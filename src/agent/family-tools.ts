@@ -33,7 +33,7 @@ export interface FamilyDeps {
   deskFile?: string;
 }
 
-type Writable = "school" | "hobbies";
+type Writable = "family" | "school" | "hobbies";
 
 function writableId(d: FamilyDeps, which: Writable): string {
   const id = calId(d.cfg, which);
@@ -106,7 +106,11 @@ async function ownEvent(d: FamilyDeps, which: Writable, id: string): Promise<{ c
   return { calendarId, ev };
 }
 
-const calendarProp = { type: "string" as const, enum: ["school", "hobbies"], description: "school = school/Wilma things, hobbies = sports and clubs" };
+const calendarProp = {
+  type: "string" as const,
+  enum: ["family", "school", "hobbies"],
+  description: "family = the shared Perhe calendar (appointments, family plans), school = school/Wilma things, hobbies = sports and clubs",
+};
 const fields = {
   title: { type: "string" as const, maxLength: 200, description: 'Finnish, child first, e.g. "Oskar: hammaslääkäri"' },
   date: { type: "string" as const, pattern: DATE, description: "YYYY-MM-DD" },
@@ -157,7 +161,7 @@ export function familyTools(d: FamilyDeps): Tool[] {
     {
       name: "calendar_add",
       description:
-        "Add an event to the school or hobbies calendar. Returns the existing event instead if one with the same title and start is already there.",
+        "Add an event to the family (Perhe), school or hobbies calendar. Returns the existing event instead if one with the same title and start is already there.",
       input: { properties: { calendar: calendarProp, ...fields }, required: ["calendar", "title", "date"] },
       async run(a) {
         const which = a.calendar as Writable;

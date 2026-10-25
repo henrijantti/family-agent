@@ -3,7 +3,7 @@
 // moved to agent buttons, digest cut over; openclaw/README.md "Moving the jobs to
 // OpenClaw"). Then save the bot token (`save-bot-token family`), apply this with
 // `openclaw config patch --file`, and `openclaw agents bind --agent family --bind telegram:family`.
-// Replace <HENRI_TELEGRAM_USER_ID>; add the spouse's numeric id to groupAllowFrom when Henri gives it.
+// Replace <HENRI_TELEGRAM_USER_ID> and <SPOUSE_TELEGRAM_USER_ID> (Henri gave it 2026-10-25) with the numeric ids.
 // Check key names against `openclaw config schema` on the running version first.
 {
   channels: {
@@ -15,7 +15,7 @@
           dmPolicy: "disabled",
           groupPolicy: "allowlist",
           // Only these people can make the bot act in the group.
-          groupAllowFrom: ["<HENRI_TELEGRAM_USER_ID>"],
+          groupAllowFrom: ["<HENRI_TELEGRAM_USER_ID>", "<SPOUSE_TELEGRAM_USER_ID>"],
           groups: {
             // "Family group"; answers only when @-mentioned or replied to.
             "-5586784958": { requireMention: true },
