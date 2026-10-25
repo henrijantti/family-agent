@@ -59,6 +59,9 @@ Written from `digest_data`, in Finnish, for the whole family. Henri's layout rul
 - Päällekkäisyydet lists every `overlaps` pair, with its day when it is not today
 - Päällekkäisyydet line: "• <päivä> klo <alku>–<loppu>: <kuka> (<halli>) ja <kuka> (<halli>), kuka vie?",
   with the hall name only (the part before the first comma, no street or postcode)
+  When both events are the same child's, name the events instead: "• su 25.10. klo 14.00–15.15:
+  Oliver: PPJ Laru 2015 (Ruukinlahden halli) ja K-Espoo Blues 3 - Ice Force (Matinkylä 4), kuka vie?"
+  Every pair counts, also those days ahead: never shorten the list to today's
 - Title line exactly "Perheen päivä · <Viikonpäivä> <p>.<k>." (no year), week summary "Tuleva viikko"
 - Fees and sign-ups: amount, date and reference number exactly as in the data
 - Names, places, teams and event titles exactly as in the data: never translate,

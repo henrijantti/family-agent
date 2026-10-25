@@ -146,7 +146,11 @@ test("digest_data in the family group's copy has no bills", async () => {
   const henri = (await call(tools(false), "digest_data", { kind: "daily" })).json();
   const group = (await call(tools(true), "digest_data", { kind: "daily" })).json();
   assert.ok(henri.billsToday.length > 0, "the private copy shows the PPJ bill");
+  assert.equal(henri.billsToday[0].sender, undefined, "a known biller's address stays out");
   assert.deepEqual(group.billsToday, []);
+  state.outlook.bills[0].newBiller = true;
+  const fresh = (await call(tools(false), "digest_data", { kind: "daily" })).json();
+  assert.deepEqual([fresh.billsToday[0].newBiller, fresh.billsToday[0].sender], [true, "c@x.fi"]);
   assert.ok(!family(true).tools.some((t) => t.name === "bills_list"));
 });
 

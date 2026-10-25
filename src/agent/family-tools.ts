@@ -256,7 +256,7 @@ export function familyTools(d: FamilyDeps): Tool[] {
           overlaps: [...new Set([...days, ...(week ? [] : events.map((e) => e.date).filter((x) => x > today))])].sort().flatMap((day) => conflicts(events.filter((e) => e.date === day)).map(([x, y]) => [view(x), view(y)])),
           signupsClosing: myclub ? openSignups(myclub, today, week ? 7 : 3).map((e) => ({ child: e.child, title: e.title, deadline: e.signup?.deadline })) : [],
           feesDue: myclub ? feesDue(myclub, today, 7) : [],
-          billsToday: d.cfg.outlook.enabled && !d.group ? billsToRemind(c.state, today, d.cfg.outlook.remind_days_before).map((b) => ({ biller: b.biller, amount: b.amount, dueDate: b.dueDate, reference: b.reference, inDays: b.inDays })) : [],
+          billsToday: d.cfg.outlook.enabled && !d.group ? billsToRemind(c.state, today, d.cfg.outlook.remind_days_before).map((b) => ({ biller: b.biller, amount: b.amount, dueDate: b.dueDate, reference: b.reference, inDays: b.inDays, newBiller: b.newBiller, sender: b.newBiller ? b.sender : undefined })) : [],
           schoolNews: c.state.digestQueue,
           changedSinceYesterday: c.state.changes.filter((x) => Date.parse(x.at) > since && x.kind !== "new"),
           sourcesFailing: Object.entries(c.state.health).filter(([, h]) => !h.ok).map(([s]) => s),
