@@ -48,6 +48,8 @@
             "brain__*", "mail__*", "desk__*", "family__*", "jobs__*",
           ],
           elevated: { enabled: false },
+          // Tools are called directly, not through code mode's exec/wait surface.
+          codeMode: false,
         },
       },
       main: { tools: { deny: ["mail__*", "family__*", "brain__*", "desk__*", "jobs__*", "familygroup__*", "jobsgroup__*"] } },
