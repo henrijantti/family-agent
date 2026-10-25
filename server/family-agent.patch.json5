@@ -3,7 +3,10 @@
 // moved to agent buttons, digest cut over; openclaw/README.md "Moving the jobs to
 // OpenClaw"). Then save the bot token (`save-bot-token family`), apply this with
 // `openclaw config patch --file`, and `openclaw agents bind --agent family --bind telegram:family`.
-// Replace <HENRI_TELEGRAM_USER_ID> and <SPOUSE_TELEGRAM_USER_ID> (Henri gave it 2026-10-25) with the numeric ids.
+// Replace <HENRI_TELEGRAM_USER_ID>, <SPOUSE_TELEGRAM_USER_ID> (Henri gave it 2026-10-25) and
+// <FAMILY_GROUP_CHAT_ID> with the numeric ids. Making the bot a group admin (needed: a bot in
+// privacy mode never sees plain @-mentions) turns the group into a supergroup with a new id;
+// OpenClaw rewrites `groups` itself, but TELEGRAM_FAMILY_CHAT_ID and the two crons need the new id.
 // Check key names against `openclaw config schema` on the running version first.
 {
   channels: {
@@ -18,7 +21,7 @@
           groupAllowFrom: ["<HENRI_TELEGRAM_USER_ID>", "<SPOUSE_TELEGRAM_USER_ID>"],
           groups: {
             // "Family group"; answers only when @-mentioned or replied to.
-            "-5586784958": { requireMention: true },
+            "<FAMILY_GROUP_CHAT_ID>": { requireMention: true },
           },
           joinIntro: false,
         },

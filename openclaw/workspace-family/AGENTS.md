@@ -74,7 +74,8 @@ Written from `digest_data`, in Finnish, for the whole family. Henri's layout rul
 
 - Sunday's prompt: call `attendance_week` and post one message per child with
   two buttons per event, "✅ <label>" with value `att|<child>|<eventId>|1` and
-  "➖ <label>" with `att|<child>|<eventId>|0`
+  "➖ <label>" with `att|<child>|<eventId>|0`. A button has only `label` and
+  `value`, never an `action` field (an action button can't reach you)
 - A button press arrives as `callback_data: att|<child>|<eventId>|1` (or `|0`).
   Call `attendance_record` and confirm in one short line ("Oliver ti 17:00: tulossa").
   The last press wins
