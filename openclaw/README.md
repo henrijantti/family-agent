@@ -447,6 +447,22 @@ Deploy (server thread):
    huoltoja on tulossa?", a photo of a receipt with "tallenna tämä", a PDF of a game
    schedule, "mitä tehdään hiihtolomalla?"
 
+## After every deploy: test questions (2026-10-25)
+
+Henri chose post-deploy test questions and a self-healing gateway. After every
+deploy, once the gateway answers `cron list` and the probes pass, run
+`~/family-agent-smoke.sh --notify` (copy it from `server/` when it changes). It asks
+`henri`, `family` and `email` read-only questions (reminders, holidays, tomorrow's
+calendar, the inbox count) in throwaway `smoke-*` sessions and checks each answer's
+shape. Nothing goes to the family group; Henri gets one DM only if a question fails.
+A deploy is "fixed" only when it prints no FAIL line. Add a case to `CASES` when a
+deploy adds a tool worth checking.
+
+Self-healing lives in `family-agent-health.sh` (copy it and
+`systemd/family-agent-health.service`, `systemctl --user daemon-reload`): a stuck
+Telegram lane two runs in a row restarts the gateway, at most once an hour, and
+Henri gets "🔧 Korjasin itse" afterwards.
+
 ## Weekly reviews for every agent and the capability log (2026-10-25)
 
 Henri: dreaming for the Chief of staff and the Email agent too, with email kept

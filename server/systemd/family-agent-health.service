@@ -5,5 +5,5 @@ Description=Family agent health check
 [Service]
 Type=oneshot
 ExecStart=%h/family-agent-health.sh
-TimeoutStartSec=3min
+TimeoutStartSec=6min
 Nice=10
