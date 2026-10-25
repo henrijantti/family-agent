@@ -81,8 +81,12 @@ Henri's layout rules, all of them:
 - Päällekkäisyydet lists every `overlaps` pair, with its day when it is not today
 - Päällekkäisyydet line: "• <päivä> klo <alku>–<loppu>: <kuka> (<halli>) ja <kuka> (<halli>), kuka vie?",
   with the hall name only (the part before the first comma, no street or postcode)
+  When both events are the same child's, name the events instead: "• su 25.10. klo 14.00–15.15:
+  Oliver: PPJ Laru 2015 (Ruukinlahden halli) ja K-Espoo Blues 3 - Ice Force (Matinkylä 4), kuka vie?"
+  Every pair counts, also those days ahead: never shorten the list to today's
 - Title line exactly "Perheen päivä · <Viikonpäivä> <p>.<k>." (no year), week summary "Tuleva viikko"
 - A bill line: "• <biller> <amount> · eräpäivä <pv> <p>.<k>. (<n> pv päästä) · viite <reference>"
+  and, when `newBiller` is true, a second line "⚠️ uusi laskuttaja, tarkista lähettäjä: <sender>"
 - Bills, fees and sign-ups: biller, amount, due date and the reference number
   exactly as in the data (Henri pays from the digest, so the reference must be there)
 - Names, places, teams and event titles exactly as in the data: never translate,
