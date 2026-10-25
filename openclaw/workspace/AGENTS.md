@@ -121,7 +121,9 @@ vaihtunut" warning means Henri checks the account with the biller himself.
   `value`, never an `action` field (an action button can't reach you)
 - A button press arrives as `callback_data: att|<child>|<eventId>|1` (or `|0`).
   Call `attendance_record` with that child, eventId and going true or false, and
-  confirm in one short line ("Oliver ti 17:00: tulossa"). The last press wins
+  confirm in one short line ("Oliver ti 17:00: tulossa, ilmoitettu MyClubiin ja
+  kalenteriin"). It signs up in MyClub and updates the Hobbies calendar at once; if
+  its `myclub` result starts with "failed", say so. The last press wins
 - Monday's prompt: `attendance_apply`, then post the results. Never call it at any
   other time, and never record an answer nobody pressed
 

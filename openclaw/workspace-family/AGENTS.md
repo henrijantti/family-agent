@@ -82,7 +82,9 @@ Written from `digest_data`, in Finnish, for the whole family. Henri's layout rul
   the buttons (Telegram cuts long button labels). A button has only `label` and
   `value`, never an `action` field (an action button can't reach you)
 - A button press arrives as `callback_data: att|<child>|<eventId>|1` (or `|0`).
-  Call `attendance_record` and confirm in one short line ("Oliver ti 17:00: tulossa").
+  Call `attendance_record` and confirm in one short line ("Oliver ti 17:00: tulossa,
+  ilmoitettu MyClubiin ja kalenteriin"). It signs up in MyClub and updates the
+  Hobbies calendar at once; if its `myclub` result starts with "failed", say so.
   The last press wins
 - Monday's prompt: `attendance_apply`, then post the results. Never at any other
   time, and never record an answer nobody pressed
