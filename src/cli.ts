@@ -15,6 +15,8 @@ import { encrypt } from "./lib/state.js";
 import { triage, triageReport } from "./outlook-triage.js";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { handle, serve, Tool } from "./agent/mcp.js";
+import { homeTools } from "./agent/home.js";
+import { driveCredsFromEnv, driveLogin, userDrive } from "./lib/drive-user.js";
 import { jobsTools } from "./agent/jobs-tools.js";
 import { withLock } from "./lib/lock.js";
 import { familyTools } from "./agent/family-tools.js";
@@ -22,7 +24,7 @@ import { brainDepsFromEnv, brainTools } from "./agent/brain.js";
 import { mailTools } from "./agent/mail-tools.js";
 import { deskTools, deskWorkerTools, wakeFromEnv } from "./agent/desk.js";
 import { newsTools, httpFetcher } from "./agent/news.js";
-import { dreamingTools, exportRows, findings, openclawRunner, saveFindings } from "./agent/dreaming.js";
+import { capabilityTool, dreamingToolsFor, exportRows, findings, openclawRunner, PROFILES, readCapabilities, saveFindings } from "./agent/dreaming.js";
 import { weekPlan } from "./digest/week-plan.js";
 import { buildDashboard, runDashboard } from "./dashboard/run.js";
 import { screenshot } from "./dashboard/shot.js";
@@ -40,14 +42,16 @@ function store() {
   return new StateStore(env("STATE_FILE") ?? "state/state.json", env("STATE_KEY"));
 }
 
-/** Where the weekly review keeps its files, and the family bot's USER.md it writes to. */
-function dreamingDeps(now: () => Date) {
-  return {
-    dir: `${dirname(env("STATE_FILE") ?? "state/state.json")}/dreaming`,
-    userMd: env("DREAMING_USER_MD") ?? `${process.env.HOME}/.openclaw/workspace-family/USER.md`,
-    now,
-  };
+/** Where an agent's weekly review keeps its files, and the USER.md it writes to. */
+function dreamingDeps(now: () => Date, agent: "family" | "henri" | "email" = "family") {
+  const base = `${dirname(env("STATE_FILE") ?? "state/state.json")}/dreaming`;
+  if (agent === "family")
+    return { dir: base, userMd: env("DREAMING_USER_MD") ?? `${process.env.HOME}/.openclaw/workspace-family/USER.md`, now };
+  return { dir: `${base}/${agent}`, userMd: `${process.env.HOME}/.openclaw/workspace-${agent}/USER.md`, now };
 }
+
+/** Every agent's "I couldn't do this" lines (capability_missing). */
+const capabilitiesFile = () => `${dirname(env("STATE_FILE") ?? "state/state.json")}/capabilities.jsonl`;
 
 function buildCtx(cfg: Config, state: StateStore, now: Date): Ctx {
   if (isMock()) {
@@ -538,6 +542,13 @@ async function main() {
         const calendar = buildCtx(cfg, st, now).calendar;
         const deskFile = `${dirname(env("STATE_FILE") ?? "state/state.json")}/mail-desk.jsonl`;
         tools = familyTools({ cfg, calendar, loadState: () => store().data, now: clock, group, deskFile: group ? undefined : deskFile });
+        tools.push(capabilityTool(capabilitiesFile(), group ? "family" : "henri", clock));
+        // Henri's household register (reminders, papers, holidays): never in the family group's copy.
+        if (!group) {
+          const creds = driveCredsFromEnv();
+          const home = `${dirname(env("STATE_FILE") ?? "state/state.json")}/home.json`;
+          tools.push(...homeTools({ cfg, calendar, file: home, mediaDir: env("OPENCLAW_INBOUND_DIR"), drive: creds ? userDrive(creds) : undefined, now: clock }));
+        }
       } else if (which === "jobs") {
         tools = jobsTools({
           cfg,
@@ -556,6 +567,8 @@ async function main() {
         const ea = cfg.outlook.email_agent ?? { send: false, self: [] };
         const mail = GraphMail.fromEnv({ outlook: st.data.outlook } as StateData, ea.send);
         const dir = dirname(env("STATE_FILE") ?? "state/state.json");
+        const review = dreamingDeps(clock, "email");
+        const capFile = capabilitiesFile();
         for (const k of Object.keys(process.env)) if (!MAIL_ENV.includes(k)) delete process.env[k];
         tools = [
           ...mailTools({
@@ -568,6 +581,9 @@ async function main() {
             now: clock,
           }),
           ...deskWorkerTools({ file: `${dir}/mail-desk.jsonl`, now: clock, getMessage: (id) => mail.getMessage(id), draftsFile: `${dir}/mail-drafts.jsonl`, billPdfFile: `${dir}/mail-bill-pdf.jsonl` }),
+          // The Email agent's own weekly review and capability log: its findings hold email text, so they stay here.
+          ...dreamingToolsFor({ email: review }),
+          capabilityTool(capFile, "email", clock),
         ];
       } else if (which === "desk") {
         // Chief of staff's side of the mail desk: the task file only, no Outlook, no mail secrets.
@@ -575,7 +591,7 @@ async function main() {
         tools = deskTools({ file: `${dir}/mail-desk.jsonl`, now: clock, wake: wakeFromEnv(env("MAIL_DESK_WAKE")) });
       } else if (which === "dreaming") {
         // Chief of staff's weekly review of the family bot: this week's findings, and the family workspace's USER.md block.
-        tools = dreamingTools(dreamingDeps(clock));
+        tools = dreamingToolsFor({ family: dreamingDeps(clock), henri: dreamingDeps(clock, "henri") });
       } else if (which === "news") {
         // Henri's morning news brief: public feeds in, one message to his Chief of staff chat out.
         // Feed text is untrusted, so this process keeps no other secret in its environment.
@@ -594,6 +610,18 @@ async function main() {
       const res = (await handle(which, tools, { id: 1, method: "tools/call", params: { name: args[1], arguments: JSON.parse(args[2] ?? "{}") } })) as any;
       console.log(res.result?.content?.[0]?.text ?? JSON.stringify(res));
       if (res.result?.isError) process.exitCode = 1;
+      break;
+    }
+    case "drive-login": {
+      // Signs Henri's Google Drive in for family papers (drive.file scope only). The
+      // refresh token goes straight to the wrapper's secret file and is never printed.
+      const id = env("GOOGLE_OAUTH_CLIENT_ID");
+      const secret = env("GOOGLE_OAUTH_CLIENT_SECRET");
+      if (!id || !secret) throw new Error("save GOOGLE_OAUTH_CLIENT_ID and GOOGLE_OAUTH_CLIENT_SECRET first (save-secret)");
+      const token = await driveLogin(id, secret, (s) => console.log(s));
+      const file = `${env("HOME") ?? "/home/openclaw"}/.secrets/family-agent/GOOGLE_DRIVE_REFRESH_TOKEN`;
+      writeFileSync(file, token, { mode: 0o600 });
+      log(`Drive signed in; token saved to ${file} (${token.length} characters)`);
       break;
     }
     case "week-plan": {
@@ -616,14 +644,24 @@ async function main() {
       if (args[0] !== "export") throw new Error("usage: dreaming export [--days N]");
       const days = args.includes("--days") ? Number(args[args.indexOf("--days") + 1]) : 7;
       const bin = env("OPENCLAW_CLI") ?? `${process.env.HOME}/openclaw-cli.sh`;
-      const rows = await exportRows({ openclaw: openclawRunner(bin), now: () => now, days });
-      const f = findings(rows, now, days);
-      saveFindings(dreamingDeps(() => now).dir, f);
-      const by = (t: string) => f.findings.filter((x) => x.type === t).length;
-      log(
-        `dreaming ${f.week}: ${rows.length} rows, ${f.messages.fromPeople} asks, ${f.messages.replies} replies, ${f.buttons.presses} button presses; ` +
-          `unanswered ${by("unanswered")}, corrections ${by("correction")}, repeated ${by("repeated")}, tool errors ${by("tool_error")}`,
-      );
+      // Every agent's week, each into its own folder; one failing doesn't stop the others.
+      let failed = 0;
+      for (const agent of ["family", "henri", "email"] as const) {
+        try {
+          const rows = await exportRows({ openclaw: openclawRunner(bin), now: () => now, days, agent });
+          const f = findings(rows, now, days, PROFILES[agent].talk, readCapabilities(capabilitiesFile(), agent));
+          saveFindings(dreamingDeps(() => now, agent).dir, f);
+          const by = (t: string) => f.findings.filter((x) => x.type === t).length;
+          log(
+            `dreaming ${agent} ${f.week}: ${rows.length} rows, ${f.messages.fromPeople} asks, ${f.messages.replies} replies, ${f.buttons.presses} button presses; ` +
+              `unanswered ${by("unanswered")}, corrections ${by("correction")}, repeated ${by("repeated")}, tool errors ${by("tool_error")}, missing ${by("capability")}`,
+          );
+        } catch (e) {
+          failed++;
+          log(`dreaming ${agent} failed: ${(e as Error).message}`);
+        }
+      }
+      if (failed) process.exitCode = 1;
       break;
     }
     case "dashboard": {
@@ -688,6 +726,7 @@ async function main() {
   digest [--week]          build and send the digest now
   wilma-week [--send]      Sunday's Wilma summary per child (prints; --send = family group, silent)
   week-plan [--send]       Henri's Sunday week plan (prints; --send = his private chat)
+  drive-login              sign Henri's Google Drive in for family papers (device code)
   dreaming export [--days N]  this week's family-bot findings for the weekly review (reads agent family only)
   mcp family|brain|jobs|mail|desk|dreaming|news  tool server on stdio for an OpenClaw agent
   tool family|brain|jobs|mail|desk|news <name> [json]  call one agent tool once, print the result`);

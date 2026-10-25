@@ -1,0 +1,47 @@
+// Photos and PDFs to calendar, family papers, household reminders, holidays and
+// letters (Henri 2026-10-25). Apply as openclaw with
+// `openclaw config patch --file server/home-tools.patch.json5`.
+// The new tools (reminder_*, paper_*, holiday_plan) are in the `family` server, which
+// only the Chief of staff has (the family group's copy leaves them out), so no tool
+// policy change is needed for them. This patch only lets the Chief of staff and the
+// family bot read PDFs with OpenClaw's built-in `pdf` tool: it is in no tool profile,
+// and sandboxed sessions need it in the sandbox list too (default list has view_image only).
+// The Chief of staff gets its own sandbox list (it replaces the global one for henri only):
+// its servers, `pdf`, and `message` for the morning action buttons. The global list is left
+// as it is, so no other agent gains `pdf` or `message`.
+// Delegation (Henri 2026-10-25, "CoS ohjaa perhebottia"): the Chief of staff may ASK the
+// family bot to post in the group with sessions_send, one way. Send-only: henri can't read
+// family's history, family can't send to anyone, email/news/main are outside `allow`.
+// henri is sandboxed, and the sandbox clamps session tools to spawned sessions by default,
+// so henri's sandbox gets sessionToolsVisibility "all" while the gateway-wide visibility
+// drops to "agent" (an agent sees only its own sessions). VERIFY on 2026.10.6 with
+// `openclaw config schema` that agents.entries.*.sandbox.sessionToolsVisibility exists.
+// Arrays replace on patch, so each list repeats what is live (news patch, 2026-10-25)
+// plus the new entries. Check the live lists before applying.
+{
+  agents: {
+    entries: {
+      henri: {
+        sandbox: { sessionToolsVisibility: "all" },
+        tools: {
+          alsoAllow: ["family__*", "brain__*", "desk__*", "jobs__*", "dreaming__*", "view_image", "pdf", "sessions_send"],
+          sandbox: { tools: { alsoAllow: ["family__*", "brain__*", "desk__*", "jobs__*", "dreaming__*", "pdf", "message", "sessions_send"] } },
+          // Was live with "sessions_send" in it; dropped so the delegation works. sessions_spawn stays denied.
+          deny: ["group:runtime", "group:fs", "browser", "image_generate", "sessions_spawn", "mail__*", "familygroup__*", "jobsgroup__*", "news__*"],
+          agentToAgent: { send: ["family"] },
+        },
+      },
+      family: {
+        tools: {
+          alsoAllow: ["familygroup__*", "jobsgroup__*", "view_image", "pdf"],
+          sandbox: { tools: { alsoAllow: ["message", "familygroup__*", "jobsgroup__*", "pdf"] } },
+          agentToAgent: { send: [] },
+        },
+      },
+    },
+  },
+  tools: {
+    agentToAgent: { enabled: true, allow: ["henri", "family"] },
+    sessions: { visibility: "agent" },
+  },
+}
