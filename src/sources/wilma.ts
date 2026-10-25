@@ -255,7 +255,10 @@ export function wilmaEvents(snap: WilmaSnapshot, cfg: Config, today: string): De
   for (const st of snap.students) {
     for (const ex of st.exams) {
       if (ex.date < today) continue;
-      const what = [ex.subject, ex.name && ex.name !== ex.subject ? ex.name : "exam"].join(" ");
+      // Always "koe": a named exam ("Kirkkohistoria jakso 1") must still read as an exam to
+      // the digest's Tulossa, the dashboard and the chat bots (Henri, 2026-10-25).
+      const named = ex.name && ex.name !== ex.subject && !/^(koe|exam)$/i.test(ex.name.trim());
+      const what = `${ex.subject || ex.name} koe${named ? ` (${ex.name})` : ""}`;
       const title = `${st.name}: ${what}${ex.topic ? `: ${ex.topic}` : ""}`;
       const timed = !!ex.time;
       events.push({

@@ -15,7 +15,10 @@ test("Wilma: exams become timed or all-day events titled with the child's first 
   const snap = await new FixtureWilma(`${FIX}wilma.json`).fetch(cfg);
   const evs = wilmaEvents(snap, cfg, today);
   const math = evs.find((e) => e.sourceId === "exam:1001:501")!;
-  assert.equal(math.title, "Aino: Matematiikka Koe: chapters 3-4");
+  assert.equal(math.title, "Aino: Matematiikka koe: chapters 3-4");
+  assert.equal(math.description, "Kokeen lisätiedot: kpl 4-8 s. 16-36\nOpettaja: Satu Pietinen");
+  snap.students[0].exams[0] = { ...snap.students[0].exams[0], subject: "Evankelisluterilainen uskonto", name: "Kirkkohistoria jakso 1", topic: null };
+  assert.equal(wilmaEvents(snap, cfg, today).find((e) => e.sourceId === "exam:1001:501")!.title, "Aino: Evankelisluterilainen uskonto koe (Kirkkohistoria jakso 1)");
   assert.deepEqual(math.start, { dateTime: "2026-10-23T08:15:00+03:00", timeZone: "Europe/Helsinki" });
   const bio = evs.find((e) => e.sourceId === "exam:1001:502")!;
   assert.deepEqual(bio.start, { date: "2026-11-04" });
