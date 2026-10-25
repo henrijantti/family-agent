@@ -5,7 +5,7 @@ import { testConfig } from "./config.js";
 import { emptyState } from "../src/lib/state.js";
 import { FixtureMyClub, feesDue, myclubEvents, openSignups, parseFeeds } from "../src/sources/myclub.js";
 import { FixtureMail, assertNoSend, billsToRemind, detectInvoice, scanInvoices } from "../src/sources/outlook.js";
-import { FixtureWilma, datesInText, needsAction, wilmaDiff, wilmaEvents } from "../src/sources/wilma.js";
+import { FixtureWilma, datesInText, needsAction, switchWilmaAccount, wilmaDiff, wilmaEvents } from "../src/sources/wilma.js";
 
 const cfg = testConfig();
 const FIX = fileURLToPath(new URL("./fixtures/", import.meta.url));
@@ -121,4 +121,19 @@ test("Wilma mail rule is created once, with move + mark read, never forward", as
   assert.equal(created.length, 1);
   const actions = (created[0] as { actions: Record<string, unknown> }).actions;
   assert.deepEqual(Object.keys(actions).sort(), ["markAsRead", "moveToFolder", "stopProcessingRules"]);
+});
+
+test("Wilma: a new login account forgets the old session and learns silently again", async () => {
+  const st = emptyState();
+  assert.equal(switchWilmaAccount(st, "https://helsinki.inschool.fi", "henri"), false);
+  const snap = await new FixtureWilma(`${FIX}wilma.json`).fetch(cfg);
+  wilmaDiff(snap, st, cfg, today);
+  st.wilma.session = "old";
+  assert.equal(switchWilmaAccount(st, "https://helsinki.inschool.fi", "Henri"), false);
+  assert.equal(st.wilma.session, "old");
+  assert.equal(switchWilmaAccount(st, "https://helsinki.inschool.fi", "anna"), true);
+  assert.equal(st.wilma.session, undefined);
+  assert.equal(st.wilma.seenMessages.length, 0);
+  snap.students[1].messages.push({ id: 9100, subject: "Vanha viesti", sentAt: "2026-10-01T05:00:00Z" });
+  assert.equal(wilmaDiff(snap, st, cfg, today).fresh.length, 0);
 });
