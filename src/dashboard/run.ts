@@ -61,7 +61,7 @@ export async function runDashboard(ctx: Ctx, opts: { force?: boolean; shoot?: Sh
     try {
       await ctx.notifier.editPhoto(chat, prev.messageId, png, caption);
       ctx.state.dashboard = { ...prev, hash: d.hash, at };
-      ctx.log(`dashboard: updated pinned message ${prev.messageId}`);
+      ctx.log(`dashboard: updated ${prev.pinned === false ? "unpinned" : "pinned"} message ${prev.messageId}`);
       return "edited";
     } catch (e) {
       // Deleted or no longer editable: post a fresh one below.
