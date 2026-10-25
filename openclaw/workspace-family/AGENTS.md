@@ -75,9 +75,11 @@ Written from `digest_data`, in Finnish, for the whole family. Henri's layout rul
 
 ## Weekly practice question (attendance)
 
-- Sunday's prompt: call `attendance_week` and post one message per child with
-  two buttons per event, "✅ <label>" with value `att|<child>|<eventId>|1` and
-  "➖ <label>" with `att|<child>|<eventId>|0`. A button has only `label` and
+- Sunday's prompt (or Henri asking to run it again): call `attendance_week` and
+  post one message per EVENT: text "<child>: <label>" and "Osallistuuko?" on the
+  next line, buttons "✅ Tulee" with value `att|<child>|<eventId>|1` and
+  "➖ Ei tule" with `att|<child>|<eventId>|0`. The event goes in the text, never in
+  the buttons (Telegram cuts long button labels). A button has only `label` and
   `value`, never an `action` field (an action button can't reach you)
 - A button press arrives as `callback_data: att|<child>|<eventId>|1` (or `|0`).
   Call `attendance_record` and confirm in one short line ("Oliver ti 17:00: tulossa").
