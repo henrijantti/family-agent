@@ -155,6 +155,7 @@ test("dreaming: at most 5 items a week, and forget removes one", async () => {
   assert.equal(gone.removed.text, "Perhetieto numero 1 on totta.");
   assert.equal(readLearned(readFileSync(md, "utf8")).length, 4);
   assert.ok((await call(tools, "review_forget", { id: "d20261025-99" })).error);
+
 });
 
 test("dreaming: the block never pushes USER.md over its budget", async () => {
@@ -174,4 +175,16 @@ test("dreaming: review_week says so when the export hasn't run", async () => {
   assert.match(r.text, /export/);
   assert.ok(!existsSync(join(dir, "USER.md")));
   assert.equal(isoWeek(new Date("2026-01-01T12:00:00Z")), "2026-W01");
+});
+
+test("dreaming: an id is never reused after a forget", async () => {
+  const { md, tools } = setup();
+  const id = (await call(tools, "review_week", {})).json().findings[0].id;
+  const fact = (i: number) => ({ kind: "fact", text: `Perhetieto numero ${i} on totta.`, why: "x", evidence: [id] });
+  const first = (await call(tools, "review_propose", { proposals: [fact(1), fact(2)] })).json();
+  await call(tools, "review_forget", { id: first.applied[0].id });
+  const next = (await call(tools, "review_propose", { proposals: [fact(3)] })).json();
+  assert.notEqual(next.applied[0].id, first.applied[1].id);
+  await call(tools, "review_forget", { id: next.applied[0].id });
+  assert.deepEqual(readLearned(readFileSync(md, "utf8")).map((l) => l.text), ["Perhetieto numero 2 on totta."]);
 });

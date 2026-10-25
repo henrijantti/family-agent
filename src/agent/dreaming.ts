@@ -486,6 +486,9 @@ export function dreamingTools(d: DreamingDeps): Tool[] {
         const day = at.slice(0, 10);
         let md = readMd(d);
         const learned = readLearned(md);
+        // Ids are never reused, also after review_forget: the next number after every id seen today.
+        const prefix = `d${day.replace(/-/g, "")}-`;
+        let seq = Math.max(0, ...[...learned.map((l) => l.id), ...log(d).map((r) => r.id ?? "")].filter((x) => x.startsWith(prefix)).map((x) => Number(x.slice(prefix.length))));
         let room = MAX_APPLIED_PER_WEEK - log(d).filter((r) => r.week === f.week && r.type === "applied").length;
         const rows: LogRow[] = [];
         const result = { applied: [] as Learned[], pending: [] as Proposal[], refused: [] as { text: string; reason: string }[] };
@@ -502,7 +505,7 @@ export function dreamingTools(d: DreamingDeps): Tool[] {
             continue;
           }
           const reason = room <= 0 ? `already ${MAX_APPLIED_PER_WEEK} this week` : refuse(p, learned);
-          const item: Learned = { id: `d${day.replace(/-/g, "")}-${learned.length + 1}`, kind: p.kind as Learned["kind"], text: p.text.trim(), observed: day };
+          const item: Learned = { id: `${prefix}${seq + 1}`, kind: p.kind as Learned["kind"], text: p.text.trim(), observed: day };
           const next = reason ? undefined : writeLearned(md, [...learned, item]);
           const tooBig = next && next.length > USER_MD_BUDGET ? "USER.md would go over its 4,000-character budget; ask Henri to drop an old item" : undefined;
           if (reason || tooBig) {
@@ -511,6 +514,7 @@ export function dreamingTools(d: DreamingDeps): Tool[] {
             continue;
           }
           learned.push(item);
+          seq++;
           md = next!;
           room--;
           result.applied.push(item);
