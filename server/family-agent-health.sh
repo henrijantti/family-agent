@@ -104,7 +104,8 @@ heal_telegram() {
   touch "$last"; rm -f "$strike"
   systemctl --user restart openclaw-gateway
   local up=0
-  for _ in $(seq 1 24); do
+  local until=$((SECONDS + 120)) # whole wait 2 min, inside the unit's 6 min with the other checks
+  while [ "$SECONDS" -lt "$until" ]; do
     sleep 5
     # shellcheck source=/dev/null
     if (set -a; . "$HOME/.secrets/gateway.env"; set +a; timeout 20 openclaw cron list >/dev/null 2>&1); then up=1; break; fi
