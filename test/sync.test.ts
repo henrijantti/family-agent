@@ -104,3 +104,45 @@ test("change times are shown in Helsinki time whatever offset Google returns", (
   assert.equal(describeWhen({ dateTime: "2026-10-25T11:30:00Z" }), "2026-10-25 13:30");
   assert.equal(describeWhen({ date: "2026-10-25" }), "2026-10-25");
 });
+
+test("with an hours grace, forced runs in quick succession never delete", async () => {
+  const cal = new FakeCalendar();
+  const graced = { ...opts, missingHoursBeforeDelete: 24 };
+  await syncSource(cal, [ev("1", "2026-10-23"), ev("2", "2026-10-30")], graced);
+  // A reader bug drops item 2 on three runs a few minutes apart (a deploy test).
+  for (const min of [5, 10, 15]) {
+    const r = await syncSource(cal, [ev("1", "2026-10-23")], { ...graced, now: new Date(opts.now.getTime() + min * 60_000) });
+    assert.equal(r.deleted, 0);
+    assert.equal(r.markedMissing, 1);
+    assert.deepEqual(r.missing, ["Aino: exam 2 2026-10-30"]);
+  }
+  // Fixed reader: the item comes back and the clock resets.
+  await syncSource(cal, [ev("1", "2026-10-23"), ev("2", "2026-10-30")], { ...graced, now: new Date(opts.now.getTime() + 20 * 60_000) });
+  assert.equal(cal.all("school").find((e) => e.id === eventId("wilma", "2"))?.extendedProperties?.private?.missingSince, undefined);
+  assert.equal(cal.all("school").length, 2);
+});
+
+test("with an hours grace, an item gone for a day is deleted", async () => {
+  const cal = new FakeCalendar();
+  const graced = { ...opts, missingHoursBeforeDelete: 24 };
+  await syncSource(cal, [ev("1", "2026-10-23"), ev("2", "2026-10-30")], graced);
+  await syncSource(cal, [ev("1", "2026-10-23")], graced);
+  const early = await syncSource(cal, [ev("1", "2026-10-23")], { ...graced, now: new Date(opts.now.getTime() + 23 * 3600_000) });
+  assert.equal(early.deleted, 0);
+  const late = await syncSource(cal, [ev("1", "2026-10-23")], { ...graced, now: new Date(opts.now.getTime() + 25 * 3600_000) });
+  assert.equal(late.deleted, 1);
+  assert.deepEqual(late.deletions, ["Aino: exam 2 2026-10-30"]);
+});
+
+test("dry run reports the same plan and writes nothing", async () => {
+  const cal = new FakeCalendar();
+  await syncSource(cal, [ev("1", "2026-10-23"), ev("2", "2026-10-30")], opts);
+  await syncSource(cal, [ev("1", "2026-10-23")], opts);
+  const before = JSON.stringify(cal.all("school"));
+  const plan = await syncSource(cal, [ev("1", "2026-10-24"), ev("3", "2026-11-02")], { ...opts, dryRun: true });
+  assert.equal(plan.created, 1);
+  assert.equal(plan.updated, 1);
+  assert.equal(plan.deleted, 1);
+  assert.deepEqual(plan.deletions, ["Aino: exam 2 2026-10-30"]);
+  assert.equal(JSON.stringify(cal.all("school")), before);
+});

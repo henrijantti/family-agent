@@ -56,22 +56,27 @@ async function sendAlert(ctx: Ctx, lines: string[]) {
   await ctx.notifier.send(familyChat()!, `🔔 <b>Family agent</b>\n${lines.map((l) => `• ${esc(l)}`).join("\n")}`);
 }
 
+function syncOpts(ctx: Ctx, id: string, source: "wilma" | "myclub", days: number) {
+  const today = localParts(ctx.now).date;
+  return {
+    calendarId: id,
+    source,
+    windowStart: fromLocal(today).toISOString(),
+    windowEnd: fromLocal(addDays(today, days)).toISOString(),
+    missingRunsBeforeDelete: ctx.cfg.calendar.missing_runs_before_delete,
+    missingHoursBeforeDelete: ctx.cfg.calendar.missing_hours_before_delete ?? 0,
+    maxDeletes: ctx.cfg.calendar.max_deletes_per_run,
+    now: ctx.now,
+  };
+}
+
 async function syncInto(ctx: Ctx, which: "school" | "hobbies", source: "wilma" | "myclub", desired: ReturnType<typeof wilmaEvents>, days: number) {
   const id = calId(ctx.cfg, which);
   if (!ctx.calendar || !id) {
     ctx.log(`calendar not configured, skipping ${which} sync (${desired.length} items)`);
     return [];
   }
-  const today = localParts(ctx.now).date;
-  const r = await syncSource(ctx.calendar, desired, {
-    calendarId: id,
-    source,
-    windowStart: fromLocal(today).toISOString(),
-    windowEnd: fromLocal(addDays(today, days)).toISOString(),
-    missingRunsBeforeDelete: ctx.cfg.calendar.missing_runs_before_delete,
-    maxDeletes: ctx.cfg.calendar.max_deletes_per_run,
-    now: ctx.now,
-  });
+  const r = await syncSource(ctx.calendar, desired, syncOpts(ctx, id, source, days));
   ctx.state.changes.push(...r.changes);
   ctx.log(`${which}: +${r.created} ~${r.updated} =${r.unchanged} -${r.deleted} (missing ${r.markedMissing})`);
   return r.warnings;
@@ -105,6 +110,28 @@ export async function runWilma(ctx: Ctx, slot?: RunSlot) {
     await sendAlert(ctx, [...urgent, ...warnings]);
   } else if (warnings.length) await sendAlert(ctx, warnings);
   if (slot?.weekly) await sendWilmaWeek(ctx, snap);
+}
+
+/**
+ * What a Wilma or MyClub run would do to its calendar, without writing to the
+ * calendar or the state. Run it after a change to a source reader, before the
+ * first real run: "missing" or "delete" lines there mean the reader lost items.
+ */
+export async function syncPlan(ctx: Ctx, source: "wilma" | "myclub") {
+  const which = source === "wilma" ? "school" : "hobbies";
+  const id = calId(ctx.cfg, which);
+  if (!ctx.calendar || !id) throw new Error(`the ${which} calendar is not configured`);
+  if (source === "wilma") {
+    if (!ctx.wilma) throw new Error("Wilma is off or its secrets are missing");
+    const snap = await ctx.wilma.fetch(ctx.cfg, ctx.state);
+    const desired = wilmaEvents(snap, ctx.cfg, localParts(ctx.now).date);
+    return syncSource(ctx.calendar, desired, { ...syncOpts(ctx, id, source, 120), dryRun: true });
+  }
+  if (!ctx.myclub) throw new Error("MyClub is off");
+  const snap = await ctx.myclub.fetch(ctx.cfg);
+  const declined = new Set(ctx.state.myclub.declined ?? []);
+  const desired = myclubEvents(snap, ctx.cfg, ctx.now).map((e) => (declined.has(e.sourceId) ? { ...e, title: `${e.title} (not going)` } : e));
+  return syncSource(ctx.calendar, desired, { ...syncOpts(ctx, id, source, ctx.cfg.myclub.horizon_weeks * 7), dryRun: true });
 }
 
 /** The week's Wilma summary, one message per child, to the family group. */

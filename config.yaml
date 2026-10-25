@@ -18,6 +18,7 @@ calendar:
   school_calendar_id_env: GOOGLE_SCHOOL_CALENDAR_ID   # "Family: School (Wilma)", agent writes
   hobbies_calendar_id_env: GOOGLE_HOBBIES_CALENDAR_ID # "Family: Hobbies (MyClub)", agent writes
   missing_runs_before_delete: 2
+  missing_hours_before_delete: 24   # and missing this long: forced runs can't burn the grace (2026-10-25, 30.10 School event lost)
   max_deletes_per_run: 5
 
 digest:

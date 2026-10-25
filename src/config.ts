@@ -23,6 +23,8 @@ export interface Config {
     school_calendar_id_env: string;
     hobbies_calendar_id_env: string;
     missing_runs_before_delete: number;
+    /** Hours an event must be missing from its source before it is deleted. */
+    missing_hours_before_delete?: number;
     max_deletes_per_run: number;
   };
   digest: {

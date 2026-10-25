@@ -8,8 +8,12 @@ import { CalendarApi, CalendarEvent, CalendarHttpError, DesiredEvent, EventTime 
 //  - Event id is deterministic: hash(source + sourceId).
 //  - Private extended properties hold source, sourceId, hash and a missing counter.
 //  - Same hash: skip. Different: update, report "changed".
-//  - Missing from the source on N runs in a row: delete, report "cancelled".
+//  - Missing from the source on N runs in a row AND for at least H hours:
+//    delete, report "cancelled". Counting runs alone let forced runs during a
+//    deploy burn the grace in minutes (2026-10-25: a parser bug deleted a real
+//    School event), so the clock starts at the first missing run (missingSince).
 //  - A run that wants to delete more than maxDeletes stops deleting and alerts.
+//  - dryRun computes the same result without writing anything.
 
 export interface SyncOptions {
   calendarId: string;
@@ -17,8 +21,11 @@ export interface SyncOptions {
   windowStart: string; // ISO
   windowEnd: string; // ISO
   missingRunsBeforeDelete: number;
+  /** Hours an event must have been missing before it is deleted (0: runs only). */
+  missingHoursBeforeDelete?: number;
   maxDeletes: number;
   now?: Date;
+  dryRun?: boolean;
 }
 
 export interface SyncResult {
@@ -30,6 +37,10 @@ export interface SyncResult {
   abortedDeletes: number;
   changes: ChangeRecord[];
   warnings: string[];
+  /** Titles and times of the events this run deleted, or would delete when dryRun. */
+  deletions: string[];
+  /** Titles and times of the events marked missing (not deleted yet). */
+  missing: string[];
 }
 
 export function eventId(source: string, sourceId: string): string {
@@ -74,8 +85,12 @@ export function describeWhen(t: EventTime): string {
 }
 
 export async function syncSource(api: CalendarApi, desired: DesiredEvent[], opts: SyncOptions): Promise<SyncResult> {
-  const now = (opts.now ?? new Date()).toISOString();
-  const r: SyncResult = { created: 0, updated: 0, unchanged: 0, deleted: 0, markedMissing: 0, abortedDeletes: 0, changes: [], warnings: [] };
+  const nowDate = opts.now ?? new Date();
+  const now = nowDate.toISOString();
+  const r: SyncResult = { created: 0, updated: 0, unchanged: 0, deleted: 0, markedMissing: 0, abortedDeletes: 0, changes: [], warnings: [], deletions: [], missing: [] };
+  const write = opts.dryRun
+    ? { insert: async () => {}, update: async () => {}, delete: async () => {} }
+    : { insert: (c: string, e: CalendarEvent) => api.insert(c, e), update: (c: string, id: string, e: CalendarEvent) => api.update(c, id, e), delete: (c: string, id: string) => api.delete(c, id) };
   const change = (kind: ChangeRecord["kind"], title: string, when: EventTime) =>
     r.changes.push({ at: now, source: opts.source, kind, title, when: describeWhen(when) });
 
@@ -99,19 +114,19 @@ export async function syncSource(api: CalendarApi, desired: DesiredEvent[], opts
         r.unchanged++;
         continue;
       }
-      await api.update(opts.calendarId, ev.id, ev);
+      await write.update(opts.calendarId, ev.id, ev);
       r.updated++;
       if (p.hash !== ev.extendedProperties!.private!.hash) change("changed", d.title, d.start);
       continue;
     }
     try {
-      await api.insert(opts.calendarId, ev);
+      await write.insert(opts.calendarId, ev);
       r.created++;
       change("new", d.title, d.start);
     } catch (e) {
       // The id exists outside the window or as a deleted event: bring it back.
       if (e instanceof CalendarHttpError && e.status === 409) {
-        await api.update(opts.calendarId, ev.id, ev);
+        await write.update(opts.calendarId, ev.id, ev);
         r.updated++;
       } else throw e;
     }
@@ -123,13 +138,19 @@ export async function syncSource(api: CalendarApi, desired: DesiredEvent[], opts
     return r;
   }
   const toDelete: CalendarEvent[] = [];
+  const graceMs = (opts.missingHoursBeforeDelete ?? 0) * 3600_000;
   for (const e of gone) {
-    const missing = Number(e.extendedProperties?.private?.missing ?? "0") + 1;
-    if (missing >= opts.missingRunsBeforeDelete) toDelete.push(e);
+    const p = e.extendedProperties!.private!;
+    const missing = Number(p.missing ?? "0") + 1;
+    // Events marked before missingSince existed start their clock now.
+    const since = p.missingSince && missing > 1 ? p.missingSince : now;
+    if (missing >= opts.missingRunsBeforeDelete && nowDate.getTime() - Date.parse(since) >= graceMs) toDelete.push(e);
     else {
-      e.extendedProperties!.private!.missing = String(missing);
-      await api.update(opts.calendarId, e.id, e);
+      p.missing = String(missing);
+      p.missingSince = since;
+      await write.update(opts.calendarId, e.id, e);
       r.markedMissing++;
+      r.missing.push(`${e.summary ?? "(untitled)"} ${describeWhen(e.start)}`);
     }
   }
   if (toDelete.length > opts.maxDeletes) {
@@ -138,8 +159,9 @@ export async function syncSource(api: CalendarApi, desired: DesiredEvent[], opts
     return r;
   }
   for (const e of toDelete) {
-    await api.delete(opts.calendarId, e.id);
+    await write.delete(opts.calendarId, e.id);
     r.deleted++;
+    r.deletions.push(`${e.summary ?? "(untitled)"} ${describeWhen(e.start)}`);
     change("cancelled", e.summary ?? "(untitled)", e.start);
   }
   return r;
