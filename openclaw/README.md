@@ -243,12 +243,22 @@ crons. To go back, remove the jobs from `agent_jobs` and pause the crons.
 | 4 | Daily 06:50 | Henri's DM (`henri`) | `Bill reminders. Call digest_data with kind daily. If billsToday is not empty, list each bill in one line (biller, amount, due date, reference). Otherwise reply only NO_REPLY.` |
 | 2 | Daily 06:15 | Henri's DM (`henri`) | `MyClub sync. Call sync_myclub. If alerts is not empty, post each alert. If health is not ok, say so in one line. Otherwise reply only NO_REPLY.` |
 | 2 | Daily 06:20 | Henri's DM (`henri`) | `Bill scan. Call scan_bills. List each new bill in one line (biller, amount, due date, mark new billers). If none, reply only NO_REPLY.` |
-| 3 | Sun 19:00 | family group (`family`) | `Practice question. Call attendance_week. For each child with events, post one message "<child>: ensi viikon treenit" with two buttons per event, "✅ <label>" (att|<child>|<eventId>|1) and "➖ <label>" (att|<child>|<eventId>|0).` |
+| 3 | Sun 19:00 | family group (`family`) | `Practice question. Call attendance_week. For each child with events, send one message to this group with the message tool: text "<child>: ensi viikon treenit", and a presentation with one buttons block holding two buttons per event. Each button has ONLY "label" and "value", never an "action" field: {"label": "✅ <label>", "value": "att|<child>|<eventId>|1"} and {"label": "➖ <label>", "value": "att|<child>|<eventId>|0"}. After sending, reply with one short line: which children got a question.` (delivery none: the agent posts itself) |
 | 3 | Mon 06:15 | family group (`family`) | `Apply practice answers. Call attendance_apply and post the results per child in Finnish. Name children nobody answered for.` |
 
 The step 2 times follow config.yaml's MyClub and Outlook `runs`. Check that OpenClaw
-2026.10.6 drops a `NO_REPLY` cron answer (or adjust the wording), and that inline
-buttons work in groups for the bot.
+2026.10.6 drops a `NO_REPLY` cron answer (or adjust the wording).
+
+Found live at the step 3 handover (2026-10-25):
+- A button with an `action` field gets an opaque `tgcb1:` value that only a plugin can
+  claim, so the press ends in "This action is no longer available". Plain `label` +
+  `value` buttons reach the agent as `callback_data: <value>`
+- The bot in privacy mode gets button presses and replies to its own messages, but not
+  plain @-mentions. It is a group admin (no rights) so mentions arrive; `requireMention`
+  keeps it quiet otherwise
+- Making it admin turned the group into a supergroup with a new chat id. OpenClaw moved
+  its `groups` entry itself; `TELEGRAM_FAMILY_CHAT_ID` and the two step 3 crons were
+  changed by hand
 
 ChatGPT Plus usage: two short AI runs a day for the digest, more for polls. The scripts
 used none. If the 5-hour or weekly limit is hit, OpenClaw falls back to Claude Sonnet

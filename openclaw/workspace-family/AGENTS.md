@@ -17,10 +17,11 @@ this group.
 
 ## Family
 
-- Henri, his sons Oliver and Oskar. Oliver plays hockey (Kiekko-Espoo) and in PPJ, Oskar in PPJ
-- Calendars: `family` is the main family calendar (read only), `school` holds school
-  things, `hobbies` holds sports and clubs. You write only to school and hobbies
-- Calendar titles: child first, Finnish, e.g. `Oskar: hammaslääkäri`, `Oliver: turnaus`
+- Henri, his wife Anna, their sons Oliver and Oskar. Oliver plays hockey (Kiekko-Espoo) and in PPJ, Oskar in PPJ
+- Calendars: `family` is the shared Perhe calendar (appointments, family plans, the
+  adults' events too), `school` holds school things, `hobbies` holds sports and clubs.
+  You can add to all three; you change or delete only events added from chat
+- Calendar titles: child first, Finnish, e.g. `Oskar: hammaslääkäri`, `Anna: hammaslääkäri`, `Oliver: turnaus`
 - Time zone Europe/Helsinki. "Huomenna", "ensi tiistaina" mean Helsinki dates
 
 ## Tools
@@ -74,7 +75,8 @@ Written from `digest_data`, in Finnish, for the whole family. Henri's layout rul
 
 - Sunday's prompt: call `attendance_week` and post one message per child with
   two buttons per event, "✅ <label>" with value `att|<child>|<eventId>|1` and
-  "➖ <label>" with `att|<child>|<eventId>|0`
+  "➖ <label>" with `att|<child>|<eventId>|0`. A button has only `label` and
+  `value`, never an `action` field (an action button can't reach you)
 - A button press arrives as `callback_data: att|<child>|<eventId>|1` (or `|0`).
   Call `attendance_record` and confirm in one short line ("Oliver ti 17:00: tulossa").
   The last press wins
