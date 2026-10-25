@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { Config } from "../config.js";
 import { CalendarApi, CalendarEvent, EventTime } from "../calendar/types.js";
-import { buildDigest, conflicts, isComingUp, mergeCrossCalendar, splitTitle } from "../digest/build.js";
+import { buildDigest, conflicts, isComingUp, localTitles, mergeCrossCalendar, splitTitle } from "../digest/build.js";
 import { billsToRemind } from "../sources/outlook.js";
 import { feesDue, MyClubSnapshot, openSignups } from "../sources/myclub.js";
 import { calId, collectHub, Ctx } from "../jobs.js";
@@ -240,7 +240,7 @@ export function familyTools(d: FamilyDeps): Tool[] {
         const c = ctx(d);
         const week = a.kind === "week";
         const today = localParts(c.now).date;
-        const events = mergeCrossCalendar(await collectHub(c, week ? 8 : d.cfg.digest.coming_up_days));
+        const events = localTitles(mergeCrossCalendar(await collectHub(c, week ? 8 : d.cfg.digest.coming_up_days)), d.cfg.digest.language);
         const days = week ? Array.from({ length: 7 }, (_, i) => addDays(today, i + 1)) : [today];
         const view = (e: (typeof events)[number]) => {
           const cancelled = /^CANCELLED: /.test(e.title);
