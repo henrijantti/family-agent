@@ -34,6 +34,8 @@
         name: "Family",
         workspace: "/home/openclaw/.openclaw/workspace-family",
         sandbox: { mode: "all" },
+        // A message starting with "botti" counts as a mention, as does a reply to the bot (Henri, 2026-10-25).
+        groupChat: { mentionPatterns: ["^[ ]*botti([^a-zäöå0-9]|$)"] },
         tools: {
           profile: "messaging",
           // The group copies of the family and jobs servers (--group): no bills in digest_data,
