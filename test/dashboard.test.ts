@@ -25,6 +25,7 @@ function ev(calendar: HubEvent["calendar"], title: string, day: number, start?: 
 
 const events = [
   ev("school", "Oskar: Retki (from bulletin)", 0),
+  ev("school", "Oliver: Lokakuun tiedote 2026 (from bulletin)", 4),
   ev("hobbies", "Oliver: K-E Blues 15: Jäävuoro", 0, "07:00", "08:15", "Espoo Metro Areena, Urheilupuistontie 3"),
   ev("hobbies", "Oskar: PPJ: Harjoitukset", 0, "17:00", "18:00", "Leppävaaran stadion"),
   ev("hobbies", "Oliver: PPJ: Harjoitukset", 0, "17:30", "19:00", "Kilonkenttä"),
@@ -45,6 +46,7 @@ test("dashboard model: today first, next timed event, notices, kids", () => {
   assert.deepEqual(m.notices.map((n) => n.pill), ["Päällekkäin", "Koe"]);
   assert.match(m.notices[0].text, /^ma 26\.10\. 17:30–18:00 Oskar ja Oliver, kuka vie\?$/);
   assert.equal(m.days.length, 6);
+  assert.ok(!m.days.flatMap((d) => d.events).some((e) => /Lokakuun tiedote/.test(e.what)), "newsletters are not events");
   assert.ok(!m.days.flatMap((d) => d.events).some((e) => e.what === "Next week"), "only 7 days");
   const [oliver, oskar] = m.kids;
   assert.equal(oliver.count, 3);

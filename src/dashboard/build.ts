@@ -74,11 +74,20 @@ const dm = (date: string) => {
 };
 const short = (date: string) => `${SHORT[wd(date)]} ${dm(date)}`;
 
+/**
+ * A school newsletter that Wilma's bulletin sync put on a day ("Lokakuun
+ * tiedote 2026") is not something to do; a dated bulletin item ("Retki
+ * Nuuksioon (tiedote)") is, so only the marker is ignored.
+ */
+export function isNewsletter(title: string): boolean {
+  return /tiedote|newsletter|uutiskirje/i.test(title.replace(/\s*\((tiedote|from bulletin)\)/gi, ""));
+}
+
 export function dashboardModel(inp: DashInput): DashModel {
   const now = localParts(inp.now);
   const today = now.date;
   const end = addDays(today, 6);
-  const events = localTitles(mergeCrossCalendar(inp.events), "fi").filter((e) => e.date >= today && e.date <= end);
+  const events = localTitles(mergeCrossCalendar(inp.events), "fi").filter((e) => e.date >= today && e.date <= end && !isNewsletter(e.title));
   const view = (e: HubEvent): DashEvent => {
     const cancelled = /^CANCELLED: /.test(e.title);
     const { who, what } = splitTitle(e.title.replace(/^CANCELLED: /, ""));
