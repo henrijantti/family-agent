@@ -372,6 +372,7 @@ async function main() {
         w.seenMessages = [...new Set([...w.seenMessages, ...st.messages.map((m) => m.id)])].slice(-500);
         w.seenNews = [...new Set([...w.seenNews, ...st.news.map((n) => n.id)])].slice(-500);
       }
+      session.data.wilma.lastSnapshot = snap; // the next fetch keeps the message texts from it
       const slot = key.startsWith("forced") ? undefined : key.split(" ")[1];
       if (slot) session.data.lastRun[`wilma-fetch@${slot}`] = key;
       const out = env("WILMA_SNAPSHOT_FILE") ?? "state/wilma-snapshot.json";

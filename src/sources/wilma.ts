@@ -154,7 +154,11 @@ export class LiveWilma implements WilmaProvider {
         const replies = (full.replies ?? []).map((r) => `— ${r.senderName ?? "?"}, ${localParts(r.sentAt).date}:\n${r.content}`);
         msgBodies.set(m.wilmaId, [full.content ?? "", ...replies].filter(Boolean).join("\n\n").slice(0, TEXT_MAX));
       }
-      const newNews = news.filter((n) => !state.wilma.seenNews.includes(n.wilmaId) && !n.content && prevNews.get(n.wilmaId)?.content == null).slice(0, 10);
+      // Bulletins: new ones, and recent ones whose text no run has read yet.
+      const newNews = news
+        .filter((n) => !n.content && prevNews.get(n.wilmaId)?.content == null)
+        .filter((n) => !state.wilma.seenNews.includes(n.wilmaId) || (n.published?.getTime() ?? 0) >= recent)
+        .slice(0, 10);
       const newsBodies = new Map<number, string | null | undefined>();
       for (const n of newNews) newsBodies.set(n.wilmaId, (await kid.news.get(n.wilmaId)).content);
 
