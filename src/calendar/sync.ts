@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import type { ChangeRecord } from "../lib/state.js";
+import { localParts } from "../lib/time.js";
 import { CalendarApi, CalendarEvent, CalendarHttpError, DesiredEvent, EventTime } from "./types.js";
 
 // Writes one source's items into that source's own calendar, without
@@ -64,6 +65,11 @@ export function toCalendarEvent(d: DesiredEvent, missing = 0): CalendarEvent {
 
 export function describeWhen(t: EventTime): string {
   if ("date" in t) return t.date;
+  // Google returns times in the calendar's own offset; show Helsinki time.
+  if (/(Z|[+-]\d\d:\d\d)$/.test(t.dateTime)) {
+    const p = localParts(new Date(t.dateTime));
+    return `${p.date} ${p.time}`;
+  }
   return t.dateTime.slice(0, 16).replace("T", " ");
 }
 

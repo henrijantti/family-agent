@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { FakeCalendar } from "../src/calendar/fake.js";
-import { eventId, syncSource } from "../src/calendar/sync.js";
+import { describeWhen, eventId, syncSource } from "../src/calendar/sync.js";
 import type { DesiredEvent } from "../src/calendar/types.js";
 
 const opts = {
@@ -96,4 +96,11 @@ test("an item that comes back after deletion is restored (409 on insert)", async
   const r = await syncSource(cal, [ev("1", "2026-10-23"), ev("2", "2026-10-24")], opts);
   assert.equal(r.updated, 1);
   assert.equal(cal.all("school").length, 2);
+});
+
+test("change times are shown in Helsinki time whatever offset Google returns", () => {
+  // 13:30 Helsinki on 25.10.2026 (EET, +02:00), returned in a +01:00 calendar zone
+  assert.equal(describeWhen({ dateTime: "2026-10-25T12:30:00+01:00" }), "2026-10-25 13:30");
+  assert.equal(describeWhen({ dateTime: "2026-10-25T11:30:00Z" }), "2026-10-25 13:30");
+  assert.equal(describeWhen({ date: "2026-10-25" }), "2026-10-25");
 });
