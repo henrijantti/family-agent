@@ -171,6 +171,8 @@ export async function runDigest(ctx: Ctx, weekAhead = false): Promise<string> {
   const events = await collectHub(ctx, weekAhead ? 8 : cfg.digest.coming_up_days);
   const bills = cfg.outlook.enabled ? billsToRemind(ctx.state, today, cfg.outlook.remind_days_before) : [];
   const billsPrivately = cfg.outlook.bills_to === "private_if_set" && !!privateChat();
+  // "none": the Chief of staff's 06:50 bill reminder covers them, not the family group.
+  const billsInGroup = cfg.outlook.bills_to === "family" || (cfg.outlook.bills_to === "private_if_set" && !privateChat());
   const html = buildDigest({
     now: ctx.now,
     cfg,
@@ -179,7 +181,7 @@ export async function runDigest(ctx: Ctx, weekAhead = false): Promise<string> {
     myclub: ctx.state.myclub.lastSnapshot as MyClubSnapshot | undefined,
     queue: ctx.state.digestQueue,
     changes: ctx.state.changes,
-    bills: billsPrivately ? [] : bills,
+    bills: billsInGroup ? bills : [],
     health: ctx.state.health,
     weekAhead,
   });

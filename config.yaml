@@ -96,7 +96,9 @@ outlook:
   remind_days_before: 3
   # Bills from Henri's private mail. OPEN: post them to the family group, or
   # only to Henri's private chat with the bot (set TELEGRAM_PRIVATE_CHAT_ID).
-  bills_to: private_if_set   # family | private_if_set
+  # none (2026-10-25): bills stay out of the family group (Anna is in it); the
+  # Chief of staff's 06:50 bill reminder sends them to Henri's DM.
+  bills_to: none   # family | private_if_set | none
   scan_lookback_days: 14
   # Wilma's notification emails skip the inbox (Henri: too much noise); the
   # agent keeps an Outlook rule that files them, read, in this folder.

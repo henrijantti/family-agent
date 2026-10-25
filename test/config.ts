@@ -6,6 +6,7 @@ export function testConfig() {
   cfg.wilma.enabled = true;
   cfg.myclub.enabled = true;
   cfg.outlook.enabled = true;
+  cfg.outlook.bills_to = "private_if_set";
   cfg.digest.language = "en"; // assertions are written against the English labels
   cfg.agent_jobs = []; // tests that need agent-owned jobs set them themselves
   if (cfg.dashboard) delete cfg.dashboard.drive_file_id; // never upload to Henri's Drive from tests

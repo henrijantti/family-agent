@@ -42,7 +42,7 @@ export interface Config {
     enabled: boolean;
     runs: RunSlot[];
     remind_days_before: number;
-    bills_to: "family" | "private_if_set";
+    bills_to: "family" | "private_if_set" | "none";
     scan_lookback_days: number;
     /** Move Wilma's notification emails out of the inbox into this folder. */
     wilma_folder?: { name: string; senders: string[] };
