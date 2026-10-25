@@ -31,6 +31,7 @@ Helsinki) from scratch. Nothing here contains secrets.
 | `systemd/family-agent-backup.service` + `.timer` | user units; backup at 02:30 Helsinki |
 | `family-agent-health.sh` + `systemd/family-agent-health.*` | every 10 min: private Telegram alert (Chief of staff bot, chat id in `~/.secrets/health-chat-id`) when the tick, gateway, backup, a cron, memory or disk fails; once per problem per 6 h |
 | `family-agent-status.sh` + `systemd/family-agent-status.*` | every 15 min: `status.json` (units, crons, memory, disk, open alerts; no secrets or content) to the `status` branch of the backup repo, for cloud sessions |
+| `systemd/claude-remote-control.service` | user unit: Claude Code Remote Control as "family-agent server" in `~/family-agent` (live jobs checkout), restarts after 30 s; since 2026-10-25 |
 | `email-agent.patch.json5` | `openclaw config patch --file`: agent `email`, `mail` MCP server, tool policy |
 | `email-telegram.patch.json5` | `openclaw config patch --file`: the mail bot (DM allowlist), then `agents bind --agent email --bind telegram:mail` |
 | `email-approvals.patch.json5` | `openclaw config patch --file`: route the mail-approval cards to Henri's mail-bot DM (approver + inline buttons) |

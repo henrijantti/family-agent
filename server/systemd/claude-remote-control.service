@@ -1,0 +1,18 @@
+# systemd USER unit for the openclaw user (~/.config/systemd/user/).
+# Claude Code Remote Control: sessions from claude.ai/code or the mobile app run
+# in ~/family-agent, the live job checkout. Needs Claude Code installed in
+# ~/.local/bin, a one-time `claude` login, and one interactive run of
+# `claude remote-control` to answer its "Enable Remote Control?" prompt.
+[Unit]
+Description=Claude Code Remote Control (family-agent)
+After=network-online.target
+
+[Service]
+WorkingDirectory=%h/family-agent
+ExecStart=%h/.local/bin/claude remote-control --name "family-agent server"
+StandardInput=null
+Restart=always
+RestartSec=30
+
+[Install]
+WantedBy=default.target
