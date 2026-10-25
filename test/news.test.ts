@@ -114,3 +114,23 @@ test("news: lines are one plain line", () => {
   assert.equal(checkLine(" Fortum myy lämpöliiketoiminnan ", "t"), "Fortum myy lämpöliiketoiminnan");
   for (const bad of ["a\nb", "katso www.x", "lue lisää hs.fi/a", "seuraa @joku", "[linkki](x)"]) assert.throws(() => checkLine(bad, "t"));
 });
+
+test("news: the next brief starts at the last fetch, not the send", async () => {
+  let xml = KL_XML;
+  const s = setup(async (url) => (url === KL.url ? xml : FT_XML), "2026-10-26T05:15:00Z");
+  await call(s.tools, "news_items", {});
+  s.setNow("2026-10-26T05:20:00Z");
+  assert.equal((await call(s.tools, "news_publish", { items: [{ id: "n1", text: "Nokia ostaa" }] })).error, false);
+  // Published between the fetch and the send: still comes next time.
+  xml = rss(`<item><title>Myöhäinen</title><link>https://www.kauppalehti.fi/a/late</link><pubDate>Mon, 26 Oct 2026 05:17:00 GMT</pubDate></item>`);
+  s.setNow("2026-10-27T05:15:00Z");
+  assert.deepEqual((await call(s.tools, "news_items", {})).json().items.map((x: any) => x.title), ["Myöhäinen"]);
+});
+
+test("news: two overlapping publishes send once", async () => {
+  const s = setup(ok);
+  await call(s.tools, "news_items", {});
+  const r = await Promise.all([1, 2].map(() => call(s.tools, "news_publish", { items: [{ id: "n1", text: "Nokia ostaa" }] })));
+  assert.equal(s.sent.length, 1);
+  assert.deepEqual(r.map((x) => x.error).sort(), [false, true]);
+});

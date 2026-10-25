@@ -1,6 +1,7 @@
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import * as cheerio from "cheerio";
+import { withLock } from "../lib/lock.js";
 import { localParts } from "../lib/time.js";
 import { Tool, ToolError } from "./mcp.js";
 
@@ -140,6 +141,8 @@ interface Batch {
 interface SentLine {
   at: string;
   date: string;
+  /** When the feeds were read for this brief: the next brief starts here. */
+  fetched?: string;
   /** What Henri got. */
   urls: string[];
   /** Everything he was offered, so undated items don't come back tomorrow. */
@@ -184,7 +187,7 @@ export function newsTools(d: NewsDeps): Tool[] {
       const sent = readSent(d.dir);
       const last = sent.at(-1);
       const floor = now.getTime() - MAX_LOOKBACK_H * 3600_000;
-      const since = new Date(Math.max(floor, last ? Date.parse(last.at) : now.getTime() - FIRST_LOOKBACK_H * 3600_000));
+      const since = new Date(Math.max(floor, last ? Date.parse(last.fetched ?? last.at) : now.getTime() - FIRST_LOOKBACK_H * 3600_000));
       const seen = new Set(sent.filter((s) => Date.parse(s.at) > now.getTime() - SENT_KEEP_DAYS * 86400_000).flatMap((s) => [...s.urls, ...(s.seen ?? [])]));
 
       const results = await Promise.all(
@@ -244,35 +247,40 @@ export function newsTools(d: NewsDeps): Tool[] {
       required: ["items"],
     },
     async run(args) {
-      const chosen = args.items as { id: string; text: string }[];
-      if (chosen.length < 1 || chosen.length > MAX_ITEMS) throw new ToolError(`pick 1 to ${MAX_ITEMS} items`);
-      if (!existsSync(batchFile)) throw new ToolError("call news_items first");
-      const batch = JSON.parse(readFileSync(batchFile, "utf8")) as Batch;
-      const now = d.now();
-      if (now.getTime() - Date.parse(batch.at) > BATCH_MAX_AGE_H * 3600_000) throw new ToolError("the item list is old, call news_items again");
-      const today = localParts(now).date;
-      if (readSent(d.dir).some((s) => s.date === today)) throw new ToolError("today's brief was already sent");
-
-      const ids = new Set<string>();
-      const lines = chosen.map((c, i) => {
-        const it = batch.items.find((x) => x.id === c.id);
-        if (!it) throw new ToolError(`items[${i}].id ${c.id} is not in today's list`);
-        if (ids.has(c.id)) throw new ToolError(`items[${i}].id ${c.id} is listed twice`);
-        ids.add(c.id);
-        return { text: checkLine(c.text, `items[${i}].text`), it };
-      });
-
-      const p = localParts(now);
-      const [, m, day] = p.date.split("-");
-      const head = `<b>Uutiset ${WEEKDAY_FI[p.day]} ${Number(day)}.${Number(m)}.</b>`;
-      const body = lines.map((l) => `• ${esc(l.text)} <a href="${esc(l.it.url)}">${l.it.source}</a>`);
-      const foot = batch.missing.length ? [`<i>Ei saatu tänään: ${batch.missing.join(", ")}</i>`] : [];
-      await d.sender.send([head, ...body, ...foot].join("\n\n"));
-
-      appendFileSync(join(d.dir, "sent.jsonl"), JSON.stringify({ at: now.toISOString(), date: today, urls: lines.map((l) => l.it.url), seen: batch.items.map((x) => x.url) } satisfies SentLine) + "\n");
-      return `sent ${lines.length} items to Henri`;
+      // One check-send-record at a time, so two calls can't both send today's brief.
+      return withLock(join(d.dir, "publish"), () => send(args), 30_000);
     },
   };
+
+  async function send(args: Record<string, unknown>) {
+    const chosen = args.items as { id: string; text: string }[];
+    if (chosen.length < 1 || chosen.length > MAX_ITEMS) throw new ToolError(`pick 1 to ${MAX_ITEMS} items`);
+    if (!existsSync(batchFile)) throw new ToolError("call news_items first");
+    const batch = JSON.parse(readFileSync(batchFile, "utf8")) as Batch;
+    const now = d.now();
+    if (now.getTime() - Date.parse(batch.at) > BATCH_MAX_AGE_H * 3600_000) throw new ToolError("the item list is old, call news_items again");
+    const today = localParts(now).date;
+    if (readSent(d.dir).some((s) => s.date === today)) throw new ToolError("today's brief was already sent");
+
+    const ids = new Set<string>();
+    const lines = chosen.map((c, i) => {
+      const it = batch.items.find((x) => x.id === c.id);
+      if (!it) throw new ToolError(`items[${i}].id ${c.id} is not in today's list`);
+      if (ids.has(c.id)) throw new ToolError(`items[${i}].id ${c.id} is listed twice`);
+      ids.add(c.id);
+      return { text: checkLine(c.text, `items[${i}].text`), it };
+    });
+
+    const p = localParts(now);
+    const [, m, day] = p.date.split("-");
+    const head = `<b>Uutiset ${WEEKDAY_FI[p.day]} ${Number(day)}.${Number(m)}.</b>`;
+    const body = lines.map((l) => `• ${esc(l.text)} <a href="${esc(l.it.url)}">${l.it.source}</a>`);
+    const foot = batch.missing.length ? [`<i>Ei saatu tänään: ${batch.missing.join(", ")}</i>`] : [];
+    await d.sender.send([head, ...body, ...foot].join("\n\n"));
+
+    appendFileSync(join(d.dir, "sent.jsonl"), JSON.stringify({ at: now.toISOString(), date: today, fetched: batch.at, urls: lines.map((l) => l.it.url), seen: batch.items.map((x) => x.url) } satisfies SentLine) + "\n");
+    return `sent ${lines.length} items to Henri`;
+  }
 
   return [items, publish];
 }
