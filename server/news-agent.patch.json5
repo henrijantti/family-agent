@@ -1,0 +1,51 @@
+// News agent `news` (Henri 2026-10-25): weekday morning brief from KL, HS and FT.
+// Apply as openclaw after `openclaw agents add news` (workspace below, no channel
+// binding: it only runs from its cron job, so nobody can message it):
+//   openclaw config patch --file server/news-agent.patch.json5
+// Its only tools are the `news` server's news_items and news_publish. Feed text is
+// untrusted, so it gets no runtime, files, browser, web fetch, messaging or sessions,
+// and no other agent gets the news tools.
+// Arrays replace on patch, so each list repeats what is live (dreaming patch, 2026-10-25)
+// plus "news__*". Check the live lists before applying.
+{
+  agents: {
+    entries: {
+      // Default model (gpt-6-luna, Sonnet fallback) is inherited from agents.defaults.
+      news: {
+        name: "News",
+        workspace: "/home/openclaw/.openclaw/workspace-news",
+        sandbox: { mode: "all" },
+        tools: {
+          profile: "minimal",
+          alsoAllow: ["news__*"],
+          deny: [
+            "group:runtime", "group:fs", "group:web", "browser", "message", "image_generate", "sessions_spawn", "sessions_send",
+            "mail__*", "family__*", "brain__*", "desk__*", "jobs__*", "familygroup__*", "jobsgroup__*", "dreaming__*",
+          ],
+          elevated: { enabled: false },
+        },
+      },
+      henri: { tools: { deny: ["group:runtime", "group:fs", "browser", "image_generate", "sessions_spawn", "sessions_send", "mail__*", "familygroup__*", "jobsgroup__*", "news__*"] } },
+      main: { tools: { deny: ["mail__*", "family__*", "brain__*", "desk__*", "jobs__*", "familygroup__*", "jobsgroup__*", "dreaming__*", "news__*"] } },
+      email: {
+        tools: {
+          deny: ["group:runtime", "group:fs", "browser", "image_generate", "sessions_spawn", "sessions_send", "family__*", "brain__*", "desk__*", "jobs__*", "familygroup__*", "jobsgroup__*", "dreaming__*", "news__*"],
+        },
+      },
+      family: {
+        tools: {
+          deny: [
+            "group:runtime", "group:fs", "browser", "image_generate", "sessions_spawn", "sessions_send",
+            "brain__*", "mail__*", "desk__*", "family__*", "jobs__*", "dreaming__*", "news__*",
+          ],
+        },
+      },
+    },
+  },
+  mcp: {
+    servers: {
+      news: { command: "/home/openclaw/family-agent-run.sh", args: ["mcp", "news"] },
+    },
+  },
+  tools: { sandbox: { tools: { alsoAllow: ["mail__*", "family__*", "brain__*", "desk__*", "jobs__*", "familygroup__*", "jobsgroup__*", "dreaming__*", "news__*"] } } },
+}
