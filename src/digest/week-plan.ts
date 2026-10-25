@@ -5,7 +5,7 @@ import { addDays, daysBetween, localParts } from "../lib/time.js";
 import { esc } from "../notify/telegram.js";
 import { feesDue, openSignups, type MyClubSnapshot } from "../sources/myclub.js";
 import type { WilmaSnapshot } from "../sources/wilma.js";
-import { conflicts, mergeCrossCalendar, splitTitle, type HubEvent } from "./build.js";
+import { conflicts, localTitles, mergeCrossCalendar, splitTitle, type HubEvent } from "./build.js";
 
 // Henri's Sunday week planner: one private message from the Chief of staff
 // with what the coming week needs from him. Unlike the family group's week
@@ -27,6 +27,8 @@ export interface PlanBill {
   reference?: string;
   newBiller?: boolean;
   ibanChanged?: boolean;
+  /** When the bill email arrived or was found (ISO time); ages out bills without a due date. */
+  found?: string;
 }
 
 export interface WeekPlanInput {
@@ -82,11 +84,11 @@ function dueText(due: string, today: string): string {
   return `eräpäivä ${short(due)} (${rel})`;
 }
 
-/** Bills worth a line this week: due by the week's end (overdue up to a week), or found this week without a due date. */
+/** Bills worth a line this week: due by the week's end (overdue up to a week), or found in the last two weeks without a due date. */
 export function billsForWeek(bills: PlanBill[], today: string): PlanBill[] {
   const end = addDays(today, 7);
   return bills
-    .filter((b) => (b.due ? b.due <= end && b.due >= addDays(today, -7) : true))
+    .filter((b) => (b.due ? b.due <= end && b.due >= addDays(today, -7) : !b.found || b.found.slice(0, 10) >= addDays(today, -14)))
     .sort((x, y) => (x.due ?? "9999").localeCompare(y.due ?? "9999"));
 }
 
@@ -102,7 +104,7 @@ export function buildWeekPlan(inp: WeekPlanInput): string {
   const first = days[0];
   const last = days[6];
   const inWeek = (d?: string) => !!d && d >= first && d <= last;
-  const events = mergeCrossCalendar(inp.events).filter((e) => inWeek(e.date));
+  const events = localTitles(mergeCrossCalendar(inp.events), "fi").filter((e) => inWeek(e.date));
   const out: string[] = [];
   const section = (title: string, items: string[]) => {
     if (items.length) out.push(`${title}\n\n${items.join("\n\n")}`);
@@ -202,7 +204,8 @@ export function buildWeekPlan(inp: WeekPlanInput): string {
  */
 export function mergeBills(scanned: Bill[], desk: DeskItem[]): PlanBill[] {
   const out = new Map<string, PlanBill>();
-  for (const x of scanned) out.set(x.messageId, { messageId: x.messageId, biller: x.biller, amount: x.amount, due: x.dueDate, reference: x.reference, newBiller: x.newBiller });
+  for (const x of scanned)
+    out.set(x.messageId, { messageId: x.messageId, biller: x.biller, amount: x.amount, due: x.dueDate, reference: x.reference, newBiller: x.newBiller, found: x.foundAt || undefined });
   for (const it of desk) {
     const prev = out.get(it.messageId!);
     const domain = it.sender?.split("@")[1] ?? "tuntematon laskuttaja";
@@ -215,6 +218,7 @@ export function mergeBills(scanned: Bill[], desk: DeskItem[]): PlanBill[] {
       reference: it.reference ?? prev?.reference,
       newBiller: prev?.newBiller,
       ibanChanged: it.ibanChanged,
+      found: prev?.found ?? it.received,
     });
   }
   return [...out.values()];

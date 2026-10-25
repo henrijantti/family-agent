@@ -123,14 +123,40 @@ test("week plan: a quiet week says so, and a free week is all free evenings", ()
 
 test("week plan: desk bills fill in what the scan missed and are named by domain only", () => {
   const merged = mergeBills(
-    [{ messageId: "m1", biller: "Helen", sender: "lasku@helen.fi", subject: "Lasku", newBiller: false, foundAt: "x" }],
+    [{ messageId: "m1", biller: "Helen", sender: "lasku@helen.fi", subject: "Lasku", newBiller: false, foundAt: "2026-10-20T06:00:00Z" }],
     [
       { messageId: "m1", category: "bill", amount: "84.20", currency: "EUR", due: "2026-10-27", reference: "1232", sender: "lasku@helen.fi", fromPdf: true },
-      { messageId: "m9", category: "bill", amount: "10.00", currency: "EUR", sender: "billing@evil.example" },
+      { messageId: "m9", category: "bill", amount: "10.00", currency: "EUR", sender: "billing@evil.example", received: "2026-10-24T08:00:00Z" },
     ],
   );
   assert.deepEqual(merged, [
-    { messageId: "m1", biller: "Helen", amount: "84.20", currency: "EUR", due: "2026-10-27", reference: "1232", newBiller: false, ibanChanged: undefined },
-    { messageId: "m9", biller: "evil.example", amount: "10.00", currency: "EUR", due: undefined, reference: undefined, newBiller: undefined, ibanChanged: undefined },
+    { messageId: "m1", biller: "Helen", amount: "84.20", currency: "EUR", due: "2026-10-27", reference: "1232", newBiller: false, ibanChanged: undefined, found: "2026-10-20T06:00:00Z" },
+    { messageId: "m9", biller: "evil.example", amount: "10.00", currency: "EUR", due: undefined, reference: undefined, newBiller: undefined, ibanChanged: undefined, found: "2026-10-24T08:00:00Z" },
   ]);
+});
+
+test("week plan: Finnish only, no English sync markers; a bill without due date says so and ages out", () => {
+  const out = buildWeekPlan(
+    input({
+      events: [
+        ev("school", "Oskar: Lokakuun tiedote 2026 (from bulletin)", "2026-10-30"),
+        ev("school", "Oskar: Retki Nuuksioon (from bulletin)", "2026-10-28"),
+        ev("hobbies", "Oliver: PPJ: Harjoitus (not going)", "2026-10-27", "18:00", "19:00"),
+      ],
+      bills: [
+        { messageId: "b1", biller: "Bank Norwegian", amount: "170,29 €", found: "2026-10-23T07:00:00Z" },
+        { messageId: "b2", biller: "Vanha", amount: "5,00 €", found: "2026-09-01T07:00:00Z" },
+      ],
+      myclub: undefined,
+      wilma: undefined,
+      queue: [],
+      health: {},
+    }),
+  );
+  assert.doesNotMatch(out, /from bulletin|not going/);
+  assert.match(out, /Lokakuun tiedote 2026\n/);
+  assert.match(out, /Retki Nuuksioon \(tiedote\)/);
+  assert.match(out, /Harjoitus \(ei mene\)/);
+  assert.match(out, /• \*\*Bank Norwegian\*\* 170,29 €\n eräpäivä puuttuu/);
+  assert.doesNotMatch(out, /Vanha/);
 });

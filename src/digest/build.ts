@@ -149,6 +149,22 @@ export function mergeCrossCalendar(events: HubEvent[]): HubEvent[] {
   return [...out, ...fam.filter((f) => !dropped.has(f))].sort((x, y) => x.startMs - y.startMs);
 }
 
+/**
+ * Finnish output never shows the English markers the syncs put in calendar
+ * titles: "(from bulletin)" becomes "(tiedote)", or goes when the title already
+ * says tiedote; "(not going)" becomes "(ei mene)". "CANCELLED: " stays, it is
+ * rendered as "peruttu" where events are shown.
+ */
+export function fiTitle(title: string): string {
+  return title
+    .replace(/\s*\(from bulletin\)/i, (_m, off: number, all: string) => (/tiedote/i.test(all.slice(0, off)) ? "" : " (tiedote)"))
+    .replace(/\s*\(not going\)$/i, " (ei mene)");
+}
+
+export function localTitles(events: HubEvent[], lang: string): HubEvent[] {
+  return lang === "fi" ? events.map((e) => ({ ...e, title: fiTitle(e.title) })) : events;
+}
+
 function who(title: string): string | undefined {
   const m = title.match(/^(?:CANCELLED: )?([^:]{1,30}):/);
   return m?.[1];
@@ -166,7 +182,7 @@ export function isComingUp(title: string): boolean {
 /** Two timed events in different places overlapping: someone has to drive two places,
  * or one child is booked in two places at once. */
 export function conflicts(events: HubEvent[]): [HubEvent, HubEvent][] {
-  const timed = events.filter((e) => e.start && !/^CANCELLED/.test(e.title) && !/\(not going\)$/.test(e.title));
+  const timed = events.filter((e) => e.start && !/^CANCELLED/.test(e.title) && !/\((not going|ei mene)\)$/.test(e.title));
   const out: [HubEvent, HubEvent][] = [];
   for (let i = 0; i < timed.length; i++)
     for (let j = i + 1; j < timed.length; j++) {
@@ -204,7 +220,7 @@ function conflictLine([a, b]: [HubEvent, HubEvent], t: Labels, withDay = false):
 export function buildDigest(inp: DigestInput): string {
   const t = L[inp.cfg.digest.language] ?? L.en;
   const today = localParts(inp.now).date;
-  const events = mergeCrossCalendar(inp.events);
+  const events = localTitles(mergeCrossCalendar(inp.events), inp.cfg.digest.language);
   const out: string[] = [];
   const icons: Record<string, string> = { [t.needs]: "✅", [t.today]: "📅", [t.conflicts]: "🚗", [t.changed]: "🔄", [t.coming]: "🔜", [t.school]: "🏫", [t.status]: "🔧" };
   const section = (title: string, lines: string[], sep = "\n") => {
