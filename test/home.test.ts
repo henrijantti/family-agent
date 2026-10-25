@@ -190,3 +190,21 @@ test("a snoozed reminder stays quiet, then is told once more", async () => {
   clock.at = new Date("2026-11-04T08:00:00Z");
   assert.equal((await call(tools, "reminders_due", { mark: true })).json()[0].stage, "over1");
 });
+
+test("review fixes: update keeps repeat bounds, multi-day events fill their days, local-only papers reach Drive later", async () => {
+  const { dir, media, cal, tools } = setup();
+  const r = (await call(tools, "reminder_add", { kind: "upkeep", title: "Auto: huolto", due: "2026-11-20", everyMonths: 12 })).json();
+  assert.match((await call(tools, "reminder_update", { id: r.id, everyMonths: -1 })).text, /everyMonths must be 1-120/);
+  cal.seed("family", [{ id: "trip", summary: "Matka: Levi", start: { date: "2026-12-18" }, end: { date: "2026-12-24" } }]);
+  const xmas = (await call(tools, "holiday_plan", { months: 3 })).json().holidays[0];
+  for (const day of ["2026-12-19", "2026-12-21", "2026-12-23"]) assert.ok(!xmas.freeDays.includes(day), day);
+  assert.ok(xmas.freeDays.includes("2026-12-24"));
+  // Saved without Drive, then uploaded once Drive is there.
+  const file = join(dir, "home.json");
+  const offline = homeTools({ cfg: testConfig(), file, mediaDir: media, now: () => new Date("2026-10-25T08:00:00Z") });
+  writeFileSync(join(media, "b.pdf"), "%PDF-1.4 b");
+  assert.match((await call(offline, "paper_save", { media: "b.pdf", kind: "receipt", title: "Kuitti B" })).json().drive, /not signed in/);
+  const synced = (await call(tools, "paper_sync_drive", {})).json();
+  assert.equal(synced.uploaded, 1);
+  assert.equal((await call(tools, "paper_save", { media: "b.pdf", kind: "receipt", title: "x" })).json().drive, "saved");
+});

@@ -214,6 +214,12 @@ async function addReminder(d: HomeDeps, data: HomeData, a: Partial<Reminder> & {
   return r;
 }
 
+/** Repeat and lead limits, for add and update alike (a negative repeat would walk backwards). */
+function checkBounds(a: Record<string, unknown>) {
+  if (a.everyMonths !== undefined && ((a.everyMonths as number) < 1 || (a.everyMonths as number) > 120)) throw new ToolError("everyMonths must be 1-120");
+  if (a.remindDays !== undefined && ((a.remindDays as number) < 0 || (a.remindDays as number) > 365)) throw new ToolError("remindDays must be 0-365");
+}
+
 function find(data: HomeData, id: string): Reminder {
   const r = data.reminders.find((x) => x.id === id && x.status !== "removed");
   if (!r) throw new ToolError(`no reminder ${id}; reminder_list shows the ids`);
@@ -262,7 +268,35 @@ export function homeTools(d: HomeDeps): Tool[] {
     remindDays: { type: "integer" as const, description: "first reminder this many days before; default by kind: upkeep 30, birthday 14, document 60, contract 30, paper 14, other 7" },
     notes: { type: "string" as const, maxLength: 1000 },
   };
+  /** Uploads a paper that isn't on Drive yet; a paper saved before sign-in or during an outage gets there later. */
+  const toDrive = async (data: HomeData, p: Paper, buf: Buffer): Promise<string> => {
+    if (p.driveFileId) return "saved";
+    if (!d.drive) return "not signed in to Drive yet: kept on the server only";
+    try {
+      data.driveFolderId ??= await d.drive.createFolder("Perheen paperit");
+      const up = await d.drive.upload(data.driveFolderId, `${p.date ?? p.savedAt.slice(0, 10)} ${p.title}.${p.file.split(".").pop()}`, p.mime, buf);
+      p.driveFileId = up.id;
+      p.driveLink = up.link;
+      const r = data.reminders.find((x) => x.id === p.reminderId);
+      if (r && !r.notes) r.notes = `Paperi: ${up.link}`;
+      return "saved";
+    } catch (e) {
+      return `failed: ${(e as Error).message}; kept on the server`;
+    }
+  };
   return [
+    {
+      name: "paper_sync_drive",
+      description: "Upload every saved paper that is still only on the server (saved before Drive sign-in, or when an upload failed). Use after Henri has signed Drive in, or when paper_save said the upload failed.",
+      input: { properties: {} },
+      async run() {
+        return change(d, async (data) => {
+          const out = [];
+          for (const p of data.papers.filter((x) => !x.driveFileId)) out.push({ id: p.id, title: p.title, drive: await toDrive(data, p, readFileSync(join(dirname(d.file), p.file))) });
+          return { uploaded: out.filter((x) => x.drive === "saved").length, papers: out };
+        });
+      },
+    },
     {
       name: "reminder_add",
       description:
@@ -278,8 +312,7 @@ export function homeTools(d: HomeDeps): Tool[] {
         required: ["kind", "title", "due"],
       },
       async run(a) {
-        if (a.everyMonths !== undefined && ((a.everyMonths as number) < 1 || (a.everyMonths as number) > 120)) throw new ToolError("everyMonths must be 1-120");
-        if (a.remindDays !== undefined && ((a.remindDays as number) < 0 || (a.remindDays as number) > 365)) throw new ToolError("remindDays must be 0-365");
+        checkBounds(a);
         return change(d, async (data) => view(d, await addReminder(d, data, a as never, a.calendar !== false)));
       },
     },
@@ -307,6 +340,7 @@ export function homeTools(d: HomeDeps): Tool[] {
       description: "Change a reminder: only the fields given change. The calendar event moves with it.",
       input: { properties: { id: { type: "string", maxLength: 40 }, ...reminderFields }, required: ["id"] },
       async run(a) {
+        checkBounds(a);
         return change(d, async (data) => {
           const r = find(data, a.id as string);
           for (const k of ["title", "due", "everyMonths", "remindDays", "notes"] as const) if (a[k] !== undefined) (r as unknown as Record<string, unknown>)[k] = a[k];
@@ -421,7 +455,7 @@ export function homeTools(d: HomeDeps): Tool[] {
         const sha256 = createHash("sha256").update(buf).digest("hex");
         return change(d, async (data) => {
           const same = data.papers.find((p) => p.sha256 === sha256);
-          if (same) return { status: "already saved", paper: same };
+          if (same) return { status: "already saved", drive: await toDrive(data, same, buf), paper: same };
           const id = newId("p");
           const year = ((a.date as string) ?? today(d)).slice(0, 4);
           const rel = `papers/${year}/${id}-${slug(a.title as string)}.${ext}`;
@@ -442,18 +476,7 @@ export function homeTools(d: HomeDeps): Tool[] {
             sha256,
             savedAt: d.now().toISOString(),
           };
-          let drive = "not signed in to Drive yet: kept on the server only";
-          if (d.drive) {
-            try {
-              data.driveFolderId ??= await d.drive.createFolder("Perheen paperit");
-              const up = await d.drive.upload(data.driveFolderId, `${p.date ?? year} ${p.title}.${ext}`, mime, buf);
-              p.driveFileId = up.id;
-              p.driveLink = up.link;
-              drive = "saved";
-            } catch (e) {
-              drive = `failed: ${(e as Error).message}; kept on the server`;
-            }
-          }
+          const drive = await toDrive(data, p, buf);
           if (p.expires) {
             const r = await addReminder(d, data, {
               kind: "paper",
@@ -504,7 +527,7 @@ export function homeTools(d: HomeDeps): Tool[] {
           const dow = (x: string) => new Date(`${x}T12:00:00Z`).getUTCDay();
           const from = dow(h.from) === 1 ? addDays(h.from, -2) : h.from;
           const to = dow(h.to) === 5 ? addDays(h.to, 2) : h.to;
-          const events: { calendar: string; date: string; title: string; start: string }[] = [];
+          const events: { calendar: string; date: string; end?: string; title: string; start: string }[] = [];
           if (d.calendar && daysBetween(from, to) <= 62) {
             for (const which of ["family", "school", "hobbies"] as const) {
               const id = calId(d.cfg, which);
@@ -512,11 +535,15 @@ export function homeTools(d: HomeDeps): Tool[] {
               const evs = await d.calendar.list(id, { timeMin: localIso(from, "00:00"), timeMax: localIso(addDays(to, 1), "00:00") });
               for (const e of evs.filter((x) => x.status !== "cancelled")) {
                 const start = "date" in e.start ? e.start.date : e.start.dateTime;
-                events.push({ calendar: which, date: "date" in e.start ? e.start.date : localParts(new Date(e.start.dateTime)).date, title: e.summary ?? "", start });
+                const first = "date" in e.start ? e.start.date : localParts(new Date(e.start.dateTime)).date;
+                // All-day ends are exclusive; a timed event ending at midnight doesn't take the next day.
+                const last = "date" in e.end ? addDays(e.end.date, -1) : localParts(new Date(Date.parse(e.end.dateTime) - 1)).date;
+                events.push({ calendar: which, date: first, end: last > first ? last : undefined, title: e.summary ?? "", start });
               }
             }
           }
-          const busy = new Set(events.map((e) => e.date));
+          // Every day an event covers counts, also for trips that started before the holiday.
+          const busy = new Set(events.flatMap((e) => Array.from({ length: daysBetween(e.date, e.end ?? e.date) + 1 }, (_, i) => addDays(e.date, i))));
           const days = Array.from({ length: daysBetween(from, to) + 1 }, (_, i) => addDays(from, i));
           out.push({
             name: h.name,

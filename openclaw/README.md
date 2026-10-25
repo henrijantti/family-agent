@@ -396,7 +396,7 @@ The family bot reads photos and PDFs too (`openclaw/workspace-family/AGENTS.md`)
 | Tools (in the `family` server, not in `--group`) | Code |
 | --- | --- |
 | `reminder_add`, `reminder_list`, `reminder_update`, `reminder_done`, `reminder_remove`, `reminders_due` | src/agent/home.ts |
-| `paper_save`, `paper_list` | src/agent/home.ts, src/lib/drive-user.ts |
+| `paper_save`, `paper_list`, `paper_sync_drive` | src/agent/home.ts, src/lib/drive-user.ts |
 | `holiday_plan` (config `school_holidays`, Helsinki schools) | src/agent/home.ts |
 
 Guarantees in code:
@@ -421,7 +421,8 @@ Deploy (server thread):
 2. Copy `openclaw/workspace/AGENTS.md` to `~/.openclaw/workspace-henri/` and
    `openclaw/workspace-family/AGENTS.md` to `~/.openclaw/workspace-family/`
 3. Restart the gateway, wait until `cron list` answers, `openclaw mcp doctor family --probe`
-   (lists the 9 new tools) and `familygroup --probe` (none of them)
+   (lists the 11 new tools and `capability_missing`) and `familygroup --probe` (only
+   `capability_missing` is new there)
 4. Cron jobs on agent `henri`, delivered to Henri's DM, times Helsinki:
 
 | Name | When | Prompt |
@@ -440,7 +441,8 @@ Deploy (server thread):
    and secret from the laptop with `ssh -t root@<server> save-secret GOOGLE_OAUTH_CLIENT_ID` (and `GOOGLE_OAUTH_CLIENT_SECRET`), run
    `~/family-agent-run.sh drive-login` and enter the code at google.com/device. A
    Testing-mode refresh token expires after 7 days; publish the app (no review needed
-   for drive.file) to keep it
+   for drive.file) to keep it. Then ask the Chief of staff "Drive on kunnossa": it runs
+   `paper_sync_drive` for papers saved before
 7. Smoke test in the Chief of staff chat: "katsastus 20.11. joka vuosi", "mitä
    huoltoja on tulossa?", a photo of a receipt with "tallenna tämä", a PDF of a game
    schedule, "mitä tehdään hiihtolomalla?"
