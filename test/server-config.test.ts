@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
@@ -40,4 +40,16 @@ test("laptop permission templates parse and keep the hard denies", () => {
   const user = JSON.parse(readFileSync(join(SERVER, "laptop", "user-automode.json"), "utf8"));
   assert.deepEqual(Object.keys(user), ["autoMode"]);
   assert.ok(user.autoMode.hard_deny.length > 1);
+});
+
+// OpenClaw truncates a workspace bootstrap file over 20,000 characters in the injected
+// context, so the end of an agent's instructions would silently go missing.
+test("every workspace AGENTS.md stays under OpenClaw's 20,000 character limit", () => {
+  const root = join(ROOT, "openclaw");
+  for (const dir of readdirSync(root).filter((d) => d.startsWith("workspace"))) {
+    const f = join(root, dir, "AGENTS.md");
+    if (!existsSync(f)) continue;
+    const n = [...readFileSync(f, "utf8")].length;
+    assert.ok(n <= 19500, `${dir}/AGENTS.md is ${n} characters, keep it under 19,500`);
+  }
 });
