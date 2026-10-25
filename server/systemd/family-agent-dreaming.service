@@ -1,0 +1,13 @@
+# systemd USER unit for the openclaw user: the family bot's week for the Sunday review.
+# Reads agent `family`'s sessions through the gateway and saves the findings to
+# ~/family-agent/state/dreaming/; the Chief of staff's "Family bot review" cron reads them.
+[Unit]
+Description=Family bot weekly review: export findings
+After=network-online.target openclaw-gateway.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=%h/family-agent-run.sh dreaming export
+TimeoutStartSec=10min
+Nice=10
