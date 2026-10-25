@@ -26,7 +26,7 @@ export interface Ctx {
   log: (s: string) => void;
 }
 
-const familyChat = () => env("TELEGRAM_FAMILY_CHAT_ID");
+export const familyChat = () => env("TELEGRAM_FAMILY_CHAT_ID");
 const privateChat = () => env("TELEGRAM_PRIVATE_CHAT_ID");
 
 export function calId(cfg: Config, which: "family" | "school" | "hobbies") {
@@ -156,6 +156,8 @@ export async function collectHub(ctx: Ctx, days: number): Promise<HubEvent[]> {
     try {
       const evs = await ctx.calendar.list(id, { timeMin: fromLocal(today).toISOString(), timeMax: fromLocal(addDays(today, days + 1)).toISOString() });
       out.push(...evs.filter((e) => e.status !== "cancelled").map((e) => toHubEvent(e, which)));
+      // Clear an earlier failure, or the digest and dashboard keep warning about it.
+      if (ctx.state.health[`Google calendar (${which})`]) ok(ctx, `Google calendar (${which})`, evs.length);
     } catch (e) {
       fail(ctx, `Google calendar (${which})`, e);
     }

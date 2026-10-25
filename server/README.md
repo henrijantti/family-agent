@@ -58,6 +58,22 @@ To move back to GitHub: stop the timer, push the server's state.json to the
 `state` branch, then `gh workflow enable tick.yml`. Never run both at once:
 they share one Telegram bot and one state.
 
+## Family dashboard (pinned picture)
+
+`src/dashboard` draws the family dashboard (Kunto design) as a PNG and keeps it
+pinned in the family group: the 15-minute tick re-renders it only when the
+content changed and edits the pinned message in place (no notification). It
+needs headless Chromium on the server. To switch it on (server thread):
+
+1. As user openclaw: `cd ~/family-agent && npx -y playwright@1.63.0 install chromium`
+   (root once for the system libraries: `npx -y playwright@1.63.0 install-deps chromium`).
+   The renderer finds Playwright's Chromium in `~/.cache/ms-playwright`, or use `CHROME_BIN`
+2. Check: `~/family-agent-run.sh dashboard --png /tmp/dash.png` and look at the picture
+3. @Family_fff_bot must be a group admin with "Pin messages"
+4. `~/family-agent-run.sh dashboard --send` posts and pins the first one (the group sees
+   one "pinned a photo" line), then set `dashboard.enabled: true` in config.yaml
+5. Memory: Chromium runs about 1–2 s per changed picture, a few times a day
+
 ## Backups
 
 Every night at 02:30 the server packs the OpenClaw backup (`openclaw backup

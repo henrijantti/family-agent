@@ -58,6 +58,19 @@ myclub:
 # in MyClub and declines the rest, then posts what it did. A poll nobody
 # answered changes nothing. `live: false` = report only, until the MyClub
 # sign-up step has been checked against the real pages.
+# Family dashboard: one picture pinned in the family group (Kunto design), edited
+# in place by the 15-minute tick whenever the calendars change. Needs Chromium on
+# the server (CHROME_BIN or Playwright's) and the bot as group admin with "Pin
+# messages". Off until the server thread has installed Chromium and sent the
+# first one with `dashboard --send`.
+dashboard:
+  enabled: false
+  # Henri's copy in Claude (artifact "Perheen viikko"): the page also goes to this
+  # Drive file, "Perhe-dashboard.html" in janttiho@gmail.com's Drive, shared with
+  # the service account as editor (2026-10-25). Needs the Drive API enabled in the
+  # Google Cloud project.
+  drive_file_id: 1yq_LTx-NVSEy37UB4rs_T8CdaYGtGF84
+
 # Jobs the OpenClaw agents run instead of the 15-minute tick (openclaw/README.md
 # "Moving the jobs to OpenClaw"). Step 3, 2026-10-25: attendance moved to agent
 # `family` with inline buttons in the family group.

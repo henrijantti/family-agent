@@ -25,6 +25,26 @@ function b64url(s: string | Buffer) {
   return Buffer.from(s).toString("base64url");
 }
 
+/** An access token for the service account (JWT bearer grant), for one scope. */
+export async function serviceAccountToken(key: ServiceAccountKey, scope: string): Promise<{ value: string; exp: number }> {
+  const now = Math.floor(Date.now() / 1000);
+  const aud = key.token_uri ?? "https://oauth2.googleapis.com/token";
+  const header = b64url(JSON.stringify({ alg: "RS256", typ: "JWT" }));
+  const claims = b64url(JSON.stringify({ iss: key.client_email, scope, aud, iat: now, exp: now + 3600 }));
+  const sig = createSign("RSA-SHA256").update(`${header}.${claims}`).sign(key.private_key);
+  const res = await fetch(aud, {
+    method: "POST",
+    headers: { "content-type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer",
+      assertion: `${header}.${claims}.${b64url(sig)}`,
+    }),
+  });
+  if (!res.ok) throw new CalendarHttpError(res.status, `Google token: ${await res.text()}`);
+  const j = (await res.json()) as { access_token: string; expires_in: number };
+  return { value: j.access_token, exp: Date.now() + j.expires_in * 1000 };
+}
+
 export class GoogleCalendar implements CalendarApi {
   private token?: { value: string; exp: number };
   constructor(private key: ServiceAccountKey) {}
@@ -39,23 +59,8 @@ export class GoogleCalendar implements CalendarApi {
 
   private async accessToken(): Promise<string> {
     if (this.token && this.token.exp > Date.now() + 60_000) return this.token.value;
-    const now = Math.floor(Date.now() / 1000);
-    const aud = this.key.token_uri ?? "https://oauth2.googleapis.com/token";
-    const header = b64url(JSON.stringify({ alg: "RS256", typ: "JWT" }));
-    const claims = b64url(JSON.stringify({ iss: this.key.client_email, scope: SCOPE, aud, iat: now, exp: now + 3600 }));
-    const sig = createSign("RSA-SHA256").update(`${header}.${claims}`).sign(this.key.private_key);
-    const res = await fetch(aud, {
-      method: "POST",
-      headers: { "content-type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({
-        grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer",
-        assertion: `${header}.${claims}.${b64url(sig)}`,
-      }),
-    });
-    if (!res.ok) throw new CalendarHttpError(res.status, `Google token: ${await res.text()}`);
-    const j = (await res.json()) as { access_token: string; expires_in: number };
-    this.token = { value: j.access_token, exp: Date.now() + j.expires_in * 1000 };
-    return j.access_token;
+    this.token = await serviceAccountToken(this.key, SCOPE);
+    return this.token.value;
   }
 
   private async call<T>(method: string, path: string, body?: unknown): Promise<T> {

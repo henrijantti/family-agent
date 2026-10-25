@@ -1,0 +1,1 @@
+`manrope-latin.woff2`: Manrope variable font (weights 200–800, Latin subset incl. å ä ö) from Google Fonts, SIL Open Font License 1.1. Inlined into the family dashboard picture (src/dashboard) so rendering needs no network.

@@ -22,6 +22,8 @@ import { brainDepsFromEnv, brainTools } from "./agent/brain.js";
 import { mailTools } from "./agent/mail-tools.js";
 import { deskTools, deskWorkerTools, wakeFromEnv } from "./agent/desk.js";
 import { weekPlan } from "./digest/week-plan.js";
+import { buildDashboard, runDashboard } from "./dashboard/run.js";
+import { screenshot } from "./dashboard/shot.js";
 import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -159,6 +161,15 @@ async function main() {
         const fresh = store();
         const ctx = buildCtx(cfg, fresh, now);
         await tick(ctx, force);
+        // The pinned dashboard follows the calendars; a failure here never fails the tick.
+        if (cfg.dashboard?.enabled && !force) {
+          try {
+            const r = await runDashboard(ctx);
+            if (r !== "unchanged") log(`dashboard ${r}`);
+          } catch (e) {
+            log(`dashboard failed: ${e instanceof Error ? e.message : e}`);
+          }
+        }
         fresh.save();
       });
       break;
@@ -538,6 +549,29 @@ async function main() {
       }
       break;
     }
+    case "dashboard": {
+      // dashboard [--html file] [--png file]   writes the page / picture from live data, sends nothing
+      // dashboard --send                       sends or updates the pinned picture in the family group now
+      const opt = (name: string) => args[args.indexOf(name) + 1];
+      if (args.includes("--send")) {
+        await withLock(env("STATE_FILE") ?? "state/state.json", async () => {
+          const fresh = store();
+          log(`dashboard ${await runDashboard(buildCtx(cfg, fresh, now), { force: true })}`);
+          fresh.save();
+        });
+        break;
+      }
+      const ctx = buildCtx(cfg, st, now);
+      if (isMock()) await tick(ctx, ["myclub", "wilma"]); // fill the fake calendars from the fixtures
+      const d = await buildDashboard(ctx);
+      const html = args.includes("--html") ? opt("--html") : undefined;
+      const png = args.includes("--png") ? opt("--png") : undefined;
+      if (html) writeFileSync(html, d.html);
+      if (png) writeFileSync(png, await screenshot(d.html));
+      if (!html && !png) console.log(d.html);
+      else log(`dashboard written${html ? ` ${html}` : ""}${png ? ` ${png}` : ""} (content hash ${d.hash})`);
+      break;
+    }
     case "digest": {
       const ctx = buildCtx(cfg, st, now);
       await runDigest(ctx, args.includes("--week"));
@@ -547,6 +581,7 @@ async function main() {
     default:
       console.log(`Commands:
   tick [--force=myclub,outlook,wilma,digest,week-ahead]   run whatever is due now (Helsinki time)
+  dashboard [--html f] [--png f] | --send   family dashboard picture; --send posts/updates the pinned one now
   demo                     full run on fixtures, prints the digest (no logins)
   check                    which secrets are set, and whether the schedule covers every slot
   calendar-smoke           read the 3 calendars, write + remove a test event
