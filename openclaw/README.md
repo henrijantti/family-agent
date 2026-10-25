@@ -346,8 +346,10 @@ Guarantees in code (src/agent/news.ts):
 - The agent never writes a link: it picks items by id and `news_publish` adds the
   article URL, which must be https on kauppalehti.fi, hs.fi or ft.com (tracking
   parameters dropped)
-- Its lines are plain one-line text, at most 240 characters, no links, handles or
-  markup. At most 8 items, one brief per Helsinki day, only to Henri's chat with the
+- The agent gives each story a topic from a fixed list, a headline (at most 90
+  characters) and one line (at most 200), plain text with no links, handles or
+  markup. Emojis, theme headings, grouping and bold come from code (2026-10-25,
+  Henri asked for a more visual brief). At most 8 items, one brief per Helsinki day, only to Henri's chat with the
   Chief of staff bot (`~/.secrets/telegram-assistant-bot.token`, `~/.secrets/health-chat-id`)
 - The server process drops every other secret from its environment
 - What Henri was offered is kept for 14 days in `state/news/sent.jsonl`, so a story
