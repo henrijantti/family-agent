@@ -6,6 +6,9 @@ import { randomBytes } from "node:crypto";
 // other people (a list: they are asked to reply).
 // Built here from calendar data only; the Email agent never writes its text.
 
+/** A plain email address, as invitations take them (lower case). */
+export const EMAIL = /^[^\s@<>",;]{1,64}@[a-z0-9.-]{1,190}\.[a-z]{2,}$/;
+
 export interface Invite {
   title: string;
   /** Timed: ISO with offset. All-day: YYYY-MM-DD. */

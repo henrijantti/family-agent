@@ -46,7 +46,7 @@ export interface DeskTask {
   invite?: Invite;
   /** work_invite: which event it came from, "<calendar>:<event id>". */
   source?: string;
-  /** calendar_invite: who Henri wants invited, as he said it (names or addresses). */
+  /** calendar_invite: the email addresses Henri gave. */
   attendees?: string[];
   at: string;
 }
@@ -101,29 +101,6 @@ export function openTasks(file: string): DeskTask[] {
   return all.filter((r): r is DeskTask => r.type === "task" && !done.has(r.taskId));
 }
 
-/**
- * Calendar invitations the Email agent couldn't address (reported failed, not_found)
- * in the last 7 days and has made no draft for since: Henri was asked for the
- * address, and gives it in the mail bot chat.
- */
-export function invitesWaitingForAddress(file: string, now: Date, draftsFile: string): DeskTask[] {
-  const all = rows(file);
-  const notFound = new Set(all.filter((r): r is DeskReport => r.type === "report" && r.status === "failed" && r.failure === "not_found").map((r) => r.taskId));
-  const drafted = new Set(
-    existsSync(draftsFile)
-      ? readFileSync(draftsFile, "utf8")
-          .split("\n")
-          .filter(Boolean)
-          .map((l) => JSON.parse(l) as { draftId: string; messageId?: string })
-          .filter((r) => r.messageId?.startsWith("calinvite:") && !findDraft(draftsFile, r.draftId)?.discardedAt)
-          .map((r) => r.messageId!.slice("calinvite:".length))
-      : [],
-  );
-  return all.filter(
-    (r): r is DeskTask => r.type === "task" && r.kind === "calendar_invite" && notFound.has(r.taskId) && !drafted.has(r.taskId) && now.getTime() - Date.parse(r.at) < 7 * 86400000,
-  );
-}
-
 const newId = (now: Date) => `t${now.toISOString().slice(0, 10).replace(/-/g, "")}-${Math.random().toString(36).slice(2, 8).padEnd(6, "0")}`;
 
 /**
@@ -144,9 +121,9 @@ export function queueWorkInvite(file: string, invite: Invite, source: string, no
 
 /**
  * Queue one calendar invitation to other people (Henri, 2026-10-26). The family tools
- * call this with event data read from the calendar and the attendees as Henri named
- * them. The Email agent finds their addresses and makes a draft with
- * mail_calendar_invite; it goes only when Henri says send and taps Allow.
+ * call this with event data read from the calendar and the email addresses Henri
+ * gave. The Email agent makes a draft to exactly those with mail_calendar_invite; it
+ * goes only when Henri says send and taps Allow.
  */
 export function queueCalendarInvite(file: string, invite: Invite, attendees: string[], source: string, now: Date, wake?: () => void): string {
   const open = openTasks(file);
@@ -246,12 +223,10 @@ export function deskWorkerTools(d: DeskWorkerDeps): Tool[] {
       description:
         "Tasks the Chief of staff has given you, oldest first. Do each with your mail tools, then answer it with desk_report. " +
         "work_invite: call mail_work_invite with its taskId (it sends the invitation, no Allow card), then desk_report done with its draftId, or failed with error. " +
-        "calendar_invite: find each attendee's address with mail_contacts, call mail_calendar_invite with the taskId and the addresses (it saves a draft, sends nothing), then desk_report done with its draftId; a name you can't match to one address: failed, not_found, and ask Henri. " +
-        "waitingForAddress: Henri was already asked; only when he gives the address in the chat, call mail_calendar_invite with it (no report).",
+        "calendar_invite: call mail_calendar_invite with its taskId (it saves a draft to the addresses Henri gave, sends nothing), then desk_report done with its draftId.",
       input: { properties: {} },
       async run() {
-        const waiting = invitesWaitingForAddress(d.file, d.now(), d.draftsFile).map(({ type: _t, ...t }) => ({ ...t, waitingForAddress: true }));
-        return [...openTasks(d.file).map(({ type: _t, ...t }) => t), ...waiting];
+        return openTasks(d.file).map(({ type: _t, ...t }) => t);
       },
     },
     {
