@@ -61,7 +61,8 @@ function decode(s: string) {
   });
 }
 
-const SKIP = new Set(["script", "style", "noscript", "svg", "template", "head"]);
+// Not "head": its end tag is optional, and what it holds is either void (meta, link), the title, or skipped here anyway.
+const SKIP = new Set(["script", "style", "noscript", "svg", "template"]);
 const BLOCK = new Set(["p", "div", "section", "article", "header", "footer", "li", "ul", "ol", "tr", "table", "h1", "h2", "h3", "h4", "h5", "h6", "dt", "dd", "blockquote", "pre", "main", "nav", "br", "hr"]);
 
 /** Index of the next `needle` (letters, "<" and "/" only) at or after `from`, any case, or -1. One linear scan. */
@@ -106,12 +107,6 @@ export function htmlText(html: string): { title?: string; text: string } {
       const e = findCi(html, `</${name}`, i);
       const inner = html.slice(i, e < 0 ? html.length : e);
       if (name === "title") title ??= inner;
-      else if (name === "head" && title === undefined) {
-        const t = findCi(inner, "<title", 0);
-        const tg = t < 0 ? -1 : inner.indexOf(">", t);
-        const te = tg < 0 ? -1 : findCi(inner, "</title", tg);
-        if (te >= 0) title = inner.slice(tg + 1, te);
-      }
       if (e < 0) break;
       const ce = html.indexOf(">", e);
       if (ce < 0) break;

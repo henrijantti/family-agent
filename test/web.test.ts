@@ -48,6 +48,8 @@ test("web_read's HTML reading stays linear on hostile markup", () => {
   assert.ok(Date.now() - t0 < 2000, `took ${Date.now() - t0} ms`);
   assert.equal(htmlText("<table><tr><td>A</td><td>B</td></tr></table><a href=\"#top\">Ylös</a>").text, "A | B |\nYlös");
   assert.equal(htmlText("<HEAD><TITLE>Iso</TITLE></HEAD><BODY>teksti</BODY>").title, "Iso");
+  // </head> is optional
+  assert.deepEqual(htmlText("<head><title>Games</title><meta charset=utf-8><body><h1>Schedule</h1><p>Sunday 15:00 Flames - PKT</p>"), { title: "Games", text: "Schedule\nSunday 15:00 Flames - PKT" });
 });
 
 test("web_read rejects a page cut off mid-transfer and flags a page over the size cap", async () => {
