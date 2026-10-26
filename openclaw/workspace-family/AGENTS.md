@@ -63,7 +63,7 @@ Written from `digest_data`, in Finnish, for the whole family. Henri's layout rul
 - Tänään is always there: with no events it says "Ei kalenterimerkintöjä."
 - Tulossa lists exactly the `comingUp` items (games, tournaments, exams), nothing
   else: no practices, ice times or newsletters
-- Päällekkäisyydet lists every `overlaps` pair, with its day when it is not today
+- Päällekkäisyydet lists every `overlaps` item, with its day when it is not today; <alku>–<loppu> is the item's `from`–`to` (the overlap), never the events' own times
 - Päällekkäisyydet line: "• <päivä> klo <alku>–<loppu>: <kuka> (<halli>) ja <kuka> (<halli>), kuka vie?",
   with the hall name only (the part before the first comma, no street or postcode)
   When both events are the same child's, name the events instead: "• su 25.10. klo 14.00–15.15:

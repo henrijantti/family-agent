@@ -88,7 +88,7 @@ Henri's layout rules, all of them:
 - Tänään is always there: with no events it says "Ei kalenterimerkintöjä."
 - Tulossa lists exactly the `comingUp` items (games, tournaments, exams), nothing
   else: no practices, ice times or newsletters
-- Päällekkäisyydet lists every `overlaps` pair, with its day when it is not today
+- Päällekkäisyydet lists every `overlaps` item, with its day when it is not today; <alku>–<loppu> is the item's `from`–`to` (the overlap), never the events' own times
 - Päällekkäisyydet line: "• <päivä> klo <alku>–<loppu>: <kuka> (<halli>) ja <kuka> (<halli>), kuka vie?",
   with the hall name only (the part before the first comma, no street or postcode)
   Both the same child's: name the events instead of the child twice.
@@ -149,7 +149,7 @@ Offer Henri one-tap actions for the day. Call `digest_data` (kind daily), `remin
 and `school_info`. Then send ONE message with the `message` tool: a short line per
 item that needs a decision, each with its buttons. A button has only `label` and
 `value` (never an `action` field); the value is `am|<what>|<n or id>`.
-- Driving clash (`overlaps`): "ti klo 17.00: Oliver (Ruukinlahden halli) ja Oskar
+- Driving clash (`overlaps`, time = its `from`–`to`): "ti klo 17.00–17.30: Oliver (Ruukinlahden halli) ja Oskar
   (Matinkylä 4), kuka vie?" Buttons "🙋 Minä vien" `am|me|<n>`, "📣 Kysy Annalta"
   `am|ask|<n>` (n = the clash's number in your message)
 - Bill due within 3 days (`billsToday`): biller, amount, due date, reference. Button
