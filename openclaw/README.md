@@ -194,8 +194,9 @@ Deploy (server thread):
    address; env only, never in the repo) where `family-agent-run.sh` loads its env. Then
    `work_calendar_invite` (family servers, also the group copy) queues a `work_invite`
    desk task from a calendar event, and the Email agent's `mail_work_invite` drafts the
-   meeting request (MIME built by code) to that address only; `mail_send` sends it on
-   Henri's Allow. Reinstall the mail-approval plugin for the 📅 card title
+   meeting request (MIME built by code) to that address only and sends it without the
+   Allow card (Henri, 2026-10-26: invitations only; every other email still needs Allow).
+   `MAIL_DESK_WAKE` makes the pickup immediate
 6. Probe: `openclaw mcp doctor desk --probe`; in the Chief of staff chat ask
    "montako sähköpostia odottaa vastaustani?", then check the mail bot answered the task
 

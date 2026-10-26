@@ -1,9 +1,10 @@
-import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
+import { randomBytes } from "node:crypto";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { htmlToText, type MailMessage } from "../sources/outlook.js";
 import { MAX_PDF_BYTES, readBillPdf, type BillFields } from "../sources/bill-pdf.js";
 import { Tool, ToolError } from "./mcp.js";
-import { inviteMime } from "./invite.js";
+import { inviteMime, type Invite } from "./invite.js";
 import { openTasks } from "./desk.js";
 
 // Tools for the Email agent, an OpenClaw agent of its own that gets only these.
@@ -18,6 +19,9 @@ import { openTasks } from "./desk.js";
 // and mail_send refuses a draft without a fresh, unused approval there, so it
 // fails closed if the plugin is missing. So an email that talks the agent into
 // something can at most get a reply, approved by Henri, back to its own sender.
+// One exception (Henri, 2026-10-26): mail_work_invite sends a calendar invitation
+// built by code from a family calendar event, without the Allow card, and only to
+// Henri's own work address (WORK_INVITE_TO).
 //
 // Email text is untrusted and handed back marked as such.
 
@@ -171,6 +175,63 @@ async function folderId(d: MailDeps, name: string): Promise<{ id: string; name: 
   if (!f) throw new ToolError(`no folder "${name}"; use mail_folders, or mail_create_folder first`);
   if (FORBIDDEN_FOLDERS.some((k) => special[k] === f.id)) throw new ToolError(`moving mail to ${f.displayName} is not allowed`);
   return { id: f.id, name: f.displayName };
+}
+
+const alive = (pid: number) => {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (e) {
+    return (e as NodeJS.ErrnoException).code === "EPERM";
+  }
+};
+
+/** An exclusive claim file holding "<pid> <token>". A claim stays while its process lives,
+ *  however long the run takes. A dead process's claim is removed only under a second claim,
+ *  `<file>.recover`, so no two runs ever remove or replace one at the same time. Returns the
+ *  release, or undefined when a live run holds the claim. Release removes the file only while it
+ *  is still ours. */
+export function claim(file: string): (() => void) | undefined {
+  mkdirSync(dirname(file), { recursive: true });
+  const mine = `${process.pid} ${randomBytes(8).toString("hex")}`;
+  const take = () => {
+    try {
+      writeFileSync(file, mine, { flag: "wx", mode: 0o600 });
+      return true;
+    } catch {
+      return false;
+    }
+  };
+  const read = (f: string) => {
+    try {
+      return readFileSync(f, "utf8");
+    } catch {
+      return undefined;
+    }
+  };
+  if (take()) return release;
+  const held = read(file);
+  if (held === undefined) return take() ? release : undefined;
+  if (alive(Number(held.split(" ")[0]))) return undefined;
+  // The owner died. Recovery is synchronous and takes microseconds; a recover claim left by a
+  // process killed inside it is refused rather than guessed about (remove it by hand).
+  const recover = `${file}.recover`;
+  try {
+    writeFileSync(recover, mine, { flag: "wx", mode: 0o600 });
+  } catch {
+    return undefined;
+  }
+  try {
+    // Only a recovery removes someone else's claim, and we hold the recovery, so what we read
+    // now is what we remove.
+    if (read(file) === held) unlinkSync(file);
+    return take() ? release : undefined;
+  } finally {
+    unlinkSync(recover);
+  }
+  function release() {
+    if (read(file) === mine) unlinkSync(file);
+  }
 }
 
 export function mailTools(d: MailDeps): Tool[] {
@@ -375,43 +436,65 @@ export function mailTools(d: MailDeps): Tool[] {
       },
     );
   }
-  if (d.workInvite && d.mail.createMimeDraft && d.self[0]) {
+  if (d.workInvite && d.mail.createMimeDraft && d.mail.sendDraft && d.self[0]) {
     const w = d.workInvite;
     const create = d.mail.createMimeDraft.bind(d.mail);
+    const send = d.mail.sendDraft.bind(d.mail);
     const from = d.self[0];
     tools.push({
       name: "mail_work_invite",
       description:
-        "Make the calendar invitation for one work_invite desk task as a draft from Henri's Outlook to his work address. The email is built from the task's event; you write nothing. Then mail_send the draftId.",
+        "Send the calendar invitation for one work_invite desk task from Henri's Outlook to his work address. The email is built from the task's event; you write nothing. No Allow card: Henri allowed these invitations (only to his work address) without one.",
       input: { properties: { taskId: { type: "string", pattern: "^t[0-9]{8}-[0-9a-z]{6}$" } }, required: ["taskId"] },
       async run(a) {
         const task = openTasks(w.deskFile).find((t) => t.taskId === a.taskId && t.kind === "work_invite");
         if (!task?.invite) throw new ToolError("no open work_invite task with that id");
-        const messageId = `invite:${task.taskId}`;
-        const earlier = lines<DraftRecord>(d.draftsFile).find((r) => r.messageId === messageId);
-        // One invitation per task: a retry after a cut-off run gets the same draft back, sent or not.
-        if (earlier) return { draftId: earlier.draftId, to: w.to, subject: earlier.subject, sent: !!findDraft(d.draftsFile, earlier.draftId)?.sentAt };
-        const m = inviteMime(task.invite, `${task.taskId}@family-agent`, from, w.to, d.now());
-        const draft = await create(m.mime);
-        recordDraft(d.draftsFile, { draftId: draft.id, messageId, replyTo: w.to.toLowerCase(), subject: m.subject, preview: m.preview, at: d.now().toISOString(), kind: "invite" });
-        return { draftId: draft.id, to: w.to, subject: m.subject, saved: "Outlook Drafts", sent: false };
+        // One run at a time per task, across mail-server processes too: a claim held from
+        // the draft lookup to the send.
+        const release = claim(`${d.draftsFile}.invite-${task.taskId}.lock`);
+        if (!release) throw new ToolError("not sent: another run is sending this invitation right now; check desk_tasks again in a few minutes");
+        try {
+          return await sendInvite(task.taskId, task.invite);
+        } finally {
+          release();
+        }
       },
     });
+    async function sendInvite(taskId: string, invite: Invite) {
+      const messageId = `invite:${taskId}`;
+      const earlier = lines<DraftRecord>(d.draftsFile).find((r) => r.messageId === messageId);
+      // One invitation per task: a retry after a cut-off run reuses the same draft, and never sends twice.
+      let rec: DraftRecord | undefined = earlier;
+      if (rec && findDraft(d.draftsFile, rec.draftId)?.sentAt) return { draftId: rec.draftId, to: w.to, subject: rec.subject, sent: true };
+      if (!rec) {
+        const m = inviteMime(invite, `${taskId}@family-agent`, from, w.to, d.now());
+        const draft = await create(m.mime);
+        rec = { draftId: draft.id, messageId, replyTo: w.to.toLowerCase(), subject: m.subject, preview: m.preview, at: d.now().toISOString(), kind: "invite" };
+        recordDraft(d.draftsFile, rec);
+      }
+      // Henri, 2026-10-26: invitations go without the Allow card. So code checks the draft
+      // in Outlook is still addressed only to the work address before it goes.
+      if (rec.replyTo !== w.to.toLowerCase()) throw new ToolError("not sent: that draft is for an earlier work address");
+      const why = sendBlocker(await d.mail.getMessage(rec.draftId), rec);
+      if (why) throw new ToolError(`not sent: ${why}`);
+      await send(rec.draftId);
+      appendFileSync(d.draftsFile, JSON.stringify({ draftId: rec.draftId, sentAt: d.now().toISOString() }) + "\n");
+      return { draftId: rec.draftId, to: w.to, subject: rec.subject, sent: true };
+    }
   }
   if (d.mail.sendDraft) {
     const send = d.mail.sendDraft.bind(d.mail);
     tools.push({
       name: "mail_send",
       description:
-        "Send one draft that mail_draft_reply or mail_work_invite made, as it now stands in Drafts. Henri must approve each send in Telegram (OpenClaw asks him). Only plain replies to the original sender, or an invitation to Henri's work address, can be sent.",
+        "Send one reply draft that mail_draft_reply made, as it now stands in Drafts. Henri must approve each send in Telegram (OpenClaw asks him). Only plain replies to the original sender can be sent.",
       input: { properties: { draftId: { type: "string", pattern: ID } }, required: ["draftId"] },
       async run(a) {
         const draftId = String(a.draftId);
         const rec = findDraft(d.draftsFile, draftId);
         if (!rec) throw new ToolError("only drafts made with mail_draft_reply can be sent");
         if (rec.sentAt) throw new ToolError("that draft was already sent");
-        // An invitation goes only to the work address set on the server, whatever the record says.
-        if (rec.kind === "invite" && (!d.workInvite || rec.replyTo !== d.workInvite.to.toLowerCase())) throw new ToolError("not sent: invitations go only to Henri's work address");
+        if (rec.kind === "invite") throw new ToolError("invitations are sent by mail_work_invite");
         // The plugin records the Allow when Henri answers; give that write a moment to land.
         for (let waited = 0; !approved(d.approvalsFile, rec, d.now()) && waited < (d.approvalWaitMs ?? 3000); waited += 250) await new Promise((r) => setTimeout(r, 250));
         if (!approved(d.approvalsFile, rec, d.now())) throw new ToolError("not sent: Henri has not approved this draft (the approval card must be answered with Allow)");

@@ -202,7 +202,7 @@ export function deskWorkerTools(d: DeskWorkerDeps): Tool[] {
       name: "desk_tasks",
       description:
         "Tasks the Chief of staff has given you, oldest first. Do each with your mail tools, then answer it with desk_report. " +
-        "work_invite: call mail_work_invite with its taskId, then mail_send the draftId (Henri approves), then desk_report done with that draftId, or failed with not_approved if Henri didn't allow it.",
+        "work_invite: call mail_work_invite with its taskId (it sends the invitation, no Allow card), then desk_report done with its draftId, or failed with error.",
       input: { properties: {} },
       async run() {
         return openTasks(d.file).map(({ type: _t, ...t }) => t);
