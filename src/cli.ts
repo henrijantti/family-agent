@@ -475,6 +475,11 @@ async function main() {
       await discoverMyClub(cfg);
       break;
     }
+    case "salibandy-discover": {
+      const { discoverSalibandy } = await import("./salibandy-discover.js");
+      await discoverSalibandy(args[0] ?? "https://tulospalvelu.salibandy.fi/club/421/matches/fixture");
+      break;
+    }
     case "attendance-preview":
     case "attendance-poll-next": {
       // preview: what the practice polls would ask, posts nothing. poll-next: sends
