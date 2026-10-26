@@ -427,7 +427,7 @@ Deploy (server thread):
 
 | Name | When | Prompt |
 | --- | --- | --- |
-| `morning-actions` | Daily 07:05 | `Morning actions. Follow AGENTS.md "Morning actions": call digest_data with kind daily, reminders_due with mark true and school_info, then send one message with buttons for what needs Henri's decision (clashes, bills due within 3 days, exams within 3 days, due reminders; for a birthday run its giftIdeas search). If nothing needs a decision, reply only NO_REPLY.` |
+| `morning-actions` | Daily 07:05 | `Morning actions. Follow AGENTS.md "Morning actions": call digest_data with kind daily, reminders_due with mark true and school_info, then send one message per item, each with its own buttons, for what needs Henri's decision (clashes, bills due within 3 days, exams within 3 days, due reminders; for a birthday run its giftIdeas search). If nothing needs a decision, reply only NO_REPLY.` |
 | `letters-to-boys` | Sun 20:15 | `Letters to the boys. Follow AGENTS.md "Letters to the boys (Sunday)": look at the past week, write two questions per boy, capture them to the Brain inbox, then send them to Henri.` |
 
    Then disable the 06:50 "Bill reminders" cron: morning-actions lists the same bills
