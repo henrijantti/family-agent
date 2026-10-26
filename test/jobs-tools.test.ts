@@ -143,3 +143,59 @@ test("the tick skips the jobs listed in agent_jobs", async () => {
   cfg.agent_jobs = ["attendance-poll"];
   assert.ok(!dueJobs(cfg, emptyState(), sunEvening).some((j) => j.job === "attendance-poll"));
 });
+
+test("myclub sign-up on request: lists open and signed-up events, signs one, keeps an open practice answer", async () => {
+  const calls: [string, string, boolean][] = [];
+  const writer: AttendanceWriter = { live: false, set: async (o, child, go) => (calls.push([child, o.eventId, go]), go ? "signed up" : "declined") };
+  const { tools, statePath, read } = setup(["attendance-poll"], writer);
+  const st = new StateStore(statePath);
+  const ev = (id: string, child: string, title: string, at: string, host = "ppj.myclub.fi") => ({
+    id, child, club: host.split(".")[0], title, start: { dateTime: at }, end: { dateTime: at }, url: `https://${host}/flow/events/${id.split("-").pop()}`,
+  });
+  st.data.myclub.openInvites = {
+    fetchedAt: "2026-10-25T16:50:00Z",
+    events: [
+      ev("myclub-ppj-1", "Oskar", "Futsal - Sininen", "2026-11-01T07:30:00Z"),
+      ev("myclub-viimahockey-2", "Oliver", "Jää", "2026-10-28T15:00:00Z", "viimahockey.myclub.fi"), // club left out
+      ev("myclub-ppj-3", "Oskar", "Myöhemmin", "2026-11-20T15:00:00Z"), // beyond 14 days
+    ],
+  };
+  st.save();
+  const list = (await call(tools, "myclub_events")).json();
+  assert.deepEqual(list.map((e: any) => [e.child, e.eventId, e.answer]), [["Oliver", "a1", "going"], ["Oskar", "b1", "going"], ["Oliver", "a2", "going"], ["Oskar", "myclub-ppj-1", "no answer"]]);
+  assert.equal(list[3].event, "su 1.11. klo 9.30 Futsal - Sininen");
+
+  // The digest's open sign-ups list only the unanswered ones of the coming week.
+  const r = await call(tools, "myclub_set", { child: "Oskar", eventId: "myclub-ppj-1", going: true });
+  assert.deepEqual(r.json(), { child: "Oskar", event: "su 1.11. klo 9.30 Futsal - Sininen", going: true, myclub: "signed up" });
+  assert.deepEqual(read().myclub.openInvites.events.map((e: any) => e.id), ["myclub-viimahockey-2", "myclub-ppj-3"]);
+  assert.match((await call(tools, "myclub_set", { child: "Oliver", eventId: "myclub-viimahockey-2", going: true })).text, /no upcoming MyClub event/);
+  assert.match((await call(tools, "myclub_set", { child: "Oliver", eventId: "b1", going: true })).text, /no upcoming MyClub event/); // Oskar's
+
+  // An open practice question: a chat answer replaces the button answer, so Monday's apply doesn't undo it.
+  await call(tools, "attendance_week");
+  await call(tools, "attendance_record", { child: "Oliver", eventId: "a1", going: true });
+  await call(tools, "myclub_set", { child: "Oliver", eventId: "a1", going: false });
+  const s2 = read();
+  assert.equal(s2.myclub.agentPoll.votes["Oliver|a1"], false);
+  assert.ok(s2.myclub.declined.includes("a1"));
+  assert.deepEqual(calls.at(-1), ["Oliver", "a1", false]);
+});
+
+test("digest_data lists unanswered MyClub invitations of the coming week", async () => {
+  const { signableEvents } = await import("../src/attendance.js");
+  const cfg = testConfig();
+  const st = new StateStore("/nonexistent/state.json").data;
+  const at = (d: string) => ({ dateTime: `${d}T07:30:00Z` });
+  st.myclub.lastSnapshot = snap;
+  st.myclub.openInvites = {
+    fetchedAt: "",
+    events: [
+      { id: "x1", child: "Oskar", title: "Futsal - Sininen", start: at("2026-11-01"), end: at("2026-11-01"), url: "https://ppj.myclub.fi/flow/events/1" },
+      { id: "x2", child: "Oskar", title: "Peruttu", start: at("2026-10-30"), end: at("2026-10-30"), cancelled: true },
+      { id: "x3", child: "Oskar", title: "Liian myöhään", start: at("2026-11-03"), end: at("2026-11-03") },
+    ],
+  };
+  const open = signableEvents(st, cfg, "2026-10-26", 7, true);
+  assert.deepEqual(open.map((e) => [e.child, e.option.label]), [["Oskar", "su 1.11. klo 9.30 Futsal - Sininen"]]);
+});

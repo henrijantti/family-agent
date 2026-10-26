@@ -2,6 +2,7 @@ import type { Config } from "./config.js";
 import { childName, env } from "./config.js";
 import type { Ctx } from "./jobs.js";
 import { addDays, localParts } from "./lib/time.js";
+import type { StateData } from "./lib/state.js";
 import { esc } from "./notify/telegram.js";
 import type { MyClubEvent, MyClubSnapshot } from "./sources/myclub.js";
 
@@ -69,7 +70,7 @@ const T = {
   },
 };
 
-function eventDate(e: MyClubEvent) {
+export function eventDate(e: MyClubEvent) {
   return "date" in e.start ? e.start.date : localParts(new Date(e.start.dateTime)).date;
 }
 
@@ -88,6 +89,43 @@ export function weekEvents(snap: MyClubSnapshot, cfg: Config, child: string, now
 }
 
 const FI_DAYS = ["su", "ma", "ti", "ke", "to", "pe", "la"];
+
+export interface SignableEvent {
+  child: string;
+  answer: "no answer" | "going" | "not going";
+  option: PollOption;
+}
+
+/**
+ * MyClub events of the attendance children from today to today+days that the bot
+ * may sign in or out of on request (Henri, 2026-10-26): the unanswered invitations
+ * read from the logged-in pages, then the signed-up feed. Only the clubs in
+ * `attendance.clubs` (Viima left out), never cancelled events.
+ */
+export function signableEvents(state: StateData, cfg: Config, today: string, days: number, onlyOpen = false): SignableEvent[] {
+  const att = cfg.attendance;
+  if (!att) return [];
+  const to = addDays(today, days);
+  const declined = new Set(state.myclub.declined ?? []);
+  const invites = state.myclub.openInvites?.events ?? [];
+  const feed = onlyOpen ? [] : ((state.myclub.lastSnapshot as MyClubSnapshot | undefined)?.events ?? []);
+  const seen = new Set<string>();
+  const out: SignableEvent[] = [];
+  for (const [e, open] of [...invites.map((e) => [e, true] as const), ...feed.map((e) => [e, false] as const)]) {
+    const child = e.child ? childName(cfg, e.child) : undefined;
+    if (!child || !att.children.includes(child) || e.cancelled) continue;
+    const host = e.url?.match(/^https:\/\/([^/]+)/)?.[1];
+    if (host && att.clubs?.length && !att.clubs.some((c) => c.host === host && c.child === child)) continue;
+    const date = eventDate(e);
+    if (date < today || date > to) continue;
+    const k = `${child}|${e.url ?? e.id}`;
+    if (seen.has(k)) continue;
+    seen.add(k);
+    const answer = open ? "no answer" : declined.has(e.id) ? "not going" : "going";
+    out.push({ child, answer, option: { eventId: e.id, url: e.url, label: optionLabel(e), date } });
+  }
+  return out.sort((a, b) => a.option.date.localeCompare(b.option.date) || a.option.label.localeCompare(b.option.label));
+}
 
 /** "su 1.11. klo 9.30 Futsal - Sininen": shown in the family group, so in Finnish. */
 export function optionLabel(e: MyClubEvent): string {

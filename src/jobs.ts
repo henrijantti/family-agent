@@ -169,6 +169,21 @@ export async function runMyClub(ctx: Ctx) {
   await sendAlert(ctx, [...urgent, ...warnings]);
 }
 
+/**
+ * Reads the unanswered MyClub invitations into state, for the digest's open
+ * sign-ups and the bot's sign-up tool. A failure only logs: the calendar sync
+ * already ran, and yesterday's list stays.
+ */
+export async function readInvites(ctx: Ctx) {
+  if (!ctx.myclubInvites || !ctx.cfg.attendance?.clubs?.length) return;
+  try {
+    const snap = await ctx.myclubInvites.fetch(ctx.cfg);
+    ctx.state.myclub.openInvites = { fetchedAt: snap.fetchedAt, events: snap.events };
+  } catch (e) {
+    ctx.log(`MyClub invitations unavailable: ${(e as Error).message}`);
+  }
+}
+
 export async function runOutlook(ctx: Ctx) {
   if (!ctx.mail) return;
   try {
@@ -280,7 +295,10 @@ export async function tick(ctx: Ctx, force?: JobName[]) {
   jobs.sort((a, b) => order.indexOf(a.job) - order.indexOf(b.job));
   for (const j of jobs) {
     ctx.log(`running ${j.job} (${j.key})`);
-    if (j.job === "myclub") await runMyClub(ctx);
+    if (j.job === "myclub") {
+      await runMyClub(ctx);
+      await readInvites(ctx);
+    }
     if (j.job === "outlook") await runOutlook(ctx);
     if (j.job === "wilma") await runWilma(ctx, j.slot);
     if (j.job === "digest") await runDigest(ctx);

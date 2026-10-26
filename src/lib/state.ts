@@ -1,4 +1,5 @@
 import type { AgentPoll, AttendancePoll } from "../attendance.js";
+import type { MyClubEvent } from "../sources/myclub.js";
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
@@ -53,6 +54,8 @@ export interface StateData {
     agentPoll?: AgentPoll;
     /** MyClub event ids the family said a child will skip. */
     declined?: string[];
+    /** Unanswered MyClub invitations from the logged-in pages, read daily (see readInvites). */
+    openInvites?: { fetchedAt: string; events: MyClubEvent[] };
   };
   outlook: { refreshToken?: string; lastScan?: string; bills: Bill[]; knownBillers: string[] };
   /** Wilma items found since the last digest, consumed by the next digest. */
