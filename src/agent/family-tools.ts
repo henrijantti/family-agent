@@ -13,6 +13,7 @@ import { weekPlan } from "../digest/week-plan.js";
 import { Tool, ToolError } from "./mcp.js";
 import { webRead } from "./web.js";
 import { queueCalendarInvite, queueWorkInvite } from "./desk.js";
+import { EMAIL } from "./invite.js";
 
 // Tools for the chat front door. Reads cover all three calendars and the bill
 // list; writes reach only the School and Hobbies calendars, and only events
@@ -442,19 +443,20 @@ export function familyTools(d: FamilyDeps): Tool[] {
     tools.push({
       name: "calendar_invite",
       description:
-        "Invite people to one event on the family, school or hobbies calendar: the mail bot finds their addresses in Henri's email and makes an invitation draft from his Outlook. Only when Henri asks. Nothing goes until Henri says send in the mail bot chat and taps Allow; the event's own title, time and place are used.",
+        "Invite people to one event on the family, school or hobbies calendar by the email addresses Henri gives: the mail bot makes an invitation draft from his Outlook. Only when Henri asks; never guess or look up an address, ask him. Nothing goes until Henri says send in the mail bot chat and taps Allow; the event's own title, time and place are used.",
       input: {
         properties: {
           calendar: calendarProp,
           id: { type: "string", maxLength: 1024, description: "the event id from calendar_list" },
-          attendees: { type: "array", items: { type: "string", maxLength: 100 }, description: "1-10 people as Henri named them (first name, full name or email address)" },
+          attendees: { type: "array", items: { type: "string", maxLength: 254 }, description: "1-10 email addresses exactly as Henri wrote them" },
         },
         required: ["calendar", "id", "attendees"],
       },
       async run(a) {
-        const attendees = [...new Set((a.attendees as string[]).map((x) => String(x).trim()).filter(Boolean))];
-        if (!attendees.length || attendees.length > 10) throw new ToolError("attendees: 1 to 10 people");
-        if (attendees.some((x) => !/^[\p{L}\p{N} .@'_+-]{2,100}$/u.test(x))) throw new ToolError("attendees: names or email addresses only");
+        const attendees = [...new Set((a.attendees as string[]).map((x) => String(x).trim().toLowerCase()).filter(Boolean))];
+        if (!attendees.length || attendees.length > 10) throw new ToolError("attendees: 1 to 10 email addresses");
+        const bad = attendees.find((x) => !EMAIL.test(x));
+        if (bad) throw new ToolError(`not an email address: ${bad}. Ask Henri for the address; never guess one`);
         const today = localParts(d.now()).date;
         const calendarId = writableId(d, a.calendar as Writable);
         const evs = await cal(d).list(calendarId, { timeMin: localIso(addDays(today, -1), "00:00"), timeMax: localIso(addDays(today, 400), "00:00") });
@@ -468,7 +470,7 @@ export function familyTools(d: FamilyDeps): Tool[] {
           d.now(),
           ci.wake,
         );
-        return { status: "queued: the mail bot makes the invitation draft within minutes and asks Henri in its chat; it goes when he says send and taps Allow", taskId, title: ev.summary, start: when(ev.start), attendees };
+        return { status: "queued: the mail bot makes the invitation draft within minutes and shows it to Henri in its chat; it goes when he says send and taps Allow", taskId, title: ev.summary, start: when(ev.start), attendees };
       },
     });
   }
