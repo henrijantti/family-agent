@@ -111,6 +111,14 @@ test("calendar_add tags the event, skips a duplicate, and the chat can change an
   assert.equal(cal.all("school").length, 0);
 });
 
+test("calendar_add without a calendar goes to the shared family calendar (Anna Henri)", async () => {
+  const { cal, tools } = family();
+  const added = (await call(tools, "calendar_add", { title: "Oliver: tapaaminen", date: "2026-10-29", start: "16:00" })).json();
+  assert.equal(added.calendar, "family");
+  assert.equal(cal.all("family").length, 1);
+  assert.equal(cal.all("school").length, 0);
+});
+
 test("bills_list shows bills due within 14 days unless all is asked", async () => {
   const { tools } = family();
   const soon = (await call(tools, "bills_list", {})).json();
