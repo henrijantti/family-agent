@@ -305,10 +305,10 @@ async function main() {
     }
     case "mail-draft-discard": {
       // npm run agent -- mail-draft-discard <draftId>: only on Henri's word, for an unsent agent draft.
+      // Never saves state (the tick owns it; Microsoft keeps old refresh tokens valid).
       const { discardDraft } = await import("./agent/mail-tools.js");
       const dir = dirname(env("STATE_FILE") ?? "state/state.json");
       console.log(await discardDraft(GraphMail.fromEnv(st.data), `${dir}/mail-drafts.jsonl`, args[0] ?? "", now));
-      st.save();
       break;
     }
     case "mail-backlog": {
