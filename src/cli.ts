@@ -555,8 +555,11 @@ async function main() {
         const calendar = buildCtx(cfg, st, now).calendar;
         const deskFile = `${dirname(env("STATE_FILE") ?? "state/state.json")}/mail-desk.jsonl`;
         // WORK_INVITE_TO (Henri's work address, set on the server only): invitations to his work calendar, also from the group.
-        const workInvite = workInviteTo() ? { deskFile, wake: wakeFromEnv(env("MAIL_DESK_WAKE")) } : undefined;
-        tools = familyTools({ cfg, calendar, loadState: () => store().data, now: clock, group, deskFile: group ? undefined : deskFile, workInvite });
+        const wake = wakeFromEnv(env("MAIL_DESK_WAKE"));
+        const workInvite = workInviteTo() ? { deskFile, wake } : undefined;
+        // Invitations to other people: drafts the mail bot makes; they go only on Henri's Allow.
+        const calendarInvite = cfg.outlook.email_agent?.send ? { deskFile, wake } : undefined;
+        tools = familyTools({ cfg, calendar, loadState: () => store().data, now: clock, group, deskFile: group ? undefined : deskFile, workInvite, calendarInvite });
         tools.push(capabilityTool(capabilitiesFile(), group ? "family" : "henri", clock));
         // Henri's household register (reminders, papers, holidays): never in the family group's copy.
         if (!group) {
@@ -596,6 +599,7 @@ async function main() {
             self: ea.self,
             now: clock,
             ...(inviteTo && ea.send ? { workInvite: { to: inviteTo, deskFile: `${dir}/mail-desk.jsonl` } } : {}),
+            ...(ea.send ? { calendarInvite: { deskFile: `${dir}/mail-desk.jsonl` } } : {}),
           }),
           ...deskWorkerTools({ file: `${dir}/mail-desk.jsonl`, now: clock, getMessage: (id) => mail.getMessage(id), draftsFile: `${dir}/mail-drafts.jsonl`, billPdfFile: `${dir}/mail-bill-pdf.jsonl` }),
           // The Email agent's own weekly review and capability log: its findings hold email text, so they stay here.

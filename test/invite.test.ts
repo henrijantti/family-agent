@@ -182,3 +182,75 @@ test("discard a draft: only an unsent agent draft still in Drafts, moved to Dele
   const tools = mailTools({ mail: { ...mail, sendDraft: async () => {} } as unknown as MailToolApi, draftsFile, approvalsFile: join(dir, "a.jsonl"), self: ["a@x.example"], now: () => NOW });
   assert.match((await call(tools, "mail_send", { draftId: "DRAFTold00001" })).text, /invitations are sent by mail_work_invite|discarded/);
 });
+
+test("calendar invitation to other people: queued with names, addresses found in mail, a draft that goes only on Henri's Allow", async () => {
+  process.env.GOOGLE_FAMILY_CALENDAR_ID = "family";
+  process.env.GOOGLE_SCHOOL_CALENDAR_ID = "school";
+  process.env.GOOGLE_HOBBIES_CALENDAR_ID = "hobbies";
+  const dir = mkdtempSync(join(tmpdir(), "calinvite-"));
+  const deskFile = join(dir, "mail-desk.jsonl");
+  const cal = new FakeCalendar();
+  cal.seed("family", [{ id: "ev9", summary: "Mailapelit + Dinner", start: { dateTime: "2026-11-27T17:00:00+02:00" }, end: { dateTime: "2026-11-27T22:00:00+02:00" } }]);
+  let woke = 0;
+  const fam = familyTools({ cfg: testConfig(), calendar: cal, loadState: () => emptyState(), now: () => NOW, calendarInvite: { deskFile, wake: () => woke++ } });
+  assert.match((await call(fam, "calendar_invite", { calendar: "family", id: "ev9", attendees: [] })).text, /1 to 10/);
+  assert.match((await call(fam, "calendar_invite", { calendar: "family", id: "ev9", attendees: ["<script>"] })).text, /names or email/);
+  const q = (await call(fam, "calendar_invite", { calendar: "family", id: "ev9", attendees: ["Arto"] })).json();
+  assert.match(q.status, /Allow/);
+  assert.equal((await call(fam, "calendar_invite", { calendar: "family", id: "ev9", attendees: ["arto"] })).json().taskId, q.taskId, "asking twice queues one");
+  assert.equal(woke, 1);
+
+  const ARTO = "arto.example@mail.example";
+  const mimes: string[] = [];
+  const sent: string[] = [];
+  let draftTo = [ARTO];
+  const api = {
+    searchPeople: async () => [
+      { id: "m1", subject: "", receivedDateTime: "2026-10-01T10:00:00Z", from: { emailAddress: { name: "Arto Esimerkki", address: ARTO } }, toRecipients: [{ emailAddress: { address: "henri@outlook.example" } }] },
+      { id: "m2", subject: "", receivedDateTime: "2026-10-02T10:00:00Z", from: { emailAddress: { name: "Henri", address: "henri@outlook.example" } }, toRecipients: [{ emailAddress: { name: "Arto Esimerkki", address: ARTO } }, { emailAddress: { name: "Mikko", address: "mikko@mail.example" } }] },
+    ],
+    getMessage: async (id: string) => ({ id, subject: "Kutsu: Mailapelit + Dinner", receivedDateTime: "", isDraft: true, toRecipients: draftTo.map((address) => ({ emailAddress: { address } })) }),
+    createMimeDraft: async (mime: string) => (mimes.push(mime), { id: `DRAFTcal000${mimes.length}` }),
+    sendDraft: async (id: string) => void sent.push(id),
+  } as unknown as MailToolApi;
+  const files = { draftsFile: join(dir, "mail-drafts.jsonl"), approvalsFile: join(dir, "mail-approvals.jsonl") };
+  const mail = [
+    ...mailTools({ mail: api, ...files, self: ["henri@outlook.example"], now: () => NOW, approvalWaitMs: 0, calendarInvite: { deskFile } }),
+    ...deskWorkerTools({ file: deskFile, now: () => NOW, getMessage: (id) => api.getMessage(id), draftsFile: files.draftsFile }),
+  ];
+  const task = (await call(mail, "desk_tasks", {})).json()[0];
+  assert.deepEqual([task.kind, task.attendees], ["calendar_invite", ["Arto"]]);
+
+  const found = (await call(mail, "mail_contacts", { name: "arto" })).json().found;
+  assert.deepEqual(found.map((f: any) => [f.address, f.seen]), [[ARTO, 2]], "Henri's own address and other people are left out");
+
+  assert.match((await call(mail, "mail_calendar_invite", { taskId: q.taskId, to: [ARTO, "mikko@mail.example"] })).text, /names 1 attendee/);
+  assert.match((await call(mail, "mail_calendar_invite", { taskId: q.taskId, to: ["henri@outlook.example"] })).text, /organizer/);
+  assert.match((await call(mail, "mail_calendar_invite", { taskId: q.taskId, to: ["not an address"] })).text, /not an email/);
+  const d = (await call(mail, "mail_calendar_invite", { taskId: q.taskId, to: [ARTO] })).json();
+  assert.deepEqual([d.draftId, d.sent], ["DRAFTcal0001", false]);
+  assert.match(mimes[0], new RegExp(`To: ${ARTO}`));
+  assert.equal((await call(mail, "mail_calendar_invite", { taskId: q.taskId, to: [ARTO.toUpperCase()] })).json().draftId, d.draftId, "the same draft again");
+  assert.deepEqual(sent, [], "making the draft sends nothing");
+  assert.match((await call(mail, "desk_report", { taskId: q.taskId, status: "done", items: [{ draftId: d.draftId }] })).text, /Reported 1/);
+
+  // Henri says send in the mail bot chat: the draft is found, and goes only with his Allow.
+  assert.deepEqual((await call(mail, "mail_drafts_waiting", {})).json().map((w: any) => [w.draftId, w.kind, w.to]), [[d.draftId, "calendar_invite", ARTO]]);
+  assert.match((await call(mail, "mail_send", { draftId: d.draftId })).text, /not approved/);
+  appendFileSync(files.approvalsFile, JSON.stringify({ draftId: d.draftId, decision: "allow-once", at: NOW.toISOString() }) + "\n");
+  draftTo = [ARTO, "someone@else.example"];
+  assert.match((await call(mail, "mail_send", { draftId: d.draftId })).text, /must go only to/);
+  draftTo = [ARTO];
+  assert.equal((await call(mail, "mail_send", { draftId: d.draftId })).json().sent, true);
+  assert.deepEqual(sent, [d.draftId]);
+  assert.deepEqual((await call(mail, "mail_drafts_waiting", {})).json(), []);
+
+  // A name the mail can't match: Henri is asked, and his address answer in the chat makes the draft.
+  const q2 = (await call(fam, "calendar_invite", { calendar: "family", id: "ev9", attendees: ["Tuntematon"] })).json();
+  assert.match((await call(mail, "desk_report", { taskId: q2.taskId, status: "failed", failure: "not_found" })).text, /Reported 0/);
+  const waiting = (await call(mail, "desk_tasks", {})).json();
+  assert.deepEqual(waiting.map((t: any) => [t.taskId, t.waitingForAddress]), [[q2.taskId, true]]);
+  const d2 = (await call(mail, "mail_calendar_invite", { taskId: q2.taskId, to: ["tuntematon@mail.example"] })).json();
+  assert.equal(d2.sent, false);
+  assert.match(mimes.at(-1)!, /To: tuntematon@mail.example/);
+});

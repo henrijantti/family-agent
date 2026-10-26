@@ -25,8 +25,8 @@ const ID = "^[A-Za-z0-9_=+/-]{10,400}$";
 const TASK_ID = "^t[0-9]{8}-[0-9a-z]{6}$";
 
 export const KINDS = ["sort", "bills", "needs_reply", "draft_reply", "newsletters", "count"] as const;
-/** Tasks only code makes (never desk_task_create): work_invite, from the family tools' work_calendar_invite. */
-export const CODE_KINDS = ["work_invite"] as const;
+/** Tasks only code makes (never desk_task_create), from the family tools: work_invite (work_calendar_invite) and calendar_invite. */
+export const CODE_KINDS = ["work_invite", "calendar_invite"] as const;
 export const CATEGORIES = ["bill", "needs_reply", "newsletter", "receipt", "personal", "school", "hobbies", "work", "official", "phishing", "important", "flagged", "inbox", "other"] as const;
 export const FAILURES = ["no_access", "not_found", "unclear_task", "too_many", "not_approved", "error"] as const;
 const CURRENCIES = ["EUR", "USD", "GBP", "SEK", "NOK"];
@@ -46,6 +46,8 @@ export interface DeskTask {
   invite?: Invite;
   /** work_invite: which event it came from, "<calendar>:<event id>". */
   source?: string;
+  /** calendar_invite: who Henri wants invited, as he said it (names or addresses). */
+  attendees?: string[];
   at: string;
 }
 
@@ -99,12 +101,22 @@ export function openTasks(file: string): DeskTask[] {
   return all.filter((r): r is DeskTask => r.type === "task" && !done.has(r.taskId));
 }
 
+/**
+ * Calendar invitations the Email agent couldn't address (reported failed, not_found)
+ * in the last 7 days: Henri was asked for the address, and gives it in the mail bot chat.
+ */
+export function invitesWaitingForAddress(file: string, now: Date): DeskTask[] {
+  const all = rows(file);
+  const notFound = new Set(all.filter((r): r is DeskReport => r.type === "report" && r.status === "failed" && r.failure === "not_found").map((r) => r.taskId));
+  return all.filter((r): r is DeskTask => r.type === "task" && r.kind === "calendar_invite" && notFound.has(r.taskId) && now.getTime() - Date.parse(r.at) < 7 * 86400000);
+}
+
 const newId = (now: Date) => `t${now.toISOString().slice(0, 10).replace(/-/g, "")}-${Math.random().toString(36).slice(2, 8).padEnd(6, "0")}`;
 
 /**
  * Queue one calendar invitation to Henri's work address (Henri, 2026-10-26). The
  * family tools call this with event data read from the calendar; the Email agent
- * builds the email from it with mail_work_invite and sends it only on Henri's Allow.
+ * builds and sends the email with mail_work_invite (no Allow card, Henri's choice).
  */
 export function queueWorkInvite(file: string, invite: Invite, source: string, now: Date, wake?: () => void): string {
   const open = openTasks(file);
@@ -112,6 +124,24 @@ export function queueWorkInvite(file: string, invite: Invite, source: string, no
   if (same) return same.taskId;
   if (open.filter((t) => t.kind === "work_invite").length >= 5) throw new ToolError("5 work calendar invitations are already waiting for Henri's Allow");
   const task: DeskTask = { type: "task", taskId: newId(now), kind: "work_invite", invite, source, at: now.toISOString() };
+  append(file, task);
+  wake?.();
+  return task.taskId;
+}
+
+/**
+ * Queue one calendar invitation to other people (Henri, 2026-10-26). The family tools
+ * call this with event data read from the calendar and the attendees as Henri named
+ * them. The Email agent finds their addresses and makes a draft with
+ * mail_calendar_invite; it goes only when Henri says send and taps Allow.
+ */
+export function queueCalendarInvite(file: string, invite: Invite, attendees: string[], source: string, now: Date, wake?: () => void): string {
+  const open = openTasks(file);
+  const key = (a: string[]) => a.map((x) => x.trim().toLowerCase()).sort().join("|");
+  const same = open.find((t) => t.kind === "calendar_invite" && t.source === source && key(t.attendees ?? []) === key(attendees));
+  if (same) return same.taskId;
+  if (open.filter((t) => t.kind === "calendar_invite").length >= 5) throw new ToolError("5 calendar invitations are already waiting for the mail bot");
+  const task: DeskTask = { type: "task", taskId: newId(now), kind: "calendar_invite", invite, attendees, source, at: now.toISOString() };
   append(file, task);
   wake?.();
   return task.taskId;
@@ -202,10 +232,13 @@ export function deskWorkerTools(d: DeskWorkerDeps): Tool[] {
       name: "desk_tasks",
       description:
         "Tasks the Chief of staff has given you, oldest first. Do each with your mail tools, then answer it with desk_report. " +
-        "work_invite: call mail_work_invite with its taskId (it sends the invitation, no Allow card), then desk_report done with its draftId, or failed with error.",
+        "work_invite: call mail_work_invite with its taskId (it sends the invitation, no Allow card), then desk_report done with its draftId, or failed with error. " +
+        "calendar_invite: find each attendee's address with mail_contacts, call mail_calendar_invite with the taskId and the addresses (it saves a draft, sends nothing), then desk_report done with its draftId; a name you can't match to one address: failed, not_found, and ask Henri. " +
+        "waitingForAddress: Henri was already asked; only when he gives the address in the chat, call mail_calendar_invite with it (no report).",
       input: { properties: {} },
       async run() {
-        return openTasks(d.file).map(({ type: _t, ...t }) => t);
+        const waiting = invitesWaitingForAddress(d.file, d.now()).map(({ type: _t, ...t }) => ({ ...t, waitingForAddress: true }));
+        return [...openTasks(d.file).map(({ type: _t, ...t }) => t), ...waiting];
       },
     },
     {

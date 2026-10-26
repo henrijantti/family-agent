@@ -39,7 +39,7 @@ export default definePluginEntry({
         requireApproval: {
           title: (selftest
             ? "🔧 Palvelimen testikortti"
-            : d.kind === "invite"
+            : d.kind === "invite" || d.kind === "calendar_invite"
               ? `📅 Lähetetäänkö kalenterikutsu: ${d.replyTo}?`
               : known
                 ? `📧 Lähetetäänkö vastaus: ${d.replyTo}?`
@@ -48,7 +48,7 @@ export default definePluginEntry({
           description: (selftest
             ? `Automaattinen testi, hylätään itsestään. Mitään ei lähetetä. (${draftId})`
             : known
-              ? `Aihe: ${d.subject || "(ei aihetta)"}\n\n${d.preview ?? ""}`
+              ? `${d.kind === "calendar_invite" ? `Vastaanottajat: ${d.replyTo}\n` : ""}Aihe: ${d.subject || "(ei aihetta)"}\n\n${d.preview ?? ""}`
               : "Tätä luonnosta ei löytynyt, joten mitään ei lähetetä. Paina Deny.").slice(0, 512),
           severity: "warning",
           allowedDecisions: ["allow-once", "deny"],

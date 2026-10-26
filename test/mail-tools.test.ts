@@ -49,7 +49,7 @@ function setup(opts: { send?: boolean; draftTo?: string[]; cc?: string[] } = {})
 
 test("mail tools: the set has no forward, delete or rule tools; mail_send exists only when sending is on", () => {
   const names = setup().tools.map((t) => t.name).sort();
-  assert.deepEqual(names, ["mail_create_folder", "mail_draft_reply", "mail_folders", "mail_inbox", "mail_label", "mail_move", "mail_read", "mail_send"]);
+  assert.deepEqual(names, ["mail_create_folder", "mail_draft_reply", "mail_drafts_waiting", "mail_folders", "mail_inbox", "mail_label", "mail_move", "mail_read", "mail_send"]);
   assert.ok(!setup({ send: false }).tools.some((t) => t.name === "mail_send"));
 });
 

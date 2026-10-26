@@ -12,7 +12,7 @@ import { addDays, daysBetween, localIso, localParts } from "../lib/time.js";
 import { weekPlan } from "../digest/week-plan.js";
 import { Tool, ToolError } from "./mcp.js";
 import { webRead } from "./web.js";
-import { queueWorkInvite } from "./desk.js";
+import { queueCalendarInvite, queueWorkInvite } from "./desk.js";
 
 // Tools for the chat front door. Reads cover all three calendars and the bill
 // list; writes reach only the School and Hobbies calendars, and only events
@@ -41,6 +41,8 @@ export interface FamilyDeps {
    * Absent unless the server sets the work address.
    */
   workInvite?: { deskFile: string; wake?: () => void };
+  /** Invitations to other people, through the mail desk; they go only on Henri's Allow in the mail bot. */
+  calendarInvite?: { deskFile: string; wake?: () => void };
 }
 
 type Writable = "family" | "school" | "hobbies";
@@ -432,6 +434,41 @@ export function familyTools(d: FamilyDeps): Tool[] {
           w.wake,
         );
         return { status: "queued: the mail bot sends it to Henri's work address within minutes", taskId, title: ev.summary, start: when(ev.start) };
+      },
+    });
+  }
+  if (d.calendarInvite) {
+    const ci = d.calendarInvite;
+    tools.push({
+      name: "calendar_invite",
+      description:
+        "Invite people to one event on the family, school or hobbies calendar: the mail bot finds their addresses in Henri's email and makes an invitation draft from his Outlook. Only when Henri asks. Nothing goes until Henri says send in the mail bot chat and taps Allow; the event's own title, time and place are used.",
+      input: {
+        properties: {
+          calendar: calendarProp,
+          id: { type: "string", maxLength: 1024, description: "the event id from calendar_list" },
+          attendees: { type: "array", items: { type: "string", maxLength: 100 }, description: "1-10 people as Henri named them (first name, full name or email address)" },
+        },
+        required: ["calendar", "id", "attendees"],
+      },
+      async run(a) {
+        const attendees = [...new Set((a.attendees as string[]).map((x) => String(x).trim()).filter(Boolean))];
+        if (!attendees.length || attendees.length > 10) throw new ToolError("attendees: 1 to 10 people");
+        if (attendees.some((x) => !/^[\p{L}\p{N} .@'_+-]{2,100}$/u.test(x))) throw new ToolError("attendees: names or email addresses only");
+        const today = localParts(d.now()).date;
+        const calendarId = writableId(d, a.calendar as Writable);
+        const evs = await cal(d).list(calendarId, { timeMin: localIso(addDays(today, -1), "00:00"), timeMax: localIso(addDays(today, 400), "00:00") });
+        const ev = evs.find((e) => e.id === a.id && e.status !== "cancelled");
+        if (!ev) throw new ToolError(`no upcoming event ${a.id} on the ${a.calendar} calendar`);
+        const taskId = queueCalendarInvite(
+          ci.deskFile,
+          { title: ev.summary || "(ei otsikkoa)", start: when(ev.start), end: when(ev.end), allDay: "date" in ev.start, ...(ev.location ? { location: ev.location } : {}) },
+          attendees,
+          `${a.calendar}:${ev.id}`,
+          d.now(),
+          ci.wake,
+        );
+        return { status: "queued: the mail bot makes the invitation draft within minutes and asks Henri in its chat; it goes when he says send and taps Allow", taskId, title: ev.summary, start: when(ev.start), attendees };
       },
     });
   }

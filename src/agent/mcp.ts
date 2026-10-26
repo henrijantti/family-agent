@@ -49,7 +49,7 @@ function checkValue(p: Prop, v: unknown, at: string) {
   if (typeof v === "string") {
     if (p.maxLength && v.length > p.maxLength) throw new ToolError(`${at} is longer than ${p.maxLength} characters`);
     if (p.enum && !p.enum.includes(v)) throw new ToolError(`${at} must be one of ${p.enum.join(", ")}`);
-    if (p.pattern && !new RegExp(p.pattern).test(v)) throw new ToolError(`${at} has the wrong format`);
+    if (p.pattern && !new RegExp(p.pattern, "u").test(v)) throw new ToolError(`${at} has the wrong format`);
   }
   if (Array.isArray(v) && p.items) v.forEach((x, i) => checkValue(p.items!, x, `${at}[${i}]`));
   if (p.type === "object" && p.properties) validate(p.properties, p.required, v, `${at}.`);
