@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { Config } from "../config.js";
 import { CalendarApi, CalendarEvent, EventTime } from "../calendar/types.js";
-import { buildDigest, conflicts, isComingUp, localTitles, mergeCrossCalendar, splitTitle } from "../digest/build.js";
+import { buildDigest, conflicts, digestChanges, fiTitle, isComingUp, labels, localTitles, mergeCrossCalendar, splitTitle, whenLabel } from "../digest/build.js";
 import { billsToRemind } from "../sources/outlook.js";
 import type { WilmaSnapshot } from "../sources/wilma.js";
 import { feesDue, MyClubSnapshot, openSignups } from "../sources/myclub.js";
@@ -253,7 +253,6 @@ export function familyTools(d: FamilyDeps): Tool[] {
           return { date: e.date, start: e.start, end: e.end, who, what, location: e.location, calendar: e.calendar, cancelled, tentative: e.tentative, alsoOnFamily: e.alsoOnFamily };
         };
         const myclub = c.state.myclub.lastSnapshot as MyClubSnapshot | undefined;
-        const since = c.now.getTime() - 26 * 3600_000;
         return {
           today,
           kind: a.kind,
@@ -266,7 +265,7 @@ export function familyTools(d: FamilyDeps): Tool[] {
           feesDue: myclub ? feesDue(myclub, today, 7) : [],
           billsToday: d.cfg.outlook.enabled && !d.group ? billsToRemind(c.state, today, d.cfg.outlook.remind_days_before).map((b) => ({ biller: b.biller, amount: b.amount, dueDate: b.dueDate, reference: b.reference, inDays: b.inDays, newBiller: b.newBiller, sender: b.newBiller ? b.sender : undefined })) : [],
           schoolNews: c.state.digestQueue,
-          changedSinceYesterday: c.state.changes.filter((x) => Date.parse(x.at) > since && x.kind !== "new"),
+          changedSinceYesterday: digestChanges(c.state.changes, c.now, d.cfg).map((x) => ({ ...x, title: d.cfg.digest.language === "fi" ? fiTitle(x.title) : x.title, when: whenLabel(x.when, labels(d.cfg)) })),
           sourcesFailing: Object.entries(c.state.health).filter(([, h]) => !h.ok).map(([s]) => s),
         };
       },

@@ -77,7 +77,7 @@ function bring(title: string, t: Labels): string | undefined {
 }
 
 
-type Labels = (typeof L)["en"];
+export type Labels = (typeof L)["en"];
 
 /** "torstai 22.10." style dates. */
 export function niceDate(date: string, t: Labels, long = false): string {
@@ -175,8 +175,39 @@ export function isComingUp(title: string): boolean {
   // Named games first, so "Harjoitusottelu" (a practice match) stays in.
   if (/exam|koe\b|turnaus|tournament|cup|ottelu|match|peli\b|game\b|\bvs\b/i.test(title)) return true;
   if (/harjoit|treeni|jäävuoro|omatoimi|taitokoulu|tiedote|practice/i.test(title)) return false;
-  // "K-Espoo Blues 3 - Ice Force": two teams around a spaced dash is a game.
-  return /\s[-–]\s/.test(title);
+  // "K-Espoo Blues 3 - Ice Force": two teams around a spaced dash is a game. A group
+  // after the dash is a practice: "Futsal - Sininen", "... - Ryhmä Litmanen" (Henri, 2026-10-26).
+  const m = title.match(/\s[-–]\s(.*)$/);
+  return !!m && !GROUP_RE.test(m[1].trim());
+}
+const GROUP_RE = /^(ryhmä|group|sininen|punainen|keltainen|vihreä|valkoinen|musta|oranssi|harmaa|liila|violetti|pinkki|ruskea)(?=\s|$)/i;
+
+/**
+ * "Changed or cancelled since yesterday", as the family reads it: only events from
+ * today to the Coming up horizon, never the tentative bulletin dates (Wilma text
+ * re-reads churn them), one line per event (the last change wins, so a renamed
+ * event isn't listed under both titles), Finnish dates (Henri, 2026-10-26).
+ */
+export function digestChanges(changes: ChangeRecord[], now: Date, cfg: Config): ChangeRecord[] {
+  const since = now.getTime() - 26 * 3600000;
+  const today = localParts(now).date;
+  const horizon = addDays(today, cfg.digest.coming_up_days);
+  const byEvent = new Map<string, ChangeRecord>();
+  for (const c of changes) {
+    const date = c.when.slice(0, 10);
+    if (Date.parse(c.at) <= since || c.kind === "new" || /\(from bulletin\)/i.test(c.title) || date < today || date > horizon) continue;
+    const key = `${c.source}|${c.when}|${who(c.title.replace(/^CANCELLED: /, "")) ?? c.title}`;
+    byEvent.delete(key); // keep the latest, in order
+    byEvent.set(key, c);
+  }
+  return [...byEvent.values()];
+}
+
+/** "2026-10-25 13:30" -> "su 25.10. klo 13.30" (Finnish) or "Sun 25.10. 13:30". */
+export function whenLabel(when: string, t: Labels): string {
+  const [date, time] = when.split(" ");
+  if (!/^\d{4}-\d\d-\d\d$/.test(date)) return when;
+  return `${niceDate(date, t)}${time ? ` ${t === L.fi ? `klo ${time.replace(":", ".")}` : time}` : ""}`;
 }
 
 /** Two timed events in different places overlapping: someone has to drive two places,
@@ -215,6 +246,11 @@ function conflictLine([a, b]: [HubEvent, HubEvent], t: Labels, withDay = false):
   };
   const day = withDay ? `${niceDate(localParts(new Date(Math.max(a.startMs, b.startMs))).date, t)} ` : "";
   return `• ${day}${t.overlap(from, to)}: ${same ? `${esc(who(a.title)!)}: ` : ""}${side(a)} ${t.and} ${side(b)}, ${t.who}`;
+}
+
+/** The digest labels for the configured language. */
+export function labels(cfg: Config): Labels {
+  return L[cfg.digest.language as keyof typeof L] ?? L.en;
 }
 
 export function buildDigest(inp: DigestInput): string {
@@ -269,9 +305,9 @@ export function buildDigest(inp: DigestInput): string {
   section(t.conflicts, confLines);
 
   // 4. Changed or cancelled since yesterday
-  const since = inp.now.getTime() - 26 * 3600000;
-  const ch = inp.changes.filter((c) => Date.parse(c.at) > since && c.kind !== "new");
-  section(t.changed, ch.map((c) => `• ${c.kind === "cancelled" ? t.cancelled : t.changedW}: ${esc(c.title)} (${c.when})`));
+  const ch = digestChanges(inp.changes, inp.now, inp.cfg);
+  const fi = inp.cfg.digest.language === "fi";
+  section(t.changed, ch.map((c) => `• ${c.kind === "cancelled" ? t.cancelled : t.changedW}: ${esc((fi ? fiTitle(c.title) : c.title).replace(/^CANCELLED: /, ""))} (${whenLabel(c.when, t)})`));
 
   // 5. Coming up: games, tournaments and exams in the next N days
   if (!inp.weekAhead) {
