@@ -1,5 +1,8 @@
-import { lookup } from "node:dns/promises";
-import { isIP } from "node:net";
+import { lookup } from "node:dns";
+import { lookup as lookupAll } from "node:dns/promises";
+import http from "node:http";
+import https from "node:https";
+import { isIP, type LookupFunction } from "node:net";
 
 // web_read (Henri, 2026-10-26): the chat agents read a public web page someone
 // posted, as text. GET only, no cookies, logins or forms, and never the
@@ -14,9 +17,9 @@ const TYPES = /^(text\/(html|plain|calendar|csv|xml)|application\/(json|xml|rss\
 export function privateAddress(ip: string): boolean {
   if (isIP(ip) === 6) {
     const v = ip.toLowerCase();
-    const mapped = v.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/);
-    if (mapped) return privateAddress(mapped[1]);
-    return v === "::" || v === "::1" || /^f[cd]/.test(v) || /^fe[89ab]/.test(v) || v.startsWith("64:ff9b:") || v.startsWith("2001:db8");
+    // "::" first covers ::, ::1 and every IPv4-mapped or -compatible form, dotted or hex
+    // (::ffff:a9fe:a9fe is 169.254.169.254): no public site needs them.
+    return v.startsWith("::") || /^f[cd]/.test(v) || /^fe[89ab]/.test(v) || v.startsWith("64:ff9b:") || v.startsWith("2001:db8") || v.startsWith("2002:");
   }
   const [a, b] = ip.split(".").map(Number);
   return (
@@ -42,7 +45,7 @@ async function checkUrl(raw: string): Promise<URL> {
   if (u.port && !["80", "443"].includes(u.port)) throw new Error("only the standard web ports");
   const host = u.hostname.replace(/^\[|\]$/g, "");
   if (/^(localhost|.*\.local|.*\.internal|.*\.ts\.net)$/i.test(host)) throw new Error("not a public address");
-  const addrs = isIP(host) ? [{ address: host }] : await lookup(host, { all: true });
+  const addrs = isIP(host) ? [{ address: host }] : await lookupAll(host, { all: true });
   if (!addrs.length || addrs.some((x) => privateAddress(x.address))) throw new Error("not a public address");
   return u;
 }
@@ -77,45 +80,76 @@ export function htmlText(html: string): { title?: string; text: string } {
   return { title: title ? decode(title).replace(/\s+/g, " ").trim() : undefined, text };
 }
 
-async function readCapped(res: Response): Promise<string> {
-  const reader = res.body?.getReader();
-  if (!reader) return "";
-  const chunks: Uint8Array[] = [];
-  let size = 0;
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    size += value.length;
-    if (size > MAX_BYTES) {
-      await reader.cancel();
-      break;
-    }
-    chunks.push(value);
-  }
-  return new TextDecoder().decode(Buffer.concat(chunks));
+/**
+ * DNS for the actual connection: the address the socket connects to is the one
+ * checked here, so a name can't pass checkUrl with a public answer and then
+ * connect to a private one (DNS rebinding).
+ */
+const safeLookup: LookupFunction = (host, opts, cb) => {
+  lookup(host, { ...opts, all: true }, (err, addrs) => {
+    if (err) return cb(err, "", 0);
+    const list = addrs as unknown as { address: string; family: number }[];
+    const bad = list.find((a) => privateAddress(a.address));
+    if (bad || !list.length) return cb(new Error("not a public address"), "", 0);
+    if ((opts as { all?: boolean }).all) return (cb as unknown as (e: null, a: typeof list) => void)(null, list);
+    cb(null, list[0].address, list[0].family);
+  });
+};
+
+export interface Got {
+  status: number;
+  location?: string;
+  type: string;
+  body: string;
 }
 
-export async function webRead(raw: string, offset = 0, fetchFn: typeof fetch = fetch) {
+/** One GET over node's http(s) with the validating lookup, no redirects followed, body capped. */
+export function httpGet(url: string): Promise<Got> {
+  const u = new URL(url);
+  const mod = u.protocol === "https:" ? https : http;
+  return new Promise((resolve, reject) => {
+    const req = mod.get(
+      u,
+      {
+        lookup: safeLookup,
+        timeout: 15_000,
+        headers: { "user-agent": "Mozilla/5.0 (family-agent web_read)", accept: "text/html,text/plain,application/json;q=0.9,*/*;q=0.5", "accept-language": "fi,en;q=0.8" },
+      },
+      (res) => {
+        const chunks: Buffer[] = [];
+        let size = 0;
+        res.on("data", (c: Buffer) => {
+          size += c.length;
+          if (size > MAX_BYTES) return res.destroy();
+          chunks.push(c);
+        });
+        const done = () =>
+          resolve({ status: res.statusCode ?? 0, location: res.headers.location, type: String(res.headers["content-type"] ?? ""), body: Buffer.concat(chunks).toString("utf8") });
+        res.on("end", done);
+        res.on("close", done);
+      },
+    );
+    req.on("timeout", () => req.destroy(new Error("the page took too long")));
+    req.on("error", reject);
+  });
+}
+
+export async function webRead(raw: string, offset = 0, get: (url: string) => Promise<Got> = httpGet) {
   let u = await checkUrl(raw);
-  let res: Response | undefined;
+  let res: Got | undefined;
   for (let hop = 0; hop <= 5; hop++) {
-    res = await fetchFn(u.toString(), {
-      redirect: "manual",
-      signal: AbortSignal.timeout(15_000),
-      headers: { "user-agent": "Mozilla/5.0 (family-agent web_read)", accept: "text/html,text/plain,application/json;q=0.9,*/*;q=0.5", "accept-language": "fi,en;q=0.8" },
-    });
-    const loc = res.headers.get("location");
-    if (res.status >= 300 && res.status < 400 && loc) {
+    res = await get(u.toString());
+    if (res.status >= 300 && res.status < 400 && res.location) {
       if (hop === 5) throw new Error("too many redirects");
-      u = await checkUrl(new URL(loc, u).toString());
+      u = await checkUrl(new URL(res.location, u).toString());
       continue;
     }
     break;
   }
-  const type = res!.headers.get("content-type") ?? "";
-  if (!res!.ok) throw new Error(`the page answered ${res!.status}`);
+  const type = res!.type;
+  if (res!.status < 200 || res!.status >= 300) throw new Error(`the page answered ${res!.status}`);
   if (type && !TYPES.test(type)) throw new Error(`not a text page (${type.split(";")[0]})`);
-  const raw2 = await readCapped(res!);
+  const raw2 = res!.body;
   const { title, text } = /html|xml/i.test(type) || /^\s*</.test(raw2) ? htmlText(raw2) : { title: undefined, text: raw2.trim() };
   const start = Math.max(0, Math.min(offset, text.length));
   const page = text.slice(start, start + PAGE_CHARS);
