@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { Got, htmlText, privateAddress, webRead } from "../src/agent/web.js";
+import { decodeBody, Got, htmlText, privateAddress, webRead } from "../src/agent/web.js";
 
 test("web_read refuses the server's own network and non-web addresses", async () => {
   for (const ip of ["127.0.0.1", "10.1.2.3", "100.123.81.124", "169.254.169.254", "192.168.1.1", "172.20.0.1", "0.0.0.0", "::1", "fd7a:115c:a1e0::1", "::ffff:127.0.0.1"]) assert.ok(privateAddress(ip), ip);
@@ -54,7 +54,11 @@ test("web_read rejects a page cut off mid-transfer and flags a page over the siz
   const http = await import("node:http");
   const { httpGet } = await import("../src/agent/web.js");
   const server = http.createServer((req, res) => {
-    if (req.url === "/cut") {
+    if (req.url === "/slow") {
+      res.writeHead(200, { "content-type": "text/plain" });
+      const t = setInterval(() => res.write("."), 50);
+      res.on("close", () => clearInterval(t));
+    } else if (req.url === "/cut") {
       res.writeHead(200, { "content-type": "text/plain", "content-length": "1000" });
       res.write("partial");
       setTimeout(() => res.socket?.destroy(), 20);
@@ -72,7 +76,16 @@ test("web_read rejects a page cut off mid-transfer and flags a page over the siz
     const big = await httpGet(`http://127.0.0.1:${port}/big`, lookup);
     assert.equal(big.truncated, true);
     assert.equal(big.body.length, 2_000_000);
+    await assert.rejects(httpGet(`http://127.0.0.1:${port}/slow`, lookup, 300), /took too long/);
   } finally {
     server.close();
   }
+});
+
+test("web_read decodes the page in its declared charset", () => {
+  const latin = Buffer.from("Hyvää päivää", "latin1");
+  assert.equal(decodeBody(latin, "text/html; charset=iso-8859-1"), "Hyvää päivää");
+  assert.equal(decodeBody(Buffer.concat([Buffer.from('<meta charset="windows-1252"><p>'), latin]), "text/html"), '<meta charset="windows-1252"><p>Hyvää päivää');
+  assert.equal(decodeBody(Buffer.from("Hyvää", "utf8"), "text/plain"), "Hyvää");
+  assert.equal(decodeBody(Buffer.from("ok"), "text/plain; charset=nonsense"), "ok");
 });

@@ -153,6 +153,18 @@ const safeLookup: LookupFunction = (host, opts, cb) => {
   });
 };
 
+/** The body's text in its declared charset (header, else a <meta> near the top), UTF-8 when unknown. */
+export function decodeBody(buf: Buffer, type: string): string {
+  const declared =
+    /charset=["']?([\w.:-]+)/i.exec(type)?.[1] ??
+    /<meta[^>]{0,200}charset=["']?([\w.:-]+)/i.exec(buf.subarray(0, 4096).toString("latin1"))?.[1];
+  try {
+    return new TextDecoder(declared ?? "utf-8").decode(buf);
+  } catch {
+    return buf.toString("utf8"); // an unknown label
+  }
+}
+
 export interface Got {
   status: number;
   location?: string;
@@ -163,10 +175,15 @@ export interface Got {
 }
 
 /** One GET over node's http(s) with the validating lookup, no redirects followed, body capped. */
-export function httpGet(url: string, dnsLookup: LookupFunction = safeLookup): Promise<Got> {
+export function httpGet(url: string, dnsLookup: LookupFunction = safeLookup, deadlineMs = 30_000): Promise<Got> {
   const u = new URL(url);
   const mod = u.protocol === "https:" ? https : http;
   return new Promise((resolve, reject) => {
+    // The socket timeout below only measures silence; a page that trickles bytes is stopped by this.
+    const deadline = setTimeout(() => {
+      reject(new Error("the page took too long"));
+      req.destroy();
+    }, deadlineMs);
     const req = mod.get(
       u,
       {
@@ -192,13 +209,17 @@ export function httpGet(url: string, dnsLookup: LookupFunction = safeLookup): Pr
         res.on("end", () => (ended = true));
         // A connection that drops before the end isn't a read: a cut schedule would look complete.
         res.on("close", () => {
+          clearTimeout(deadline);
           if (!ended && !truncated) return reject(new Error("the page stopped before it was complete"));
-          resolve({ status: res.statusCode ?? 0, location: res.headers.location, type: String(res.headers["content-type"] ?? ""), body: Buffer.concat(chunks).toString("utf8"), ...(truncated ? { truncated } : {}) });
+          resolve({ status: res.statusCode ?? 0, location: res.headers.location, type: String(res.headers["content-type"] ?? ""), body: decodeBody(Buffer.concat(chunks), String(res.headers["content-type"] ?? "")), ...(truncated ? { truncated } : {}) });
         });
       },
     );
     req.on("timeout", () => req.destroy(new Error("the page took too long")));
-    req.on("error", reject);
+    req.on("error", (e) => {
+      clearTimeout(deadline);
+      reject(e);
+    });
   });
 }
 
