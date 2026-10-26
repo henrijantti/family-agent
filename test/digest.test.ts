@@ -132,8 +132,8 @@ test("one child booked in two places is a conflict; games count as coming up, pr
   assert.ok(!isComingUp("Oskar: Taitokoulu 2017 -syntyneet"));
   assert.ok(!isComingUp("Oliver: Lokakuun tiedote 2026 - alustava"));
   assert.ok(!isComingUp("Oliver: Kiekko-Espoo harjoitus"));
-  // A group after the dash is a practice, not two teams (Henri, 2026-10-26).
-  assert.ok(!isComingUp("Oskar: Futsal - Sininen"));
+  // A team colour after the dash is a game, a "Ryhmä" group is a practice (Henri, 2026-10-26).
+  assert.ok(isComingUp("Oskar: Futsal - Sininen"));
   assert.ok(!isComingUp("Oskar: PPJ Laru 2017 - Ryhmä Litmanen"));
 });
 

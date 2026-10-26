@@ -175,12 +175,12 @@ export function isComingUp(title: string): boolean {
   // Named games first, so "Harjoitusottelu" (a practice match) stays in.
   if (/exam|koe\b|turnaus|tournament|cup|ottelu|match|peli\b|game\b|\bvs\b/i.test(title)) return true;
   if (/harjoit|treeni|jäävuoro|omatoimi|taitokoulu|tiedote|practice/i.test(title)) return false;
-  // "K-Espoo Blues 3 - Ice Force": two teams around a spaced dash is a game. A group
-  // after the dash is a practice: "Futsal - Sininen", "... - Ryhmä Litmanen" (Henri, 2026-10-26).
+  // "K-Espoo Blues 3 - Ice Force": two teams around a spaced dash is a game, and so is a
+  // team colour: "Futsal - Sininen" is a game (Henri, 2026-10-26). A "Ryhmä ..." group is a practice.
   const m = title.match(/\s[-–]\s(.*)$/);
   return !!m && !GROUP_RE.test(m[1].trim());
 }
-const GROUP_RE = /^(ryhmä|group|sininen|punainen|keltainen|vihreä|valkoinen|musta|oranssi|harmaa|liila|violetti|pinkki|ruskea)(?=\s|$)/i;
+const GROUP_RE = /^(ryhmä|group)(?=\s|$)/i;
 
 /**
  * "Changed or cancelled since yesterday", as the family reads it: only events from
