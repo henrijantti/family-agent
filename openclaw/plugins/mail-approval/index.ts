@@ -10,7 +10,7 @@ import { definePluginEntry } from "openclaw/plugin-sdk/plugin-entry";
 
 const DEFAULT_STATE = "/home/openclaw/family-agent/state";
 
-function draft(stateDir: string, draftId: string): { replyTo?: string; subject?: string; preview?: string } {
+function draft(stateDir: string, draftId: string): { replyTo?: string; subject?: string; preview?: string; kind?: string } {
   const file = join(stateDir, "mail-drafts.jsonl");
   if (!existsSync(file)) return {};
   for (const l of readFileSync(file, "utf8").split("\n")) {
@@ -37,7 +37,14 @@ export default definePluginEntry({
       const selftest = draftId.startsWith("SELFTEST");
       return {
         requireApproval: {
-          title: (selftest ? "🔧 Palvelimen testikortti" : known ? `📧 Lähetetäänkö vastaus: ${d.replyTo}?` : "📧 Ei lähetettävää luonnosta").slice(0, 80),
+          title: (selftest
+            ? "🔧 Palvelimen testikortti"
+            : d.kind === "invite"
+              ? `📅 Lähetetäänkö kalenterikutsu: ${d.replyTo}?`
+              : known
+                ? `📧 Lähetetäänkö vastaus: ${d.replyTo}?`
+                : "📧 Ei lähetettävää luonnosta"
+          ).slice(0, 80),
           description: (selftest
             ? `Automaattinen testi, hylätään itsestään. Mitään ei lähetetä. (${draftId})`
             : known

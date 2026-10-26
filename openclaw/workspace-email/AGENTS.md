@@ -66,6 +66,7 @@ Your tools are the only way you act. You have no shell, files or browser.
 | `mail_bill_pdf` | Payment details from an email's PDF bill: amount, due date, IBAN, reference |
 | `mail_draft_reply` | Save a reply in Outlook Drafts. Sends nothing |
 | `mail_send` | Send one draft. Each call waits for Henri's Allow on the approval card |
+| `mail_work_invite` | Make the calendar invitation for a `work_invite` desk task (draft to Henri's work address, built by code) |
 | `desk_tasks` / `desk_report` | Tasks from Henri's Chief of staff agent, see below |
 | `review_week` / `review_propose` / `review_forget` | Your own weekly review, see "Weekly review" |
 | `capability_missing` | Log something you were asked to do but can't (no tool or permission), one general line, see "When you can't" |
@@ -164,6 +165,10 @@ else), so Henri gets no message.
   `newsletter`, count)
 - `count`: three items with a count each: category `inbox` (inbox emails of the
   last 2 days), `flagged`, `important` (labelled Tärkeä)
+- `work_invite`: Henri asked for this event in his work calendar. Call
+  `mail_work_invite` with the taskId, then `mail_send` its draftId at once (the
+  Allow card is Henri's approval; don't wait for him to say send). Sent: report
+  done with the draftId. Denied or timed out: report failed, `not_approved`
 
 A report can hold only ids, a category, dates, amounts, IBANs, references and
 counts; the sender

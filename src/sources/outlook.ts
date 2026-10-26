@@ -309,6 +309,17 @@ export class GraphMail implements MailApi {
    * Sends one existing draft, as it now stands in Drafts (Henri may have
    * edited it). Only the Email agent's mail_send tool calls this.
    */
+  /** A whole MIME email (a calendar invitation) saved to Drafts. Graph takes MIME as base64 text; this never sends. */
+  async createMimeDraft(mime: string) {
+    const res = await fetch(`${GRAPH}/me/messages`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${await this.token()}`, "content-type": "text/plain" },
+      body: Buffer.from(mime, "utf8").toString("base64"),
+    });
+    if (!res.ok) throw new Error(`Graph POST /me/messages (MIME): ${res.status} ${(await res.text()).slice(0, 300)}`);
+    return (await res.json()) as { id: string };
+  }
+
   async sendDraft(draftId: string) {
     if (!this.canSend) throw new Error("Sending is off (outlook.email_agent.send)");
     await this.call("POST", `/me/messages/${encodeURIComponent(draftId)}/send`, undefined, true);

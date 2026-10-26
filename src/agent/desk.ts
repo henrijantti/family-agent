@@ -3,6 +3,7 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
 import { dirname } from "node:path";
 import type { MailMessage } from "../sources/outlook.js";
 import { validIban, validReference } from "../sources/bill-pdf.js";
+import type { Invite } from "./invite.js";
 import { findDraft, pdfBillReads } from "./mail-tools.js";
 import { Tool, ToolError } from "./mcp.js";
 
@@ -24,8 +25,10 @@ const ID = "^[A-Za-z0-9_=+/-]{10,400}$";
 const TASK_ID = "^t[0-9]{8}-[0-9a-z]{6}$";
 
 export const KINDS = ["sort", "bills", "needs_reply", "draft_reply", "newsletters", "count"] as const;
+/** Tasks only code makes (never desk_task_create): work_invite, from the family tools' work_calendar_invite. */
+export const CODE_KINDS = ["work_invite"] as const;
 export const CATEGORIES = ["bill", "needs_reply", "newsletter", "receipt", "personal", "school", "hobbies", "work", "official", "phishing", "important", "flagged", "inbox", "other"] as const;
-export const FAILURES = ["no_access", "not_found", "unclear_task", "too_many", "error"] as const;
+export const FAILURES = ["no_access", "not_found", "unclear_task", "too_many", "not_approved", "error"] as const;
 const CURRENCIES = ["EUR", "USD", "GBP", "SEK", "NOK"];
 
 const KIND_HELP =
@@ -36,9 +39,11 @@ const KIND_HELP =
 export interface DeskTask {
   type: "task";
   taskId: string;
-  kind: (typeof KINDS)[number];
+  kind: (typeof KINDS)[number] | (typeof CODE_KINDS)[number];
   messageId?: string;
   instruction?: string;
+  /** work_invite: the event, copied from a family calendar by code. */
+  invite?: Invite;
   at: string;
 }
 
@@ -93,6 +98,22 @@ export function openTasks(file: string): DeskTask[] {
 }
 
 const newId = (now: Date) => `t${now.toISOString().slice(0, 10).replace(/-/g, "")}-${Math.random().toString(36).slice(2, 8).padEnd(6, "0")}`;
+
+/**
+ * Queue one calendar invitation to Henri's work address (Henri, 2026-10-26). The
+ * family tools call this with event data read from the calendar; the Email agent
+ * builds the email from it with mail_work_invite and sends it only on Henri's Allow.
+ */
+export function queueWorkInvite(file: string, invite: Invite, now: Date, wake?: () => void): string {
+  const open = openTasks(file);
+  const same = open.find((t) => t.kind === "work_invite" && t.invite?.title === invite.title && t.invite?.start === invite.start);
+  if (same) return same.taskId;
+  if (open.filter((t) => t.kind === "work_invite").length >= 5) throw new ToolError("5 work calendar invitations are already waiting for Henri's Allow");
+  const task: DeskTask = { type: "task", taskId: newId(now), kind: "work_invite", invite, at: now.toISOString() };
+  append(file, task);
+  wake?.();
+  return task.taskId;
+}
 
 export interface DeskDeps {
   file: string;
@@ -177,7 +198,9 @@ export function deskWorkerTools(d: DeskWorkerDeps): Tool[] {
   return [
     {
       name: "desk_tasks",
-      description: "Tasks the Chief of staff has given you, oldest first. Do each with your mail tools, then answer it with desk_report.",
+      description:
+        "Tasks the Chief of staff has given you, oldest first. Do each with your mail tools, then answer it with desk_report. " +
+        "work_invite: call mail_work_invite with its taskId, then mail_send the draftId (Henri approves), then desk_report done with that draftId, or failed with not_approved if Henri didn't allow it.",
       input: { properties: {} },
       async run() {
         return openTasks(d.file).map(({ type: _t, ...t }) => t);

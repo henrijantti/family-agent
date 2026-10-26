@@ -3,6 +3,8 @@ import { dirname } from "node:path";
 import { htmlToText, type MailMessage } from "../sources/outlook.js";
 import { MAX_PDF_BYTES, readBillPdf, type BillFields } from "../sources/bill-pdf.js";
 import { Tool, ToolError } from "./mcp.js";
+import { inviteMime } from "./invite.js";
+import { openTasks } from "./desk.js";
 
 // Tools for the Email agent, an OpenClaw agent of its own that gets only these.
 // It reads, sorts and drafts in Henri's Outlook. It cannot forward, delete, or
@@ -39,6 +41,8 @@ export interface MailToolApi {
   unflag(messageId: string): Promise<void>;
   /** Absent when sending is off. */
   sendDraft?(draftId: string): Promise<void>;
+  /** Save a whole MIME email as a draft (calendar invitations). Never sends. */
+  createMimeDraft?(mime: string): Promise<{ id: string }>;
   /** File attachments (id, type, size); with attachmentBytes, enables mail_bill_pdf. */
   listAttachments?(messageId: string): Promise<{ id: string; contentType: string; size: number; isInline: boolean }[]>;
   attachmentBytes?(messageId: string, attachmentId: string): Promise<Uint8Array>;
@@ -53,6 +57,8 @@ export interface DraftRecord {
   /** Start of the text as drafted, shown on Henri's approval card. */
   preview: string;
   at: string;
+  /** A calendar invitation to Henri's work address (messageId is then "invite:<taskId>"). */
+  kind?: "invite";
 }
 
 /** How long Henri's Allow stays valid for its draft. */
@@ -72,6 +78,8 @@ export interface MailDeps {
   rulesFile?: string;
   /** Record of mail_bill_pdf reads; desk_report checks reported IBANs against it. */
   billPdfFile?: string;
+  /** Henri's work address, the only one an invitation goes to, and the desk file holding the requests. */
+  workInvite?: { to: string; deskFile: string };
 }
 
 /** What mail_bill_pdf read from one email's PDF, as recorded. */
@@ -367,18 +375,42 @@ export function mailTools(d: MailDeps): Tool[] {
       },
     );
   }
+  if (d.workInvite && d.mail.createMimeDraft && d.self[0]) {
+    const w = d.workInvite;
+    const create = d.mail.createMimeDraft.bind(d.mail);
+    const from = d.self[0];
+    tools.push({
+      name: "mail_work_invite",
+      description:
+        "Make the calendar invitation for one work_invite desk task as a draft from Henri's Outlook to his work address. The email is built from the task's event; you write nothing. Then mail_send the draftId.",
+      input: { properties: { taskId: { type: "string", pattern: "^t[0-9]{8}-[0-9a-z]{6}$" } }, required: ["taskId"] },
+      async run(a) {
+        const task = openTasks(w.deskFile).find((t) => t.taskId === a.taskId && t.kind === "work_invite");
+        if (!task?.invite) throw new ToolError("no open work_invite task with that id");
+        const messageId = `invite:${task.taskId}`;
+        const earlier = lines<DraftRecord>(d.draftsFile).find((r) => r.messageId === messageId);
+        if (earlier && !findDraft(d.draftsFile, earlier.draftId)?.sentAt) return { draftId: earlier.draftId, to: w.to, subject: earlier.subject, sent: false };
+        const m = inviteMime(task.invite, `${task.taskId}@family-agent`, from, w.to, d.now());
+        const draft = await create(m.mime);
+        recordDraft(d.draftsFile, { draftId: draft.id, messageId, replyTo: w.to.toLowerCase(), subject: m.subject, preview: m.preview, at: d.now().toISOString(), kind: "invite" });
+        return { draftId: draft.id, to: w.to, subject: m.subject, saved: "Outlook Drafts", sent: false };
+      },
+    });
+  }
   if (d.mail.sendDraft) {
     const send = d.mail.sendDraft.bind(d.mail);
     tools.push({
       name: "mail_send",
       description:
-        "Send one reply draft that mail_draft_reply made, as it now stands in Drafts. Henri must approve each send in Telegram (OpenClaw asks him). Only plain replies to the original sender can be sent.",
+        "Send one draft that mail_draft_reply or mail_work_invite made, as it now stands in Drafts. Henri must approve each send in Telegram (OpenClaw asks him). Only plain replies to the original sender, or an invitation to Henri's work address, can be sent.",
       input: { properties: { draftId: { type: "string", pattern: ID } }, required: ["draftId"] },
       async run(a) {
         const draftId = String(a.draftId);
         const rec = findDraft(d.draftsFile, draftId);
         if (!rec) throw new ToolError("only drafts made with mail_draft_reply can be sent");
         if (rec.sentAt) throw new ToolError("that draft was already sent");
+        // An invitation goes only to the work address set on the server, whatever the record says.
+        if (rec.kind === "invite" && (!d.workInvite || rec.replyTo !== d.workInvite.to.toLowerCase())) throw new ToolError("not sent: invitations go only to Henri's work address");
         // The plugin records the Allow when Henri answers; give that write a moment to land.
         for (let waited = 0; !approved(d.approvalsFile, rec, d.now()) && waited < (d.approvalWaitMs ?? 3000); waited += 250) await new Promise((r) => setTimeout(r, 250));
         if (!approved(d.approvalsFile, rec, d.now())) throw new ToolError("not sent: Henri has not approved this draft (the approval card must be answered with Allow)");
