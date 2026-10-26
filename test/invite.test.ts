@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { test } from "node:test";
 import { handle, Tool } from "../src/agent/mcp.js";
 import { familyTools } from "../src/agent/family-tools.js";
-import { claim, mailTools, type MailToolApi } from "../src/agent/mail-tools.js";
+import { claim, discardDraft, mailTools, type MailToolApi } from "../src/agent/mail-tools.js";
 import { deskTools, deskWorkerTools } from "../src/agent/desk.js";
 import { inviteIcs, inviteMime, inviteWhen } from "../src/agent/invite.js";
 import { FakeCalendar } from "../src/calendar/fake.js";
@@ -157,4 +157,28 @@ test("invitation claim: held while its process lives however old, taken over fro
   writeFileSync(f, "1 other");
   third();
   assert.equal(readFileSync(f, "utf8"), "1 other");
+});
+
+test("discard a draft: only an unsent agent draft still in Drafts, moved to Deleted Items, then never sent", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "discard-"));
+  const draftsFile = join(dir, "mail-drafts.jsonl");
+  const rec = { draftId: "DRAFTold00001", messageId: "invite:t20261026-aaaaaa", replyTo: WORK, subject: "Kutsu: X", preview: "", at: NOW.toISOString(), kind: "invite" };
+  appendFileSync(draftsFile, JSON.stringify(rec) + "\n" + JSON.stringify({ ...rec, draftId: "DRAFTsent0001" }) + "\n" + JSON.stringify({ draftId: "DRAFTsent0001", sentAt: NOW.toISOString() }) + "\n");
+  let folder = "DRAFTS";
+  const moves: string[] = [];
+  const mail = {
+    getMessage: async (id: string) => ({ id, subject: "Kutsu: X", receivedDateTime: "", isDraft: true, parentFolderId: folder }),
+    move: async (id: string, to: string) => void moves.push(`${id}->${to}`),
+    wellKnownFolderIds: async () => ({ drafts: "DRAFTS", deleteditems: "TRASH" }),
+  };
+  await assert.rejects(discardDraft(mail, draftsFile, "DRAFTnone0001", NOW), /only drafts the agents made/);
+  await assert.rejects(discardDraft(mail, draftsFile, "DRAFTsent0001", NOW), /was sent/);
+  folder = "ARCHIVE";
+  await assert.rejects(discardDraft(mail, draftsFile, "DRAFTold00001", NOW), /not in Drafts/);
+  folder = "DRAFTS";
+  assert.match(await discardDraft(mail, draftsFile, "DRAFTold00001", NOW), /Deleted Items/);
+  assert.deepEqual(moves, ["DRAFTold00001->TRASH"]);
+  await assert.rejects(discardDraft(mail, draftsFile, "DRAFTold00001", NOW), /already discarded/);
+  const tools = mailTools({ mail: { ...mail, sendDraft: async () => {} } as unknown as MailToolApi, draftsFile, approvalsFile: join(dir, "a.jsonl"), self: ["a@x.example"], now: () => NOW });
+  assert.match((await call(tools, "mail_send", { draftId: "DRAFTold00001" })).text, /invitations are sent by mail_work_invite|discarded/);
 });

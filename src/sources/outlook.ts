@@ -35,6 +35,7 @@ export interface MailMessage {
   bccRecipients?: { emailAddress: { name?: string; address: string } }[];
   isDraft?: boolean;
   conversationId?: string;
+  parentFolderId?: string;
 }
 
 export interface MailApi {
@@ -269,7 +270,7 @@ export class GraphMail implements MailApi {
 
   /** One message with recipients and body, for reading or checking a draft. */
   getMessage(id: string) {
-    const q = "$select=id,subject,from,toRecipients,ccRecipients,bccRecipients,receivedDateTime,bodyPreview,body,categories,flag,isDraft,conversationId";
+    const q = "$select=id,subject,from,toRecipients,ccRecipients,bccRecipients,receivedDateTime,bodyPreview,body,categories,flag,isDraft,conversationId,parentFolderId";
     return this.call<MailMessage>("GET", `/me/messages/${encodeURIComponent(id)}?${q}`);
   }
 
