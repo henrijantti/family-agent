@@ -536,21 +536,23 @@ export function mailTools(d: MailDeps): Tool[] {
         required: ["taskId", "to"],
       },
       async run(a) {
-        const task = [...openTasks(c.deskFile), ...invitesWaitingForAddress(c.deskFile, d.now())].find((t) => t.taskId === a.taskId && t.kind === "calendar_invite");
+        const messageId = `calinvite:${a.taskId}`;
+        const records = lines<DraftRecord>(d.draftsFile).filter((r) => r.messageId === messageId);
+        if (records.some((r) => findDraft(d.draftsFile, r.draftId)?.sentAt)) throw new ToolError("that invitation was already sent");
+        const task = [...openTasks(c.deskFile), ...invitesWaitingForAddress(c.deskFile, d.now(), d.draftsFile)].find((t) => t.taskId === a.taskId && t.kind === "calendar_invite");
         if (!task?.invite) throw new ToolError("no open calendar_invite task with that id");
         const to = [...new Set((a.to as string[]).map((x) => String(x).trim().toLowerCase()))];
         if (!to.length || to.length > 10) throw new ToolError("to: 1 to 10 addresses");
         const bad = to.find((x) => !/^[^\s@<>",;]{1,64}@[a-z0-9.-]{1,190}\.[a-z]{2,}$/.test(x));
         if (bad) throw new ToolError(`not an email address: ${bad}`);
         if (to.some((x) => d.self.map((s) => s.toLowerCase()).includes(x))) throw new ToolError("Henri is the organizer; leave his own address out");
-        const named = task.attendees ?? [];
-        if (to.length > named.length) throw new ToolError(`the task names ${named.length} attendee(s); give one address each, no more`);
-        const missing = named.map((n) => n.trim().toLowerCase()).filter((n) => n.includes("@") && !to.includes(n));
+        const named = [...new Set((task.attendees ?? []).map((n) => n.trim().toLowerCase()))];
+        if (to.length !== named.length) throw new ToolError(`the task names ${named.length} attendee(s); give exactly one address for each (ask Henri for any you can't find)`);
+        const missing = named.filter((n) => n.includes("@") && !to.includes(n));
         if (missing.length) throw new ToolError(`the task names ${missing.join(", ")}; use those addresses`);
-        const messageId = `calinvite:${task.taskId}`;
         const key = [...to].sort().join(", ");
-        const earlier = lines<DraftRecord>(d.draftsFile).find((r) => {
-          if (r.messageId !== messageId || [...(r.to ?? [])].sort().join(", ") !== key) return false;
+        const earlier = records.find((r) => {
+          if ([...(r.to ?? [])].sort().join(", ") !== key) return false;
           const f = findDraft(d.draftsFile, r.draftId);
           return !f?.sentAt && !f?.discardedAt;
         });

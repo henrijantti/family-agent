@@ -103,12 +103,25 @@ export function openTasks(file: string): DeskTask[] {
 
 /**
  * Calendar invitations the Email agent couldn't address (reported failed, not_found)
- * in the last 7 days: Henri was asked for the address, and gives it in the mail bot chat.
+ * in the last 7 days and has made no draft for since: Henri was asked for the
+ * address, and gives it in the mail bot chat.
  */
-export function invitesWaitingForAddress(file: string, now: Date): DeskTask[] {
+export function invitesWaitingForAddress(file: string, now: Date, draftsFile: string): DeskTask[] {
   const all = rows(file);
   const notFound = new Set(all.filter((r): r is DeskReport => r.type === "report" && r.status === "failed" && r.failure === "not_found").map((r) => r.taskId));
-  return all.filter((r): r is DeskTask => r.type === "task" && r.kind === "calendar_invite" && notFound.has(r.taskId) && now.getTime() - Date.parse(r.at) < 7 * 86400000);
+  const drafted = new Set(
+    existsSync(draftsFile)
+      ? readFileSync(draftsFile, "utf8")
+          .split("\n")
+          .filter(Boolean)
+          .map((l) => JSON.parse(l) as { draftId: string; messageId?: string })
+          .filter((r) => r.messageId?.startsWith("calinvite:") && !findDraft(draftsFile, r.draftId)?.discardedAt)
+          .map((r) => r.messageId!.slice("calinvite:".length))
+      : [],
+  );
+  return all.filter(
+    (r): r is DeskTask => r.type === "task" && r.kind === "calendar_invite" && notFound.has(r.taskId) && !drafted.has(r.taskId) && now.getTime() - Date.parse(r.at) < 7 * 86400000,
+  );
 }
 
 const newId = (now: Date) => `t${now.toISOString().slice(0, 10).replace(/-/g, "")}-${Math.random().toString(36).slice(2, 8).padEnd(6, "0")}`;
@@ -237,7 +250,7 @@ export function deskWorkerTools(d: DeskWorkerDeps): Tool[] {
         "waitingForAddress: Henri was already asked; only when he gives the address in the chat, call mail_calendar_invite with it (no report).",
       input: { properties: {} },
       async run() {
-        const waiting = invitesWaitingForAddress(d.file, d.now()).map(({ type: _t, ...t }) => ({ ...t, waitingForAddress: true }));
+        const waiting = invitesWaitingForAddress(d.file, d.now(), d.draftsFile).map(({ type: _t, ...t }) => ({ ...t, waitingForAddress: true }));
         return [...openTasks(d.file).map(({ type: _t, ...t }) => t), ...waiting];
       },
     },

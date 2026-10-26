@@ -253,4 +253,10 @@ test("calendar invitation to other people: queued with names, addresses found in
   const d2 = (await call(mail, "mail_calendar_invite", { taskId: q2.taskId, to: ["tuntematon@mail.example"] })).json();
   assert.equal(d2.sent, false);
   assert.match(mimes.at(-1)!, /To: tuntematon@mail.example/);
+  assert.deepEqual((await call(mail, "desk_tasks", {})).json(), [], "an addressed invitation is no longer waiting");
+  assert.match((await call(mail, "mail_calendar_invite", { taskId: q.taskId, to: [ARTO] })).text, /already sent/);
+
+  // Two people named: both need an address.
+  const q3 = (await call(fam, "calendar_invite", { calendar: "family", id: "ev9", attendees: ["Arto", "Mikko"] })).json();
+  assert.match((await call(mail, "mail_calendar_invite", { taskId: q3.taskId, to: [ARTO] })).text, /exactly one address for each/);
 });
