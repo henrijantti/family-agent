@@ -114,6 +114,15 @@ test("work invitation: queued from the family tools, built by code, sent without
   assert.match((await call(mail, "desk_report", { taskId: q.taskId, status: "done", items: [{ draftId: d.draftId }] })).text, /Reported 1/);
   assert.deepEqual((await call(mail, "desk_tasks", {})).json().map((t: any) => t.taskId), [q2.taskId]);
 
+  // Two runs at once for one task: one sends, the other is told to wait. One invitation goes.
+  const both = await Promise.all([call(mail, "mail_work_invite", { taskId: q2.taskId }), call(mail, "mail_work_invite", { taskId: q2.taskId })]);
+  assert.deepEqual(both.map((r) => r.error).sort(), [false, true]);
+  assert.match(both.find((r) => r.error)!.text, /another run is sending/);
+  assert.equal(sent.length, 2);
+  // The claim is released: a later retry gets the sent invitation back.
+  assert.equal((await call(mail, "mail_work_invite", { taskId: q2.taskId })).json().sent, true);
+  assert.equal(sent.length, 2);
+
   // Without the work address set, or with sending off, there is no invitation tool.
   assert.ok(!mailTools({ mail: api, ...files, self: ["henri@outlook.example"], now: () => NOW }).some((t) => t.name === "mail_work_invite"));
   const noSend = { ...api, sendDraft: undefined } as unknown as MailToolApi;

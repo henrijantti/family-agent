@@ -1,9 +1,9 @@
-import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
+import { appendFileSync, closeSync, existsSync, mkdirSync, openSync, readFileSync, statSync, unlinkSync } from "node:fs";
 import { dirname } from "node:path";
 import { htmlToText, type MailMessage } from "../sources/outlook.js";
 import { MAX_PDF_BYTES, readBillPdf, type BillFields } from "../sources/bill-pdf.js";
 import { Tool, ToolError } from "./mcp.js";
-import { inviteMime } from "./invite.js";
+import { inviteMime, type Invite } from "./invite.js";
 import { openTasks } from "./desk.js";
 
 // Tools for the Email agent, an OpenClaw agent of its own that gets only these.
@@ -391,27 +391,50 @@ export function mailTools(d: MailDeps): Tool[] {
       async run(a) {
         const task = openTasks(w.deskFile).find((t) => t.taskId === a.taskId && t.kind === "work_invite");
         if (!task?.invite) throw new ToolError("no open work_invite task with that id");
-        const messageId = `invite:${task.taskId}`;
-        const earlier = lines<DraftRecord>(d.draftsFile).find((r) => r.messageId === messageId);
-        // One invitation per task: a retry after a cut-off run reuses the same draft, and never sends twice.
-        let rec: DraftRecord | undefined = earlier;
-        if (rec && findDraft(d.draftsFile, rec.draftId)?.sentAt) return { draftId: rec.draftId, to: w.to, subject: rec.subject, sent: true };
-        if (!rec) {
-          const m = inviteMime(task.invite, `${task.taskId}@family-agent`, from, w.to, d.now());
-          const draft = await create(m.mime);
-          rec = { draftId: draft.id, messageId, replyTo: w.to.toLowerCase(), subject: m.subject, preview: m.preview, at: d.now().toISOString(), kind: "invite" };
-          recordDraft(d.draftsFile, rec);
+        // One run at a time per task, across mail-server processes too: a claim file held from
+        // the draft lookup to the send. A claim left behind by a crashed run expires after 5 minutes.
+        const claim = `${d.draftsFile}.invite-${task.taskId}.lock`;
+        mkdirSync(dirname(claim), { recursive: true });
+        try {
+          if (Date.now() - statSync(claim).mtimeMs > 5 * 60_000) unlinkSync(claim);
+        } catch {}
+        let fd: number;
+        try {
+          fd = openSync(claim, "wx", 0o600);
+        } catch {
+          throw new ToolError("not sent: another run is sending this invitation right now; check desk_tasks again in a few minutes");
         }
-        // Henri, 2026-10-26: invitations go without the Allow card. So code checks the draft
-        // in Outlook is still addressed only to the work address before it goes.
-        if (rec.replyTo !== w.to.toLowerCase()) throw new ToolError("not sent: that draft is for an earlier work address");
-        const why = sendBlocker(await d.mail.getMessage(rec.draftId), rec);
-        if (why) throw new ToolError(`not sent: ${why}`);
-        await send(rec.draftId);
-        appendFileSync(d.draftsFile, JSON.stringify({ draftId: rec.draftId, sentAt: d.now().toISOString() }) + "\n");
-        return { draftId: rec.draftId, to: w.to, subject: rec.subject, sent: true };
+        try {
+          return await sendInvite(task.taskId, task.invite);
+        } finally {
+          closeSync(fd);
+          try {
+            unlinkSync(claim);
+          } catch {}
+        }
       },
     });
+    async function sendInvite(taskId: string, invite: Invite) {
+      const messageId = `invite:${taskId}`;
+      const earlier = lines<DraftRecord>(d.draftsFile).find((r) => r.messageId === messageId);
+      // One invitation per task: a retry after a cut-off run reuses the same draft, and never sends twice.
+      let rec: DraftRecord | undefined = earlier;
+      if (rec && findDraft(d.draftsFile, rec.draftId)?.sentAt) return { draftId: rec.draftId, to: w.to, subject: rec.subject, sent: true };
+      if (!rec) {
+        const m = inviteMime(invite, `${taskId}@family-agent`, from, w.to, d.now());
+        const draft = await create(m.mime);
+        rec = { draftId: draft.id, messageId, replyTo: w.to.toLowerCase(), subject: m.subject, preview: m.preview, at: d.now().toISOString(), kind: "invite" };
+        recordDraft(d.draftsFile, rec);
+      }
+      // Henri, 2026-10-26: invitations go without the Allow card. So code checks the draft
+      // in Outlook is still addressed only to the work address before it goes.
+      if (rec.replyTo !== w.to.toLowerCase()) throw new ToolError("not sent: that draft is for an earlier work address");
+      const why = sendBlocker(await d.mail.getMessage(rec.draftId), rec);
+      if (why) throw new ToolError(`not sent: ${why}`);
+      await send(rec.draftId);
+      appendFileSync(d.draftsFile, JSON.stringify({ draftId: rec.draftId, sentAt: d.now().toISOString() }) + "\n");
+      return { draftId: rec.draftId, to: w.to, subject: rec.subject, sent: true };
+    }
   }
   if (d.mail.sendDraft) {
     const send = d.mail.sendDraft.bind(d.mail);
