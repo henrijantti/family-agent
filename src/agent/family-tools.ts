@@ -427,6 +427,7 @@ export function familyTools(d: FamilyDeps): Tool[] {
         const taskId = queueWorkInvite(
           w.deskFile,
           { title: ev.summary || "(ei otsikkoa)", start: when(ev.start), end: when(ev.end), allDay, ...(ev.location ? { location: ev.location } : {}) },
+          `${a.calendar}:${ev.id}`,
           d.now(),
           w.wake,
         );

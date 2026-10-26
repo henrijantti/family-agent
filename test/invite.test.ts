@@ -56,7 +56,10 @@ test("work invitation: queued from the family tools, drafted from code, sent onl
   const dir = mkdtempSync(join(tmpdir(), "invite-"));
   const deskFile = join(dir, "mail-desk.jsonl");
   const cal = new FakeCalendar();
-  cal.seed("family", [{ id: "ev1", summary: "Oskar: vanhempainilta", start: { dateTime: "2026-11-04T18:00:00+02:00" }, end: { dateTime: "2026-11-04T19:00:00+02:00" }, location: "Koulu" }]);
+  cal.seed("family", [
+    { id: "ev1", summary: "Oskar: vanhempainilta", start: { dateTime: "2026-11-04T18:00:00+02:00" }, end: { dateTime: "2026-11-04T19:00:00+02:00" }, location: "Koulu" },
+    { id: "ev2", summary: "Oskar: vanhempainilta", start: { dateTime: "2026-11-04T18:00:00+02:00" }, end: { dateTime: "2026-11-04T20:00:00+02:00" }, location: "Sali" },
+  ]);
   let woke = 0;
   const fam = familyTools({ cfg: testConfig(), calendar: cal, loadState: () => emptyState(), now: () => NOW, group: true, workInvite: { deskFile, wake: () => woke++ } });
   assert.ok(!familyTools({ cfg: testConfig(), calendar: cal, loadState: () => emptyState(), now: () => NOW }).some((t) => t.name === "work_calendar_invite"));
@@ -66,6 +69,9 @@ test("work invitation: queued from the family tools, drafted from code, sent onl
   assert.match(q.status, /Allow/);
   assert.equal((await call(fam, "work_calendar_invite", { calendar: "family", id: "ev1" })).json().taskId, q.taskId, "asking twice queues one invitation");
   assert.equal(woke, 1);
+  // Same title and time, another event: its own invitation.
+  const q2 = (await call(fam, "work_calendar_invite", { calendar: "family", id: "ev2" })).json();
+  assert.notEqual(q2.taskId, q.taskId);
   // The Chief of staff can't make one itself.
   assert.match((await call(deskTools({ file: deskFile, now: () => NOW }), "desk_task_create", { kind: "work_invite" })).text, /must be one of/);
 
@@ -99,8 +105,11 @@ test("work invitation: queued from the family tools, drafted from code, sent onl
   draftTo = WORK;
   assert.equal((await call(mail, "mail_send", { draftId: d.draftId })).json().sent, true);
   assert.deepEqual(sent, [d.draftId]);
+  // A run cut off before its report gets the sent invitation back, not a second one.
+  assert.equal((await call(mail, "mail_work_invite", { taskId: q.taskId })).json().sent, true);
+  assert.equal(mimes.length, 1);
   assert.match((await call(mail, "desk_report", { taskId: q.taskId, status: "done", items: [{ draftId: d.draftId }] })).text, /Reported 1/);
-  assert.deepEqual((await call(mail, "desk_tasks", {})).json(), []);
+  assert.deepEqual((await call(mail, "desk_tasks", {})).json().map((t: any) => t.taskId), [q2.taskId]);
 
   // A mail server without the work address can't send an invitation draft, whatever the record says.
   const noWork = mailTools({ mail: api, ...files, self: ["henri@outlook.example"], now: () => NOW, approvalWaitMs: 0 });

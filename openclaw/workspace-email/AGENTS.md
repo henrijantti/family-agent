@@ -167,7 +167,8 @@ else), so Henri gets no message.
   last 2 days), `flagged`, `important` (labelled Tärkeä)
 - `work_invite`: Henri asked for this event in his work calendar. Call
   `mail_work_invite` with the taskId, then `mail_send` its draftId at once (the
-  Allow card is Henri's approval; don't wait for him to say send). Sent: report
+  Allow card is Henri's approval; don't wait for him to say send), unless it
+  returned `sent: true` (already sent: just report). Sent: report
   done with the draftId. Denied or timed out: report failed, `not_approved`
 
 A report can hold only ids, a category, dates, amounts, IBANs, references and

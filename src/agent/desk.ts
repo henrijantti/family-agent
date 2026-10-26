@@ -44,6 +44,8 @@ export interface DeskTask {
   instruction?: string;
   /** work_invite: the event, copied from a family calendar by code. */
   invite?: Invite;
+  /** work_invite: which event it came from, "<calendar>:<event id>". */
+  source?: string;
   at: string;
 }
 
@@ -104,12 +106,12 @@ const newId = (now: Date) => `t${now.toISOString().slice(0, 10).replace(/-/g, ""
  * family tools call this with event data read from the calendar; the Email agent
  * builds the email from it with mail_work_invite and sends it only on Henri's Allow.
  */
-export function queueWorkInvite(file: string, invite: Invite, now: Date, wake?: () => void): string {
+export function queueWorkInvite(file: string, invite: Invite, source: string, now: Date, wake?: () => void): string {
   const open = openTasks(file);
-  const same = open.find((t) => t.kind === "work_invite" && t.invite?.title === invite.title && t.invite?.start === invite.start);
+  const same = open.find((t) => t.kind === "work_invite" && t.source === source);
   if (same) return same.taskId;
   if (open.filter((t) => t.kind === "work_invite").length >= 5) throw new ToolError("5 work calendar invitations are already waiting for Henri's Allow");
-  const task: DeskTask = { type: "task", taskId: newId(now), kind: "work_invite", invite, at: now.toISOString() };
+  const task: DeskTask = { type: "task", taskId: newId(now), kind: "work_invite", invite, source, at: now.toISOString() };
   append(file, task);
   wake?.();
   return task.taskId;

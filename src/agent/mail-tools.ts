@@ -389,7 +389,8 @@ export function mailTools(d: MailDeps): Tool[] {
         if (!task?.invite) throw new ToolError("no open work_invite task with that id");
         const messageId = `invite:${task.taskId}`;
         const earlier = lines<DraftRecord>(d.draftsFile).find((r) => r.messageId === messageId);
-        if (earlier && !findDraft(d.draftsFile, earlier.draftId)?.sentAt) return { draftId: earlier.draftId, to: w.to, subject: earlier.subject, sent: false };
+        // One invitation per task: a retry after a cut-off run gets the same draft back, sent or not.
+        if (earlier) return { draftId: earlier.draftId, to: w.to, subject: earlier.subject, sent: !!findDraft(d.draftsFile, earlier.draftId)?.sentAt };
         const m = inviteMime(task.invite, `${task.taskId}@family-agent`, from, w.to, d.now());
         const draft = await create(m.mime);
         recordDraft(d.draftsFile, { draftId: draft.id, messageId, replyTo: w.to.toLowerCase(), subject: m.subject, preview: m.preview, at: d.now().toISOString(), kind: "invite" });
