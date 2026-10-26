@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
-import { appendFileSync, mkdtempSync } from "node:fs";
+import { appendFileSync, existsSync, mkdtempSync, readFileSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import { handle, Tool } from "../src/agent/mcp.js";
 import { familyTools } from "../src/agent/family-tools.js";
-import { mailTools, type MailToolApi } from "../src/agent/mail-tools.js";
+import { claim, mailTools, type MailToolApi } from "../src/agent/mail-tools.js";
 import { deskTools, deskWorkerTools } from "../src/agent/desk.js";
 import { inviteIcs, inviteMime, inviteWhen } from "../src/agent/invite.js";
 import { FakeCalendar } from "../src/calendar/fake.js";
@@ -127,4 +127,24 @@ test("work invitation: queued from the family tools, built by code, sent without
   assert.ok(!mailTools({ mail: api, ...files, self: ["henri@outlook.example"], now: () => NOW }).some((t) => t.name === "mail_work_invite"));
   const noSend = { ...api, sendDraft: undefined } as unknown as MailToolApi;
   assert.ok(!mailTools({ mail: noSend, ...files, self: ["henri@outlook.example"], now: () => NOW, workInvite: { to: WORK, deskFile } }).some((t) => t.name === "mail_work_invite"));
+});
+
+test("invitation claim: held while its process lives however old, taken over from a dead one, released only by its owner", () => {
+  const f = join(mkdtempSync(join(tmpdir(), "claim-")), "x.lock");
+  const release = claim(f)!;
+  assert.ok(release);
+  utimesSync(f, new Date(0), new Date(0));
+  assert.equal(claim(f), undefined, "a live run's claim never expires");
+  release();
+  assert.ok(!existsSync(f));
+
+  // A crashed run: its process is gone.
+  writeFileSync(f, "999999999 dead");
+  const again = claim(f)!;
+  assert.ok(again);
+  assert.match(readFileSync(f, "utf8"), new RegExp(`^${process.pid} `));
+  // A release after someone else's claim replaced ours leaves theirs alone.
+  writeFileSync(f, "1 other");
+  again();
+  assert.equal(readFileSync(f, "utf8"), "1 other");
 });

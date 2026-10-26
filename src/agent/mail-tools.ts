@@ -1,4 +1,5 @@
-import { appendFileSync, closeSync, existsSync, mkdirSync, openSync, readFileSync, statSync, unlinkSync } from "node:fs";
+import { randomBytes } from "node:crypto";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { htmlToText, type MailMessage } from "../sources/outlook.js";
 import { MAX_PDF_BYTES, readBillPdf, type BillFields } from "../sources/bill-pdf.js";
@@ -174,6 +175,55 @@ async function folderId(d: MailDeps, name: string): Promise<{ id: string; name: 
   if (!f) throw new ToolError(`no folder "${name}"; use mail_folders, or mail_create_folder first`);
   if (FORBIDDEN_FOLDERS.some((k) => special[k] === f.id)) throw new ToolError(`moving mail to ${f.displayName} is not allowed`);
   return { id: f.id, name: f.displayName };
+}
+
+const alive = (pid: number) => {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (e) {
+    return (e as NodeJS.ErrnoException).code === "EPERM";
+  }
+};
+
+/** An exclusive claim file holding "<pid> <token>". A claim stays while its process lives,
+ *  however long the run takes; a dead process's claim is taken over. Returns the release, or
+ *  undefined when a live run holds it. Release removes the file only while it is still ours. */
+export function claim(file: string): (() => void) | undefined {
+  mkdirSync(dirname(file), { recursive: true });
+  const mine = `${process.pid} ${randomBytes(8).toString("hex")}`;
+  const release = () => {
+    try {
+      if (readFileSync(file, "utf8") === mine) unlinkSync(file);
+    } catch {}
+  };
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      writeFileSync(file, mine, { flag: "wx", mode: 0o600 });
+      return release;
+    } catch {}
+    let held: string;
+    try {
+      held = readFileSync(file, "utf8");
+    } catch {
+      continue; // released in between: try again
+    }
+    if (alive(Number(held.split(" ")[0]))) return undefined;
+    // Take a dead run's claim aside atomically; if what moved is not the dead claim, another
+    // run got there first, so put it back.
+    const aside = `${file}.stale-${mine.replace(" ", "-")}`;
+    try {
+      renameSync(file, aside);
+    } catch {
+      continue;
+    }
+    if (readFileSync(aside, "utf8") !== held) {
+      renameSync(aside, file);
+      return undefined;
+    }
+    unlinkSync(aside);
+  }
+  return undefined;
 }
 
 export function mailTools(d: MailDeps): Tool[] {
@@ -391,26 +441,14 @@ export function mailTools(d: MailDeps): Tool[] {
       async run(a) {
         const task = openTasks(w.deskFile).find((t) => t.taskId === a.taskId && t.kind === "work_invite");
         if (!task?.invite) throw new ToolError("no open work_invite task with that id");
-        // One run at a time per task, across mail-server processes too: a claim file held from
-        // the draft lookup to the send. A claim left behind by a crashed run expires after 5 minutes.
-        const claim = `${d.draftsFile}.invite-${task.taskId}.lock`;
-        mkdirSync(dirname(claim), { recursive: true });
-        try {
-          if (Date.now() - statSync(claim).mtimeMs > 5 * 60_000) unlinkSync(claim);
-        } catch {}
-        let fd: number;
-        try {
-          fd = openSync(claim, "wx", 0o600);
-        } catch {
-          throw new ToolError("not sent: another run is sending this invitation right now; check desk_tasks again in a few minutes");
-        }
+        // One run at a time per task, across mail-server processes too: a claim held from
+        // the draft lookup to the send.
+        const release = claim(`${d.draftsFile}.invite-${task.taskId}.lock`);
+        if (!release) throw new ToolError("not sent: another run is sending this invitation right now; check desk_tasks again in a few minutes");
         try {
           return await sendInvite(task.taskId, task.invite);
         } finally {
-          closeSync(fd);
-          try {
-            unlinkSync(claim);
-          } catch {}
+          release();
         }
       },
     });
