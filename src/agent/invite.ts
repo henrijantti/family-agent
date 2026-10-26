@@ -1,8 +1,9 @@
 import { randomBytes } from "node:crypto";
 
 // A calendar invitation email (Henri, 2026-10-26: option B): one event from the
-// family calendars, sent from Henri's personal Outlook to his work address as a
-// meeting request, so it lands in the work calendar and blocks the time there.
+// family calendars, sent from Henri's personal Outlook as a meeting request. To his
+// work address (one string: no RSVP asked), so it lands in his work calendar, or to
+// other people (a list: they are asked to reply).
 // Built here from calendar data only; the Email agent never writes its text.
 
 export interface Invite {
@@ -39,7 +40,7 @@ function fold(line: string): string {
 const utc = (iso: string) => new Date(iso).toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
 const day = (d: string) => d.replace(/-/g, "");
 
-export function inviteIcs(inv: Invite, uid: string, organizer: string, attendee: string, now: Date): string {
+export function inviteIcs(inv: Invite, uid: string, organizer: string, attendees: string | string[], now: Date): string {
   const when = inv.allDay
     ? [`DTSTART;VALUE=DATE:${day(inv.start)}`, `DTEND;VALUE=DATE:${day(inv.end)}`]
     : [`DTSTART:${utc(inv.start)}`, `DTEND:${utc(inv.end)}`];
@@ -57,7 +58,7 @@ export function inviteIcs(inv: Invite, uid: string, organizer: string, attendee:
       `SUMMARY:${esc(inv.title)}`,
       ...(inv.location ? [`LOCATION:${esc(inv.location)}`] : []),
       `ORGANIZER:mailto:${organizer}`,
-      `ATTENDEE;CUTYPE=INDIVIDUAL;ROLE=REQ-PARTICIPANT;PARTSTAT=NEEDS-ACTION;RSVP=FALSE:mailto:${attendee}`,
+      ...[attendees].flat().map((a) => `ATTENDEE;CUTYPE=INDIVIDUAL;ROLE=REQ-PARTICIPANT;PARTSTAT=NEEDS-ACTION;RSVP=${Array.isArray(attendees) ? "TRUE" : "FALSE"}:mailto:${a}`),
       "SEQUENCE:0",
       "STATUS:CONFIRMED",
       `TRANSP:${inv.allDay ? "TRANSPARENT" : "OPAQUE"}`,
@@ -83,7 +84,7 @@ const b64 = (s: string) =>
     .replace(/.{76}/g, "$&\r\n");
 
 /** The whole email as MIME, the way calendar apps send invitations: text, the request itself, and an .ics copy. */
-export function inviteMime(inv: Invite, uid: string, from: string, to: string, now: Date): { subject: string; mime: string; preview: string } {
+export function inviteMime(inv: Invite, uid: string, from: string, to: string | string[], now: Date): { subject: string; mime: string; preview: string } {
   const subject = `Kutsu: ${inv.title}`;
   const text = [inv.title, inviteWhen(inv), ...(inv.location ? [inv.location] : []), "", "Lähetetty perhekalenterista."].join("\n");
   const ics = inviteIcs(inv, uid, from, to, now);
@@ -91,7 +92,7 @@ export function inviteMime(inv: Invite, uid: string, from: string, to: string, n
   const b = `alt-${randomBytes(8).toString("hex")}`;
   const mime = [
     `From: ${from}`,
-    `To: ${to}`,
+    `To: ${[to].flat().join(", ")}`,
     `Subject: =?UTF-8?B?${Buffer.from(subject, "utf8").toString("base64")}?=`,
     "MIME-Version: 1.0",
     `Content-Type: multipart/mixed; boundary="${a}"`,

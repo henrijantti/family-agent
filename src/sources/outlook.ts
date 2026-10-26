@@ -274,6 +274,12 @@ export class GraphMail implements MailApi {
     return this.call<MailMessage>("GET", `/me/messages/${encodeURIComponent(id)}?${q}`);
   }
 
+  /** Messages matching a word (Graph full-text search), with their senders and recipients only. */
+  async searchPeople(q: string, max = 50) {
+    const query = new URLSearchParams({ $search: `"${q.replace(/["\\]/g, "")}"`, $select: "from,toRecipients,ccRecipients,receivedDateTime", $top: String(max) });
+    return (await this.call<{ value: MailMessage[] }>("GET", `/me/messages?${query}`)).value;
+  }
+
   /** File attachments of one message: id, type and size only (names are the sender's text). */
   async listAttachments(messageId: string) {
     const r = await this.call<{ value: { id: string; contentType?: string; size?: number; isInline?: boolean; "@odata.type"?: string }[] }>(
