@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { appendFileSync, existsSync, mkdtempSync, readFileSync, utimesSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdtempSync, readFileSync, unlinkSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
@@ -143,8 +143,18 @@ test("invitation claim: held while its process lives however old, taken over fro
   const again = claim(f)!;
   assert.ok(again);
   assert.match(readFileSync(f, "utf8"), new RegExp(`^${process.pid} `));
+  again();
+  // A recovery in progress elsewhere: a dead claim is left to it.
+  writeFileSync(f, "999999999 dead");
+  writeFileSync(`${f}.recover`, "1 busy");
+  assert.equal(claim(f), undefined);
+  assert.equal(readFileSync(f, "utf8"), "999999999 dead");
+  unlinkSync(`${f}.recover`);
+  const third = claim(f)!;
+  assert.ok(third);
+  assert.ok(!existsSync(`${f}.recover`), "the recovery claim is released");
   // A release after someone else's claim replaced ours leaves theirs alone.
   writeFileSync(f, "1 other");
-  again();
+  third();
   assert.equal(readFileSync(f, "utf8"), "1 other");
 });

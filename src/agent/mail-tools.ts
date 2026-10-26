@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { appendFileSync, existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { htmlToText, type MailMessage } from "../sources/outlook.js";
 import { MAX_PDF_BYTES, readBillPdf, type BillFields } from "../sources/bill-pdf.js";
@@ -187,43 +187,51 @@ const alive = (pid: number) => {
 };
 
 /** An exclusive claim file holding "<pid> <token>". A claim stays while its process lives,
- *  however long the run takes; a dead process's claim is taken over. Returns the release, or
- *  undefined when a live run holds it. Release removes the file only while it is still ours. */
+ *  however long the run takes. A dead process's claim is removed only under a second claim,
+ *  `<file>.recover`, so no two runs ever remove or replace one at the same time. Returns the
+ *  release, or undefined when a live run holds the claim. Release removes the file only while it
+ *  is still ours. */
 export function claim(file: string): (() => void) | undefined {
   mkdirSync(dirname(file), { recursive: true });
   const mine = `${process.pid} ${randomBytes(8).toString("hex")}`;
-  const release = () => {
-    try {
-      if (readFileSync(file, "utf8") === mine) unlinkSync(file);
-    } catch {}
-  };
-  for (let attempt = 0; attempt < 2; attempt++) {
+  const take = () => {
     try {
       writeFileSync(file, mine, { flag: "wx", mode: 0o600 });
-      return release;
-    } catch {}
-    let held: string;
-    try {
-      held = readFileSync(file, "utf8");
+      return true;
     } catch {
-      continue; // released in between: try again
+      return false;
     }
-    if (alive(Number(held.split(" ")[0]))) return undefined;
-    // Take a dead run's claim aside atomically; if what moved is not the dead claim, another
-    // run got there first, so put it back.
-    const aside = `${file}.stale-${mine.replace(" ", "-")}`;
+  };
+  const read = (f: string) => {
     try {
-      renameSync(file, aside);
+      return readFileSync(f, "utf8");
     } catch {
-      continue;
-    }
-    if (readFileSync(aside, "utf8") !== held) {
-      renameSync(aside, file);
       return undefined;
     }
-    unlinkSync(aside);
+  };
+  if (take()) return release;
+  const held = read(file);
+  if (held === undefined) return take() ? release : undefined;
+  if (alive(Number(held.split(" ")[0]))) return undefined;
+  // The owner died. Recovery is synchronous and takes microseconds; a recover claim left by a
+  // process killed inside it is refused rather than guessed about (remove it by hand).
+  const recover = `${file}.recover`;
+  try {
+    writeFileSync(recover, mine, { flag: "wx", mode: 0o600 });
+  } catch {
+    return undefined;
   }
-  return undefined;
+  try {
+    // Only a recovery removes someone else's claim, and we hold the recovery, so what we read
+    // now is what we remove.
+    if (read(file) === held) unlinkSync(file);
+    return take() ? release : undefined;
+  } finally {
+    unlinkSync(recover);
+  }
+  function release() {
+    if (read(file) === mine) unlinkSync(file);
+  }
 }
 
 export function mailTools(d: MailDeps): Tool[] {
