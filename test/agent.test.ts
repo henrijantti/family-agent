@@ -139,6 +139,15 @@ test("digest_data gives the AI the week as data without marking anything sent", 
   assert.ok(!daily.comingUp.some((e: any) => e.what === "Kiekko-Espoo harjoitus"));
 });
 
+test("digest_data gives each overlap its own from-to window", async () => {
+  const { cal, tools } = family();
+  cal.seed("family", [
+    { id: "f1", summary: "Oskar: Taitokoulu", location: "Areena", start: { dateTime: "2026-10-27T16:30:00+02:00" }, end: { dateTime: "2026-10-27T19:00:00+02:00" } },
+  ]);
+  const w = (await call(tools, "digest_data", { kind: "week" })).json();
+  assert.deepEqual(w.overlaps.map((o: any) => [o.date, o.from, o.to, o.events.map((e: any) => e.who)]), [["2026-10-27", "17:00", "18:00", ["Oskar", "Oliver"]]]);
+});
+
 test("digest_data in the family group's copy has no bills", async () => {
   const state = emptyState();
   state.outlook.bills.push({ messageId: "m3", biller: "Soon", sender: "c@x.fi", amount: "10 €", dueDate: "2026-10-25", subject: "Lasku", newBiller: false, foundAt: "" });
