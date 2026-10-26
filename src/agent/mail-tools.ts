@@ -404,6 +404,7 @@ export function mailTools(d: MailDeps): Tool[] {
         }
         // Henri, 2026-10-26: invitations go without the Allow card. So code checks the draft
         // in Outlook is still addressed only to the work address before it goes.
+        if (rec.replyTo !== w.to.toLowerCase()) throw new ToolError("not sent: that draft is for an earlier work address");
         const why = sendBlocker(await d.mail.getMessage(rec.draftId), rec);
         if (why) throw new ToolError(`not sent: ${why}`);
         await send(rec.draftId);

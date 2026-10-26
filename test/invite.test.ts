@@ -96,6 +96,10 @@ test("work invitation: queued from the family tools, built by code, sent without
   draftTo = "someone@else.example";
   assert.match((await call(mail, "mail_work_invite", { taskId: q.taskId })).text, /must go only to henri@work.example/);
   assert.deepEqual(sent, []);
+  // The work address changed since the draft was made: nothing goes to the old one.
+  const moved = mailTools({ mail: api, ...files, self: ["henri@outlook.example"], now: () => NOW, workInvite: { to: "new@work.example", deskFile } });
+  assert.match((await call(moved, "mail_work_invite", { taskId: q.taskId })).text, /earlier work address/);
+  assert.deepEqual(sent, []);
   draftTo = WORK;
   const d = (await call(mail, "mail_work_invite", { taskId: q.taskId })).json();
   assert.deepEqual([d.draftId, d.to, d.sent], ["DRAFTinvite0001", WORK, true]);
