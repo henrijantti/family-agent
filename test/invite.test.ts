@@ -49,7 +49,7 @@ test("invitation .ics: an all-day event keeps its dates", () => {
   assert.equal(m.subject, "Kutsu: Syysloma");
 });
 
-test("work invitation: queued from the family tools, drafted from code, sent only to the work address on Henri's Allow", async () => {
+test("work invitation: queued from the family tools, built by code, sent without Allow but only to the work address", async () => {
   process.env.GOOGLE_FAMILY_CALENDAR_ID = "family";
   process.env.GOOGLE_SCHOOL_CALENDAR_ID = "school";
   process.env.GOOGLE_HOBBIES_CALENDAR_ID = "hobbies";
@@ -66,7 +66,7 @@ test("work invitation: queued from the family tools, drafted from code, sent onl
 
   assert.match((await call(fam, "work_calendar_invite", { calendar: "family", id: "nope" })).text, /no upcoming event nope/);
   const q = (await call(fam, "work_calendar_invite", { calendar: "family", id: "ev1" })).json();
-  assert.match(q.status, /Allow/);
+  assert.match(q.status, /queued/);
   assert.equal((await call(fam, "work_calendar_invite", { calendar: "family", id: "ev1" })).json().taskId, q.taskId, "asking twice queues one invitation");
   assert.equal(woke, 1);
   // Same title and time, another event: its own invitation.
@@ -92,29 +92,26 @@ test("work invitation: queued from the family tools, drafted from code, sent onl
   assert.equal(tasks[0].kind, "work_invite");
   assert.equal(tasks[0].invite.title, "Oskar: vanhempainilta");
 
-  const d = (await call(mail, "mail_work_invite", { taskId: q.taskId })).json();
-  assert.deepEqual([d.draftId, d.to, d.sent], ["DRAFTinvite0001", WORK, false]);
-  assert.match(mimes[0], /To: henri@work.example/);
-  assert.equal((await call(mail, "mail_work_invite", { taskId: q.taskId })).json().draftId, d.draftId, "no second draft");
-  assert.equal(mimes.length, 1);
-
-  assert.match((await call(mail, "mail_send", { draftId: d.draftId })).text, /not approved/);
-  appendFileSync(files.approvalsFile, JSON.stringify({ draftId: d.draftId, decision: "allow-once", at: NOW.toISOString() }) + "\n");
+  // The draft was changed in Outlook to another address: nothing goes.
   draftTo = "someone@else.example";
-  assert.match((await call(mail, "mail_send", { draftId: d.draftId })).text, /must go only to henri@work.example/);
+  assert.match((await call(mail, "mail_work_invite", { taskId: q.taskId })).text, /must go only to henri@work.example/);
+  assert.deepEqual(sent, []);
   draftTo = WORK;
-  assert.equal((await call(mail, "mail_send", { draftId: d.draftId })).json().sent, true);
+  const d = (await call(mail, "mail_work_invite", { taskId: q.taskId })).json();
+  assert.deepEqual([d.draftId, d.to, d.sent], ["DRAFTinvite0001", WORK, true]);
+  assert.match(mimes[0], /To: henri@work.example/);
+  assert.equal(mimes.length, 1, "the retry reused the first draft");
   assert.deepEqual(sent, [d.draftId]);
-  // A run cut off before its report gets the sent invitation back, not a second one.
+  // A run cut off before its report gets the sent invitation back: no second send.
   assert.equal((await call(mail, "mail_work_invite", { taskId: q.taskId })).json().sent, true);
-  assert.equal(mimes.length, 1);
+  assert.deepEqual(sent, [d.draftId]);
+  // mail_send (the Allow path) never sends an invitation.
+  assert.match((await call(mail, "mail_send", { draftId: d.draftId })).text, /already sent|sent by mail_work_invite/);
   assert.match((await call(mail, "desk_report", { taskId: q.taskId, status: "done", items: [{ draftId: d.draftId }] })).text, /Reported 1/);
   assert.deepEqual((await call(mail, "desk_tasks", {})).json().map((t: any) => t.taskId), [q2.taskId]);
 
-  // A mail server without the work address can't send an invitation draft, whatever the record says.
-  const noWork = mailTools({ mail: api, ...files, self: ["henri@outlook.example"], now: () => NOW, approvalWaitMs: 0 });
-  appendFileSync(files.draftsFile, JSON.stringify({ draftId: "DRAFTinvite0002", messageId: "invite:x", replyTo: WORK, subject: "", preview: "", at: NOW.toISOString(), kind: "invite" }) + "\n");
-  appendFileSync(files.approvalsFile, JSON.stringify({ draftId: "DRAFTinvite0002", decision: "allow-once", at: NOW.toISOString() }) + "\n");
-  assert.match((await call(noWork, "mail_send", { draftId: "DRAFTinvite0002" })).text, /only to Henri's work address/);
-  assert.ok(!noWork.some((t) => t.name === "mail_work_invite"));
+  // Without the work address set, or with sending off, there is no invitation tool.
+  assert.ok(!mailTools({ mail: api, ...files, self: ["henri@outlook.example"], now: () => NOW }).some((t) => t.name === "mail_work_invite"));
+  const noSend = { ...api, sendDraft: undefined } as unknown as MailToolApi;
+  assert.ok(!mailTools({ mail: noSend, ...files, self: ["henri@outlook.example"], now: () => NOW, workInvite: { to: WORK, deskFile } }).some((t) => t.name === "mail_work_invite"));
 });
