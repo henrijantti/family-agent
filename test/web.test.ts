@@ -38,3 +38,41 @@ test("web_read's own connection refuses a name that resolves to a private addres
   // localhost resolves to 127.0.0.1: the validating lookup stops the socket, whatever checkUrl saw.
   await assert.rejects(httpGet("http://localhost:9/"), /not a public address/);
 });
+
+test("web_read's HTML reading stays linear on hostile markup", () => {
+  const t0 = Date.now();
+  htmlText("<".repeat(500_000));
+  htmlText("<script>".repeat(100_000));
+  htmlText('<a href="'.repeat(100_000));
+  htmlText("<p>a</p>".repeat(100_000) + "<title");
+  assert.ok(Date.now() - t0 < 2000, `took ${Date.now() - t0} ms`);
+  assert.equal(htmlText("<table><tr><td>A</td><td>B</td></tr></table><a href=\"#top\">Ylös</a>").text, "A | B |\nYlös");
+  assert.equal(htmlText("<HEAD><TITLE>Iso</TITLE></HEAD><BODY>teksti</BODY>").title, "Iso");
+});
+
+test("web_read rejects a page cut off mid-transfer and flags a page over the size cap", async () => {
+  const http = await import("node:http");
+  const { httpGet } = await import("../src/agent/web.js");
+  const server = http.createServer((req, res) => {
+    if (req.url === "/cut") {
+      res.writeHead(200, { "content-type": "text/plain", "content-length": "1000" });
+      res.write("partial");
+      setTimeout(() => res.socket?.destroy(), 20);
+    } else {
+      res.writeHead(200, { "content-type": "text/plain" });
+      res.end("x".repeat(2_100_000));
+    }
+  });
+  await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
+  const port = (server.address() as { port: number }).port;
+  // The real lookup refuses loopback, so this local server is reached with node's plain one.
+  const { lookup } = await import("node:dns");
+  try {
+    await assert.rejects(httpGet(`http://127.0.0.1:${port}/cut`, lookup), /stopped before it was complete/);
+    const big = await httpGet(`http://127.0.0.1:${port}/big`, lookup);
+    assert.equal(big.truncated, true);
+    assert.equal(big.body.length, 2_000_000);
+  } finally {
+    server.close();
+  }
+});
