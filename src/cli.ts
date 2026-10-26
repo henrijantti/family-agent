@@ -546,7 +546,9 @@ async function main() {
       if (which === "family") {
         const calendar = buildCtx(cfg, st, now).calendar;
         const deskFile = `${dirname(env("STATE_FILE") ?? "state/state.json")}/mail-desk.jsonl`;
-        tools = familyTools({ cfg, calendar, loadState: () => store().data, now: clock, group, deskFile: group ? undefined : deskFile });
+        // WORK_INVITE_TO (Henri's work address, set on the server only): invitations to his work calendar, also from the group.
+        const workInvite = workInviteTo() ? { deskFile, wake: wakeFromEnv(env("MAIL_DESK_WAKE")) } : undefined;
+        tools = familyTools({ cfg, calendar, loadState: () => store().data, now: clock, group, deskFile: group ? undefined : deskFile, workInvite });
         tools.push(capabilityTool(capabilitiesFile(), group ? "family" : "henri", clock));
         // Henri's household register (reminders, papers, holidays): never in the family group's copy.
         if (!group) {
@@ -574,6 +576,7 @@ async function main() {
         const dir = dirname(env("STATE_FILE") ?? "state/state.json");
         const review = dreamingDeps(clock, "email");
         const capFile = capabilitiesFile();
+        const inviteTo = workInviteTo();
         for (const k of Object.keys(process.env)) if (!MAIL_ENV.includes(k)) delete process.env[k];
         tools = [
           ...mailTools({
@@ -584,6 +587,7 @@ async function main() {
             billPdfFile: `${dir}/mail-bill-pdf.jsonl`,
             self: ea.self,
             now: clock,
+            ...(inviteTo && ea.send ? { workInvite: { to: inviteTo, deskFile: `${dir}/mail-desk.jsonl` } } : {}),
           }),
           ...deskWorkerTools({ file: `${dir}/mail-desk.jsonl`, now: clock, getMessage: (id) => mail.getMessage(id), draftsFile: `${dir}/mail-drafts.jsonl`, billPdfFile: `${dir}/mail-bill-pdf.jsonl` }),
           // The Email agent's own weekly review and capability log: its findings hold email text, so they stay here.
@@ -742,3 +746,11 @@ main().catch((e) => {
   console.error(e instanceof Error ? e.message : e);
   process.exit(1);
 });
+
+/** Henri's work address for calendar invitations (env only, kept out of the public repo), or undefined. */
+function workInviteTo(): string | undefined {
+  const v = process.env.WORK_INVITE_TO?.trim();
+  if (!v) return undefined;
+  if (!/^[^\s@<>"]{1,64}@[A-Za-z0-9.-]{1,190}\.[A-Za-z]{2,}$/.test(v)) throw new Error("WORK_INVITE_TO must be one email address");
+  return v;
+}

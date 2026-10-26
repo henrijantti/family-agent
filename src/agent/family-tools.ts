@@ -12,6 +12,7 @@ import { addDays, daysBetween, localIso, localParts } from "../lib/time.js";
 import { weekPlan } from "../digest/week-plan.js";
 import { Tool, ToolError } from "./mcp.js";
 import { webRead } from "./web.js";
+import { queueWorkInvite } from "./desk.js";
 
 // Tools for the chat front door. Reads cover all three calendars and the bill
 // list; writes reach only the School and Hobbies calendars, and only events
@@ -34,6 +35,12 @@ export interface FamilyDeps {
   group?: boolean;
   /** The mail desk's file: bills the Email agent reported go into Henri's week plan. */
   deskFile?: string;
+  /**
+   * Calendar invitations to Henri's work address (Henri, 2026-10-26). Only queues a
+   * desk task built from the calendar event; it reads nothing back from the desk.
+   * Absent unless the server sets the work address.
+   */
+  workInvite?: { deskFile: string; wake?: () => void };
 }
 
 type Writable = "family" | "school" | "hobbies";
@@ -400,6 +407,34 @@ export function familyTools(d: FamilyDeps): Tool[] {
       },
     },
   ];
+  if (d.workInvite) {
+    const w = d.workInvite;
+    tools.push({
+      name: "work_calendar_invite",
+      description:
+        "Send one event from the family, school or hobbies calendar to Henri's work calendar as an invitation email. Only when Henri asks for that event. Henri must tap Allow before it goes; the event's own title, time and place are used.",
+      input: {
+        properties: { calendar: calendarProp, id: { type: "string", maxLength: 1024, description: "the event id from calendar_list" } },
+        required: ["calendar", "id"],
+      },
+      async run(a) {
+        const today = localParts(d.now()).date;
+        const calendarId = writableId(d, a.calendar as Writable);
+        const evs = await cal(d).list(calendarId, { timeMin: localIso(addDays(today, -1), "00:00"), timeMax: localIso(addDays(today, 400), "00:00") });
+        const ev = evs.find((e) => e.id === a.id && e.status !== "cancelled");
+        if (!ev) throw new ToolError(`no upcoming event ${a.id} on the ${a.calendar} calendar`);
+        const allDay = "date" in ev.start;
+        const taskId = queueWorkInvite(
+          w.deskFile,
+          { title: ev.summary || "(ei otsikkoa)", start: when(ev.start), end: when(ev.end), allDay, ...(ev.location ? { location: ev.location } : {}) },
+          `${a.calendar}:${ev.id}`,
+          d.now(),
+          w.wake,
+        );
+        return { status: "waiting for Henri's Allow in the mail bot", taskId, title: ev.summary, start: when(ev.start) };
+      },
+    });
+  }
   return d.group ? tools.filter((t) => t.name !== "bills_list" && t.name !== "week_plan") : tools;
 }
 
