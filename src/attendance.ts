@@ -108,10 +108,10 @@ export function signableEvents(state: StateData, cfg: Config, today: string, day
   const to = addDays(today, days);
   const declined = new Set(state.myclub.declined ?? []);
   const invites = state.myclub.openInvites?.events ?? [];
-  const feed = onlyOpen ? [] : ((state.myclub.lastSnapshot as MyClubSnapshot | undefined)?.events ?? []);
+  const known = onlyOpen ? [] : [...(state.myclub.answered ?? []), ...((state.myclub.lastSnapshot as MyClubSnapshot | undefined)?.events ?? [])];
   const seen = new Set<string>();
   const out: SignableEvent[] = [];
-  for (const [e, open] of [...invites.map((e) => [e, true] as const), ...feed.map((e) => [e, false] as const)]) {
+  for (const [e, open] of [...invites.map((e) => [e, true] as const), ...known.map((e) => [e, false] as const)]) {
     const child = e.child ? childName(cfg, e.child) : undefined;
     if (!child || !att.children.includes(child) || e.cancelled) continue;
     const host = e.url?.match(/^https:\/\/([^/]+)/)?.[1];

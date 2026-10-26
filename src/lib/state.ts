@@ -56,6 +56,8 @@ export interface StateData {
     declined?: string[];
     /** Unanswered MyClub invitations from the logged-in pages, read daily (see readInvites). */
     openInvites?: { fetchedAt: string; events: MyClubEvent[] };
+    /** Events answered through myclub_set, so a later request can still change them (the feeds drop declined ones). */
+    answered?: MyClubEvent[];
   };
   outlook: { refreshToken?: string; lastScan?: string; bills: Bill[]; knownBillers: string[] };
   /** Wilma items found since the last digest, consumed by the next digest. */

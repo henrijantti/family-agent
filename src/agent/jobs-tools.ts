@@ -1,11 +1,11 @@
-import { AttendanceWriter, DryRunWriter, optionLabel, PollOption, signableEvents, weekEvents } from "../attendance.js";
-import { Config } from "../config.js";
+import { AttendanceWriter, DryRunWriter, eventDate, optionLabel, PollOption, signableEvents, weekEvents } from "../attendance.js";
+import { childName, Config } from "../config.js";
 import { Ctx, readInvites, runMyClub, runOutlook } from "../jobs.js";
 import { withLock } from "../lib/lock.js";
 import { StateData, StateStore } from "../lib/state.js";
 import { localParts } from "../lib/time.js";
 import { Notifier } from "../notify/telegram.js";
-import { MyClubSnapshot } from "../sources/myclub.js";
+import { MyClubEvent, MyClubSnapshot } from "../sources/myclub.js";
 import { billsToRemind } from "../sources/outlook.js";
 import { stripHtml } from "./family-tools.js";
 import { Tool, ToolError } from "./mcp.js";
@@ -253,9 +253,13 @@ export function jobsTools(d: JobsDeps): Tool[] {
           if (going) declined.delete(ev.option.eventId);
           else declined.add(ev.option.eventId);
           st.data.myclub.declined = [...declined].slice(-200);
-          // Answered now, so it leaves the open list; an open practice question keeps this answer on Monday.
+          // Answered now: it leaves this child's open list (a sibling invited to the same event keeps
+          // theirs) and is kept as answered, so a later request can change it back.
+          const mine = (e: MyClubEvent) => e.id === ev.option.eventId && !!e.child && childName(d.cfg, e.child) === child;
           const inv = st.data.myclub.openInvites;
-          if (inv) inv.events = inv.events.filter((e) => e.id !== ev.option.eventId);
+          const event = inv?.events.find(mine) ?? st.data.myclub.answered?.find(mine);
+          if (inv) inv.events = inv.events.filter((e) => !mine(e));
+          if (event) st.data.myclub.answered = [...(st.data.myclub.answered ?? []).filter((e) => !mine(e) && eventDate(e) >= today), event].slice(-100);
           const poll = st.data.myclub.agentPoll;
           if (poll?.status === "open" && poll.options[child]?.some((o) => o.eventId === ev.option.eventId)) poll.votes[key(child, ev.option.eventId)] = going;
           if (writer.live) await runMyClub(ctx);

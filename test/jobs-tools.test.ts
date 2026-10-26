@@ -156,19 +156,27 @@ test("myclub sign-up on request: lists open and signed-up events, signs one, kee
     fetchedAt: "2026-10-25T16:50:00Z",
     events: [
       ev("myclub-ppj-1", "Oskar", "Futsal - Sininen", "2026-11-01T07:30:00Z"),
+      ev("myclub-ppj-1", "Oliver", "Futsal - Sininen", "2026-11-01T07:30:00Z"), // both boys invited
       ev("myclub-viimahockey-2", "Oliver", "Jää", "2026-10-28T15:00:00Z", "viimahockey.myclub.fi"), // club left out
       ev("myclub-ppj-3", "Oskar", "Myöhemmin", "2026-11-20T15:00:00Z"), // beyond 14 days
     ],
   };
   st.save();
   const list = (await call(tools, "myclub_events")).json();
-  assert.deepEqual(list.map((e: any) => [e.child, e.eventId, e.answer]), [["Oliver", "a1", "going"], ["Oskar", "b1", "going"], ["Oliver", "a2", "going"], ["Oskar", "myclub-ppj-1", "no answer"]]);
+  assert.deepEqual(list.map((e: any) => [e.child, e.eventId, e.answer]), [["Oliver", "a1", "going"], ["Oskar", "b1", "going"], ["Oliver", "a2", "going"], ["Oskar", "myclub-ppj-1", "no answer"], ["Oliver", "myclub-ppj-1", "no answer"]]);
   assert.equal(list[3].event, "su 1.11. klo 9.30 Futsal - Sininen");
 
   // The digest's open sign-ups list only the unanswered ones of the coming week.
   const r = await call(tools, "myclub_set", { child: "Oskar", eventId: "myclub-ppj-1", going: true });
   assert.deepEqual(r.json(), { child: "Oskar", event: "su 1.11. klo 9.30 Futsal - Sininen", going: true, myclub: "signed up" });
-  assert.deepEqual(read().myclub.openInvites.events.map((e: any) => e.id), ["myclub-viimahockey-2", "myclub-ppj-3"]);
+  // Oskar's invitation leaves the open list, Oliver's stays.
+  assert.deepEqual(read().myclub.openInvites.events.map((e: any) => `${e.child} ${e.id}`), ["Oliver myclub-ppj-1", "Oliver myclub-viimahockey-2", "Oskar myclub-ppj-3"]);
+  // Declined later, then back in: the answered event is still found (the feeds drop declined ones).
+  assert.equal((await call(tools, "myclub_set", { child: "Oskar", eventId: "myclub-ppj-1", going: false })).json().myclub, "declined");
+  assert.equal((await call(tools, "myclub_set", { child: "Oskar", eventId: "myclub-ppj-1", going: true })).json().myclub, "signed up");
+  const oskar = (await call(tools, "myclub_events")).json().filter((e: any) => e.child === "Oskar" && e.eventId === "myclub-ppj-1");
+  assert.deepEqual(oskar.map((e: any) => e.answer), ["going"]);
+  assert.equal(read().myclub.answered.length, 1);
   assert.match((await call(tools, "myclub_set", { child: "Oliver", eventId: "myclub-viimahockey-2", going: true })).text, /no upcoming MyClub event/);
   assert.match((await call(tools, "myclub_set", { child: "Oliver", eventId: "b1", going: true })).text, /no upcoming MyClub event/); // Oskar's
 
