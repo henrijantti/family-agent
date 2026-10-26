@@ -43,6 +43,7 @@ Helsinki) from scratch. Nothing here contains secrets.
 | `systemd/family-agent-dreaming.service` + `.timer` | user units; Sunday 20:40 `family-agent-run.sh dreaming export`: the family bot's week as findings for the 21:00 review cron (openclaw/README.md) |
 | `family-agent.patch.json5` | `openclaw config patch --file`: agent `family` in the family group. Only at the @Family_fff_bot handover (see openclaw/README.md) |
 | `save-bot-token` | `/usr/local/sbin/save-bot-token`: `ssh -t root@<server> save-bot-token <name>` saves a Telegram bot token from a hidden prompt |
+| `save-secret` | `/usr/local/sbin/save-secret`: `ssh -t root@<server> save-secret <NAME>` saves one family-agent secret from a hidden prompt to `~openclaw/.secrets/family-agent/<NAME>` (600) |
 | `check.sh` | Root helper: `bash check.sh status\|logs\|doctor\|audit\|test\|mem` (redacts secrets) |
 | `laptop/` | Not for the server: Claude Code permissions for server work from the laptop (Machina). `powershell -ExecutionPolicy Bypass -File server\laptop\install.ps1` writes `.claude\settings.local.json` and merges the `autoMode` block into `~\.claude\settings.json` (backup first, JSON validated) |
 
