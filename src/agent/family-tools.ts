@@ -114,6 +114,8 @@ const calendarProp = {
   enum: ["family", "school", "hobbies"],
   description: "family = Henri and Anna's shared calendar (appointments, family plans, adults' events), school = school/Wilma things, hobbies = sports and clubs",
 };
+// Anna and Henri, 2026-10-26: everything added from chat goes to "Anna Henri" unless someone names another calendar.
+const addCalendarProp = { ...calendarProp, description: `${calendarProp.description}. Default family: use school or hobbies only when someone asks for that calendar by name` };
 const fields = {
   title: { type: "string" as const, maxLength: 200, description: 'Finnish, child first, e.g. "Oskar: hammaslääkäri"' },
   date: { type: "string" as const, pattern: DATE, description: "YYYY-MM-DD" },
@@ -165,9 +167,9 @@ export function familyTools(d: FamilyDeps): Tool[] {
       name: "calendar_add",
       description:
         "Add an event to the family, school or hobbies calendar. Returns the existing event instead if one with the same title and start is already there.",
-      input: { properties: { calendar: calendarProp, ...fields }, required: ["calendar", "title", "date"] },
+      input: { properties: { calendar: addCalendarProp, ...fields }, required: ["title", "date"] },
       async run(a) {
-        const which = a.calendar as Writable;
+        const which = (a.calendar as Writable | undefined) ?? "family";
         const calendarId = writableId(d, which);
         const t = eventTimes(a.date as string, a.start as string, a.end as string, a.endDate as string);
         const same = await cal(d).list(calendarId, { timeMin: localIso(a.date as string, "00:00"), timeMax: localIso(addDays(a.date as string, 1), "00:00") });
