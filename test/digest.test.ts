@@ -132,4 +132,31 @@ test("one child booked in two places is a conflict; games count as coming up, pr
   assert.ok(!isComingUp("Oskar: Taitokoulu 2017 -syntyneet"));
   assert.ok(!isComingUp("Oliver: Lokakuun tiedote 2026 - alustava"));
   assert.ok(!isComingUp("Oliver: Kiekko-Espoo harjoitus"));
+  // A group after the dash is a practice, not two teams (Henri, 2026-10-26).
+  assert.ok(!isComingUp("Oskar: Futsal - Sininen"));
+  assert.ok(!isComingUp("Oskar: PPJ Laru 2017 - Ryhmä Litmanen"));
+});
+
+test("changes since yesterday: coming days only, no bulletin dates, one line per event, Finnish dates", async () => {
+  const { digestChanges, whenLabel, labels } = await import("../src/digest/build.js");
+  const cfg = testConfig();
+  const now = new Date("2026-10-26T04:45:00Z"); // Mon 06:45 Helsinki
+  const at = "2026-10-25T20:27:00Z";
+  const ch = digestChanges(
+    [
+      { at, source: "myclub", kind: "cancelled", title: "Oliver: PPJ Laru 2015: Treenit", when: "2026-10-25 13:30" }, // yesterday
+      { at, source: "wilma", kind: "changed", title: "Oliver & Oskar: Lokakuun tiedote 2026 (from bulletin)", when: "2026-10-30" },
+      { at, source: "wilma", kind: "changed", title: "Oliver: Uskonto Kirkkohistoria jakso 1", when: "2026-11-02" },
+      { at, source: "wilma", kind: "changed", title: "Oliver: Uskonto koe (Kirkkohistoria jakso 1)", when: "2026-11-02" }, // renamed: last wins
+      { at, source: "myclub", kind: "cancelled", title: "Oskar: Futis", when: "2026-10-28 17:00" },
+      { at, source: "myclub", kind: "changed", title: "Oskar: Futis", when: "2026-11-20 17:00" }, // beyond the horizon
+      { at: "2026-10-24T20:00:00Z", source: "myclub", kind: "cancelled", title: "Oskar: Vanha", when: "2026-10-27 17:00" }, // older than a day
+    ],
+    now,
+    cfg,
+  );
+  assert.deepEqual(ch.map((c) => c.title), ["Oliver: Uskonto koe (Kirkkohistoria jakso 1)", "Oskar: Futis"]);
+  const fi = labels({ ...cfg, digest: { ...cfg.digest, language: "fi" } });
+  assert.equal(whenLabel("2026-10-28 17:00", fi), "ke 28.10. klo 17.00");
+  assert.equal(whenLabel("2026-11-02", fi), "ma 2.11.");
 });
