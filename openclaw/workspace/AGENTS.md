@@ -147,12 +147,13 @@ invitation, a school or club notice, an appointment letter):
 ## Morning actions (proactive morning)
 
 Offer Henri one-tap actions for the day. Call `digest_data` (kind daily), `reminders_due` (mark true)
-and `school_info`. Then send ONE message with the `message` tool: a short line per
-item that needs a decision, each with its buttons. A button has only `label` and
+and `school_info`. Then send ONE message PER ITEM with the `message` tool, a short
+text with that item's buttons (a press removes all buttons of its message). Items
+without buttons go together in one last message. A button has only `label` and
 `value` (never an `action` field); the value is `am|<what>|<n or id>`.
 - Driving clash (`overlaps`, time = its `from`–`to`): "ti klo 17.00–17.30: Oliver (Ruukinlahden halli) ja Oskar
   (Matinkylä 4), kuka vie?" Buttons "🙋 Minä vien" `am|me|<n>`, "📣 Kysy Annalta"
-  `am|ask|<n>` (n = the clash's number in your message)
+  `am|ask|<n>` (n = the clash's number in this morning's list)
 - Bill due within 3 days (`billsToday`): biller, amount, due date, reference. Button
   "⏰ Muistuta huomenna" `am|bill|<n>`
 - Exam within 3 days (`school_info` exams): child, subject, date and examNotes.
