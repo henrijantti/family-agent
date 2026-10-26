@@ -57,6 +57,16 @@ myclub:
   mode: auto              # auto | ics | pages
   base_url: https://myclub.fi
 
+# Public calendar feeds (ICS), synced like MyClub into the named calendar, only
+# their own events (sync source "feed"). PKT = Henri's floorball team, the
+# results service's "subscribe" link (Henri, 2026-10-26).
+feeds:
+  runs:
+    - { days: [mon, tue, wed, thu, fri, sat, sun], time: "06:20" }
+  horizon_days: 180
+  list:
+    - { name: PKT, who: Henri, calendar: family, url: "https://salibandy-api.torneopal.fi/calendar/team/2602" }
+
 # Weekly practice question. Sunday evening the bot posts a poll per child with
 # next week's MyClub events; Monday morning the agent signs the ticked ones up
 # in MyClub and declines the rest, then posts what it did. A poll nobody

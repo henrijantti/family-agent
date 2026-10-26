@@ -2,7 +2,7 @@ export type EventTime = { date: string } | { dateTime: string; timeZone?: string
 
 /** What a source wants on its calendar. */
 export interface DesiredEvent {
-  source: "wilma" | "myclub";
+  source: "wilma" | "myclub" | "feed";
   sourceId: string;
   title: string;
   start: EventTime;

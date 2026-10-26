@@ -43,6 +43,8 @@ export interface Config {
   agent_jobs?: string[];
   /** School holidays (Helsinki schools), for the Chief of staff's trip planning. */
   school_holidays?: { name: string; from: string; to: string }[];
+  /** Public calendar feeds (ICS) synced into a calendar, e.g. Henri's floorball team (2026-10-26). */
+  feeds?: { runs: RunSlot[]; horizon_days: number; list: { name: string; who: string; calendar: "family" | "school" | "hobbies"; url: string }[] };
   attendance?: { enabled: boolean; children: string[]; poll: RunSlot; apply: RunSlot; live: boolean; clubs?: { host: string; child: string }[] };
   outlook: {
     enabled: boolean;
