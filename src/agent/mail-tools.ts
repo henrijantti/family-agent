@@ -140,10 +140,34 @@ const lines = <T>(file: string): T[] =>
         .map((l) => JSON.parse(l) as T)
     : [];
 
-export function findDraft(file: string, draftId: string): (DraftRecord & { sentAt?: string }) | undefined {
-  const rows = lines<DraftRecord & { sentAt?: string }>(file).filter((r) => r.draftId === draftId);
+export function findDraft(file: string, draftId: string): (DraftRecord & { sentAt?: string; discardedAt?: string }) | undefined {
+  const rows = lines<DraftRecord & { sentAt?: string; discardedAt?: string }>(file).filter((r) => r.draftId === draftId);
   const rec = rows.find((r) => r.messageId);
-  return rec && { ...rec, sentAt: rows.find((r) => r.sentAt)?.sentAt };
+  return rec && { ...rec, sentAt: rows.find((r) => r.sentAt)?.sentAt, discardedAt: rows.find((r) => r.discardedAt)?.discardedAt };
+}
+
+/**
+ * Moves one unsent draft that the agents made to Deleted Items (reversible: it can be
+ * moved back). Only for the server session on Henri's word, never an agent tool: the
+ * agents still can't move anything to Deleted Items.
+ */
+export async function discardDraft(
+  mail: { getMessage(id: string): Promise<MailMessage>; move(id: string, folderId: string): Promise<void>; wellKnownFolderIds(names: string[]): Promise<Record<string, string>> },
+  draftsFile: string,
+  draftId: string,
+  now: Date,
+): Promise<string> {
+  const rec = findDraft(draftsFile, draftId);
+  if (!rec) throw new Error("only drafts the agents made (in mail-drafts.jsonl) can be discarded");
+  if (rec.sentAt) throw new Error("that draft was sent; nothing to discard");
+  if (rec.discardedAt) throw new Error(`already discarded at ${rec.discardedAt}`);
+  const msg = await mail.getMessage(draftId);
+  const f = await mail.wellKnownFolderIds(["drafts", "deleteditems"]);
+  if (msg.isDraft === false) throw new Error("that message is not a draft (sent?)");
+  if (!f.drafts || !f.deleteditems || msg.parentFolderId !== f.drafts) throw new Error("that message is not in Drafts any more; left as it is");
+  await mail.move(draftId, f.deleteditems);
+  appendFileSync(draftsFile, JSON.stringify({ draftId, discardedAt: now.toISOString() }) + "\n");
+  return `Moved "${rec.subject}" from Drafts to Deleted Items (it can be moved back). Nothing was sent or deleted for good.`;
 }
 
 /** Henri's Allow for this draft, given after the draft was made and within the last few minutes. */
@@ -462,7 +486,7 @@ export function mailTools(d: MailDeps): Tool[] {
     });
     async function sendInvite(taskId: string, invite: Invite) {
       const messageId = `invite:${taskId}`;
-      const earlier = lines<DraftRecord>(d.draftsFile).find((r) => r.messageId === messageId);
+      const earlier = lines<DraftRecord>(d.draftsFile).find((r) => r.messageId === messageId && !findDraft(d.draftsFile, r.draftId)?.discardedAt);
       // One invitation per task: a retry after a cut-off run reuses the same draft, and never sends twice.
       let rec: DraftRecord | undefined = earlier;
       if (rec && findDraft(d.draftsFile, rec.draftId)?.sentAt) return { draftId: rec.draftId, to: w.to, subject: rec.subject, sent: true };
@@ -494,6 +518,7 @@ export function mailTools(d: MailDeps): Tool[] {
         const rec = findDraft(d.draftsFile, draftId);
         if (!rec) throw new ToolError("only drafts made with mail_draft_reply can be sent");
         if (rec.sentAt) throw new ToolError("that draft was already sent");
+        if (rec.discardedAt) throw new ToolError("that draft was discarded");
         if (rec.kind === "invite") throw new ToolError("invitations are sent by mail_work_invite");
         // The plugin records the Allow when Henri answers; give that write a moment to land.
         for (let waited = 0; !approved(d.approvalsFile, rec, d.now()) && waited < (d.approvalWaitMs ?? 3000); waited += 250) await new Promise((r) => setTimeout(r, 250));
