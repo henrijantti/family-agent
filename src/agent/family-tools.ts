@@ -5,6 +5,7 @@ import { buildDigest, conflicts, digestChanges, fiTitle, isComingUp, labels, loc
 import { billsToRemind } from "../sources/outlook.js";
 import type { WilmaSnapshot } from "../sources/wilma.js";
 import { feesDue, MyClubSnapshot, openSignups } from "../sources/myclub.js";
+import { signableEvents } from "../attendance.js";
 import { calId, collectHub, Ctx } from "../jobs.js";
 import { StateData } from "../lib/state.js";
 import { addDays, daysBetween, localIso, localParts } from "../lib/time.js";
@@ -270,6 +271,8 @@ export function familyTools(d: FamilyDeps): Tool[] {
             })),
           ),
           signupsClosing: myclub ? openSignups(myclub, today, week ? 7 : 3).map((e) => ({ child: e.child, title: e.title, deadline: e.signup?.deadline })) : [],
+          // Unanswered MyClub invitations in the coming week (Henri, 2026-10-26), read at 06:15.
+          openSignups: signableEvents(c.state, d.cfg, today, 7, true).map((e) => ({ child: e.child, eventId: e.option.eventId, event: e.option.label })),
           feesDue: myclub ? feesDue(myclub, today, 7) : [],
           billsToday: d.cfg.outlook.enabled && !d.group ? billsToRemind(c.state, today, d.cfg.outlook.remind_days_before).map((b) => ({ biller: b.biller, amount: b.amount, dueDate: b.dueDate, reference: b.reference, inDays: b.inDays, newBiller: b.newBiller, sender: b.newBiller ? b.sender : undefined })) : [],
           schoolNews: c.state.digestQueue,

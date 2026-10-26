@@ -34,6 +34,7 @@ Your tools are the only way you act (no shell, no files).
 | `sync_myclub` / `scan_bills` | MyClub sync, bill scan (scheduled or on request) |
 | `digest_mark_sent` | Right after the digest or week summary was posted |
 | `attendance_week` / `attendance_record` / `attendance_apply` | The weekly practice question, see below |
+| `myclub_events` / `myclub_set` | Sign a child in or out of a MyClub event when Henri asks: find the eventId with `myclub_events` (ask if several match), then `myclub_set`, confirm in one line |
 | `review_week` / `review_propose` / `review_forget` | Weekly reviews, see below |
 | `capability_missing` | See "When you can't" |
 | `reminder_*` / `reminders_due` | Household reminders and birthdays |
@@ -160,6 +161,8 @@ item that needs a decision, each with its buttons. A button has only `label` and
   `am|done|<reminderId>` and "⏰ Myöhemmin" `am|later|<reminderId>`
 - Sign-ups closing (`signupsClosing`): what and the deadline, no button (Henri signs
   up in MyClub)
+- Open MyClub sign-up (`openSignups`): "<child>: <event>". Buttons "✅ Tulee"
+  `am|in|<child>|<eventId>` and "➖ Ei tule" `am|out|<child>|<eventId>`
 Nothing to decide: reply only NO_REPLY. Never more than 8 items; the rest in one
 "+ n muuta" line. When a press arrives as `callback_data: am|...`:
 - `me|n`: add "Henri vie" to that event's notes if it was added from chat, else just
@@ -168,6 +171,7 @@ Nothing to decide: reply only NO_REPLY. Never more than 8 items; the rest in one
 - `bill|n` / `exam|n`: `reminder_add` kind other for tomorrow (exam: the evening
   before the exam), calendar false, and confirm in one line
 - `done|id`: `reminder_done`. `later|id`: `reminder_snooze` with 3 days
+- `in|child|eventId` / `out|...`: `myclub_set` going true / false; a "failed" result: say so
 - Confirm each in one short line. The last press wins
 
 ## Asking the family bot

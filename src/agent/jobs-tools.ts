@@ -1,11 +1,11 @@
-import { AttendanceWriter, DryRunWriter, optionLabel, PollOption, weekEvents } from "../attendance.js";
-import { Config } from "../config.js";
-import { Ctx, runMyClub, runOutlook } from "../jobs.js";
+import { AttendanceWriter, DryRunWriter, eventDate, optionLabel, PollOption, signableEvents, weekEvents } from "../attendance.js";
+import { childName, Config } from "../config.js";
+import { Ctx, readInvites, runMyClub, runOutlook } from "../jobs.js";
 import { withLock } from "../lib/lock.js";
 import { StateData, StateStore } from "../lib/state.js";
 import { localParts } from "../lib/time.js";
 import { Notifier } from "../notify/telegram.js";
-import { MyClubSnapshot } from "../sources/myclub.js";
+import { MyClubEvent, MyClubSnapshot } from "../sources/myclub.js";
 import { billsToRemind } from "../sources/outlook.js";
 import { stripHtml } from "./family-tools.js";
 import { Tool, ToolError } from "./mcp.js";
@@ -204,6 +204,66 @@ export function jobsTools(d: JobsDeps): Tool[] {
           st.data.myclub.declined = [...declined].slice(-200);
           poll.status = "applied";
           return { applied: true, live: writer.live, results, unanswered: Object.keys(poll.options).filter((c) => !results[c]) };
+        });
+      },
+    },
+    {
+      name: "myclub_events",
+      description:
+        "Upcoming MyClub events (PPJ, Kiekko-Espoo) of Oliver and Oskar with each one's current answer: 'no answer', 'going' or 'not going'. Call it before myclub_set to find the eventId. Reads MyClub's pages when the saved list is older than 30 minutes, so it can take a minute.",
+      input: { properties: { days: { type: "integer", description: "How many days ahead, 1 to 21 (default 14)" } } },
+      async run(a) {
+        owned(d, "attendance-poll");
+        return withState(d, async (st, ctx) => {
+          const fetched = st.data.myclub.openInvites?.fetchedAt;
+          if (!fetched || d.now().getTime() - Date.parse(fetched) > 30 * 60_000) await readInvites(ctx);
+          const today = localParts(d.now()).date;
+          return signableEvents(st.data, d.cfg, today, Math.min(21, Math.max(1, Number(a.days) || 14))).map((e) => ({ child: e.child, eventId: e.option.eventId, event: e.option.label, answer: e.answer }));
+        });
+      },
+    },
+    {
+      name: "myclub_set",
+      description:
+        "Sign a child in (going true) or out (going false) of one MyClub event that a family member explicitly asked for in chat, then refresh the Hobbies calendar. eventId comes from myclub_events. Never on your own initiative.",
+      input: {
+        properties: {
+          child: { type: "string", maxLength: 40 },
+          eventId: { type: "string", maxLength: 100 },
+          going: { type: "boolean" },
+        },
+        required: ["child", "eventId", "going"],
+      },
+      async run(a) {
+        owned(d, "attendance-poll");
+        return withState(d, async (st, ctx) => {
+          const child = a.child as string;
+          const going = a.going as boolean;
+          const today = localParts(d.now()).date;
+          const ev = signableEvents(st.data, d.cfg, today, 21).find((e) => e.child === child && e.option.eventId === a.eventId);
+          if (!ev) throw new ToolError(`no upcoming MyClub event ${a.eventId} for ${child}; call myclub_events first`);
+          const writer: AttendanceWriter = ctx.attendanceWriter ?? new DryRunWriter();
+          let myclub: string;
+          try {
+            myclub = await writer.set(ev.option, child, going);
+          } catch (e) {
+            return { child, event: ev.option.label, going, myclub: `failed: ${(e as Error).message}` };
+          }
+          const declined = new Set(st.data.myclub.declined ?? []);
+          if (going) declined.delete(ev.option.eventId);
+          else declined.add(ev.option.eventId);
+          st.data.myclub.declined = [...declined].slice(-200);
+          // Answered now: it leaves this child's open list (a sibling invited to the same event keeps
+          // theirs) and is kept as answered, so a later request can change it back.
+          const mine = (e: MyClubEvent) => e.id === ev.option.eventId && !!e.child && childName(d.cfg, e.child) === child;
+          const inv = st.data.myclub.openInvites;
+          const event = inv?.events.find(mine) ?? st.data.myclub.answered?.find(mine);
+          if (inv) inv.events = inv.events.filter((e) => !mine(e));
+          if (event) st.data.myclub.answered = [...(st.data.myclub.answered ?? []).filter((e) => !mine(e) && eventDate(e) >= today), event].slice(-100);
+          const poll = st.data.myclub.agentPoll;
+          if (poll?.status === "open" && poll.options[child]?.some((o) => o.eventId === ev.option.eventId)) poll.votes[key(child, ev.option.eventId)] = going;
+          if (writer.live) await runMyClub(ctx);
+          return { child, event: ev.option.label, going, myclub };
         });
       },
     },
