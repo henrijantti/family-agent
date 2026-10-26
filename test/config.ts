@@ -9,6 +9,7 @@ export function testConfig() {
   cfg.outlook.bills_to = "private_if_set";
   cfg.digest.language = "en"; // assertions are written against the English labels
   cfg.agent_jobs = []; // tests that need agent-owned jobs set them themselves
+  delete cfg.feeds; // no network in tests; the feeds test sets its own
   if (cfg.dashboard) delete cfg.dashboard.drive_file_id; // never upload to Henri's Drive from tests
   return cfg;
 }

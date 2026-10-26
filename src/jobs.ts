@@ -1,12 +1,13 @@
 import { runAttendanceApply, runAttendancePoll, type AttendanceWriter } from "./attendance.js";
 import { Config, RunSlot, env } from "./config.js";
-import type { CalendarApi } from "./calendar/types.js";
+import type { CalendarApi, DesiredEvent } from "./calendar/types.js";
 import { syncSource } from "./calendar/sync.js";
 import { HubEvent, billsMessage, buildDigest, toHubEvent } from "./digest/build.js";
 import { wilmaWeek } from "./digest/wilma-week.js";
 import type { StateData } from "./lib/state.js";
 import { addDays, fromLocal, inRange, localParts, toMinutes } from "./lib/time.js";
 import { Notifier, esc } from "./notify/telegram.js";
+import { Feed, feedEvents, fetchFeed } from "./sources/feeds.js";
 import { MyClubProvider, MyClubSnapshot, myclubEvents } from "./sources/myclub.js";
 import { MailApi, billsToRemind, ensureWilmaRule, scanInvoices } from "./sources/outlook.js";
 import { WilmaProvider, WilmaSnapshot, wilmaDiff, wilmaEvents } from "./sources/wilma.js";
@@ -56,7 +57,7 @@ async function sendAlert(ctx: Ctx, lines: string[]) {
   await ctx.notifier.send(familyChat()!, `🔔 <b>Family agent</b>\n${lines.map((l) => `• ${esc(l)}`).join("\n")}`);
 }
 
-function syncOpts(ctx: Ctx, id: string, source: "wilma" | "myclub", days: number) {
+function syncOpts(ctx: Ctx, id: string, source: DesiredEvent["source"], days: number) {
   const today = localParts(ctx.now).date;
   return {
     calendarId: id,
@@ -184,6 +185,39 @@ export async function readInvites(ctx: Ctx) {
   }
 }
 
+/**
+ * Public calendar feeds into their calendars. A feed that fails to load stops
+ * its calendar's sync for this run, so its events aren't counted as missing.
+ */
+export async function runFeeds(ctx: Ctx) {
+  const feeds = ctx.cfg.feeds?.list ?? [];
+  const byCal = new Map<"family" | "school" | "hobbies", Feed[]>();
+  for (const f of feeds) byCal.set(f.calendar, [...(byCal.get(f.calendar) ?? []), f]);
+  let total = 0;
+  const failed: string[] = [];
+  for (const [which, list] of byCal) {
+    const desired: DesiredEvent[] = [];
+    try {
+      for (const f of list) desired.push(...feedEvents(f, await fetchFeed(f), ctx.cfg, ctx.now));
+    } catch (e) {
+      failed.push((e as Error).message);
+      continue;
+    }
+    total += desired.length;
+    const id = calId(ctx.cfg, which);
+    if (!ctx.calendar || !id) {
+      ctx.log(`calendar not configured, skipping feeds into ${which} (${desired.length} items)`);
+      continue;
+    }
+    const r = await syncSource(ctx.calendar, desired, syncOpts(ctx, id, "feed", ctx.cfg.feeds?.horizon_days ?? 180));
+    ctx.state.changes.push(...r.changes);
+    ctx.log(`feeds into ${which}: +${r.created} ~${r.updated} =${r.unchanged} -${r.deleted} (missing ${r.markedMissing})`);
+    if (r.warnings.length) await sendAlert(ctx, r.warnings);
+  }
+  if (failed.length) fail(ctx, "Feeds", new Error(failed.join("; ")));
+  else ok(ctx, "Feeds", total);
+}
+
 export async function runOutlook(ctx: Ctx) {
   if (!ctx.mail) return;
   try {
@@ -247,7 +281,7 @@ export async function runDigest(ctx: Ctx, weekAhead = false): Promise<string> {
 
 // ---------- scheduler ----------
 
-export type JobName = "myclub" | "outlook" | "wilma" | "digest" | "week-ahead" | "attendance-poll" | "attendance-apply";
+export type JobName = "myclub" | "feeds" | "outlook" | "wilma" | "digest" | "week-ahead" | "attendance-poll" | "attendance-apply";
 export interface DueJob {
   job: JobName;
   key: string;
@@ -270,6 +304,7 @@ export function dueJobs(cfg: Config, state: StateData, now: Date): DueJob[] {
     due.push({ job, key, slot });
   };
   if (cfg.myclub.enabled) cfg.myclub.runs.forEach((s) => check("myclub", s));
+  if (cfg.feeds?.list.length) cfg.feeds.runs.forEach((s) => check("feeds", s));
   if (cfg.outlook.enabled) cfg.outlook.runs.forEach((s) => check("outlook", s));
   if (cfg.wilma.enabled) cfg.wilma.runs.forEach((s) => check("wilma", s));
   const weekend = lp.day === "sat" || lp.day === "sun";
@@ -291,10 +326,11 @@ export async function tick(ctx: Ctx, force?: JobName[]) {
     return [];
   }
   // Sources first so the digest sees fresh data.
-  const order: JobName[] = ["myclub", "attendance-apply", "outlook", "wilma", "digest", "week-ahead", "attendance-poll"];
+  const order: JobName[] = ["myclub", "feeds", "attendance-apply", "outlook", "wilma", "digest", "week-ahead", "attendance-poll"];
   jobs.sort((a, b) => order.indexOf(a.job) - order.indexOf(b.job));
   for (const j of jobs) {
     ctx.log(`running ${j.job} (${j.key})`);
+    if (j.job === "feeds") await runFeeds(ctx);
     if (j.job === "myclub") {
       await runMyClub(ctx);
       await readInvites(ctx);

@@ -70,7 +70,7 @@ export function toCalendarEvent(d: DesiredEvent, missing = 0): CalendarEvent {
     extendedProperties: {
       private: { agent: "family-agent", source: d.source, sourceId: d.sourceId, hash: hashOf(d), missing: String(missing) },
     },
-    ...(d.url ? { source: { title: d.source === "wilma" ? "Wilma" : "MyClub", url: d.url } } : {}),
+    ...(d.url ? { source: { title: d.source === "wilma" ? "Wilma" : d.source === "feed" ? "Tulospalvelu" : "MyClub", url: d.url } } : {}),
   };
 }
 
