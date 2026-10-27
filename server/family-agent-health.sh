@@ -30,13 +30,17 @@ send() {
 }
 
 # problem <key> <text> [signature]: alert now unless this alert already went out.
-# With a signature, the same signature never repeats; otherwise it repeats after
-# 6 h, but not at night.
+# With a signature (";a;b;" items), only an item not alerted before alerts again;
+# otherwise it repeats after 6 h, but not at night.
 problem() {
   local f="$STATE/$1" sig="${3:-}"
   if [ -f "$f" ]; then
     local had; had="$(sed -n 2p "$f")" # empty for an alert from before signatures
-    if [ -n "$sig" ] && [ -n "$had" ]; then [ "$had" = "$sig" ] && return
+    if [ -n "$sig" ] && [ -n "$had" ]; then
+      local item new=0 items
+      IFS=';' read -ra items <<< "$sig"
+      for item in "${items[@]}"; do [ -n "$item" ] && [[ "$had" != *";$item;"* ]] && new=1; done
+      [ "$new" = 0 ] && return
     else
       [ -z "$(find "$f" -mmin +"$REPEAT_MIN")" ] && return
       local h; h=$((10#$(TZ=Europe/Helsinki date +%H))) # Helsinki hour
@@ -81,7 +85,7 @@ backup_recent() { # a backup succeeded in the last 26 hours (skips the first day
   unit_ok family-agent-backup.service && [ -n "$(find "$HOME/.backup/repo" -maxdepth 1 -name '*.age' -mmin -1560 2>/dev/null | head -1)" ]
 }
 CRON_BAD="" # failed jobs' names, for the alert
-CRON_SIG="" # names and last run times: a new failed run alerts again, the same one doesn't
+CRON_SIG="" # ";name@lastRun;" per failed job: a new failed run alerts again, one already alerted doesn't
 crons_ok() { # the cron list is readable and no enabled job's last runs failed
   local out bad
   # The gateway refuses the cron list without its token (and still exits 0).
@@ -90,8 +94,8 @@ crons_ok() { # the cron list is readable and no enabled job's last runs failed
   bad="$(printf '%s' "$out" | jq -r 'if (.jobs | type) != "array" then "unreadable" else [.jobs[] | select(.enabled != false) | select((.state.consecutiveErrors // 0) > 0 or ((.lastRunStatus // .state.lastRunStatus // "") | test("error|fail"; "i")))] | length end' 2>/dev/null)"
   [ "$bad" = 0 ] && return 0
   CRON_BAD="$(printf '%s' "$out" | jq -r '[.jobs[]? | select(.enabled != false) | select((.state.consecutiveErrors // 0) > 0 or ((.lastRunStatus // .state.lastRunStatus // "") | test("error|fail"; "i"))) | .name // .id] | join(", ")' 2>/dev/null)"
-  CRON_SIG="$(printf '%s' "$out" | jq -c '[.jobs[]? | select(.enabled != false) | select((.state.consecutiveErrors // 0) > 0 or ((.lastRunStatus // .state.lastRunStatus // "") | test("error|fail"; "i"))) | [(.name // .id), (.state.lastRunAtMs // .state.lastRunAt // "")]]' 2>/dev/null)"
-  [ -n "$CRON_SIG" ] || CRON_SIG="unreadable"
+  # An unreadable list gets no signature, so it keeps repeating like other alerts.
+  CRON_SIG="$(printf '%s' "$out" | jq -r 'if (.jobs | type) != "array" then "" else [.jobs[] | select(.enabled != false) | select((.state.consecutiveErrors // 0) > 0 or ((.lastRunStatus // .state.lastRunStatus // "") | test("error|fail"; "i"))) | "\(.name // .id | gsub(";"; ","))@\(.state.lastRunAtMs // .state.lastRunAt // "")"] | if length > 0 then ";" + join(";") + ";" else "" end end' 2>/dev/null)"
   return 1
 }
 
