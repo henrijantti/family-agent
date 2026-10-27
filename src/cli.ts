@@ -3,7 +3,7 @@ import { Config, env, isMock, loadConfig } from "./config.js";
 import { FakeCalendar } from "./calendar/fake.js";
 import { GoogleCalendar } from "./calendar/google.js";
 import { eventId } from "./calendar/sync.js";
-import { Ctx, JobName, runDigest, sendWilmaWeek, syncPlan, tick, wilmaFetchDue } from "./jobs.js";
+import { Ctx, JobName, familyChat, runDigest, sendWilmaWeek, syncPlan, tick, wilmaFetchDue } from "./jobs.js";
 import { StateStore, type StateData } from "./lib/state.js";
 import { addDays, fromLocal, localIso, localParts, toMinutes } from "./lib/time.js";
 import { ConsoleNotifier, TelegramBot } from "./notify/telegram.js";
@@ -16,6 +16,7 @@ import { triage, triageReport } from "./outlook-triage.js";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { handle, serve, Tool } from "./agent/mcp.js";
 import { homeTools } from "./agent/home.js";
+import { groupReminderTools, sendGroupReminders } from "./agent/group-reminders.js";
 import { driveCredsFromEnv, driveLogin, userDrive } from "./lib/drive-user.js";
 import { jobsTools } from "./agent/jobs-tools.js";
 import { withLock } from "./lib/lock.js";
@@ -52,6 +53,7 @@ function dreamingDeps(now: () => Date, agent: "family" | "henri" | "email" = "fa
 
 /** Every agent's "I couldn't do this" lines (capability_missing). */
 const capabilitiesFile = () => `${dirname(env("STATE_FILE") ?? "state/state.json")}/capabilities.jsonl`;
+const groupRemindersFile = () => `${dirname(env("STATE_FILE") ?? "state/state.json")}/group-reminders.json`;
 
 function buildCtx(cfg: Config, state: StateStore, now: Date): Ctx {
   if (isMock()) {
@@ -177,6 +179,15 @@ async function main() {
         const fresh = store();
         const ctx = buildCtx(cfg, fresh, now);
         await tick(ctx, force);
+        // One-off reminders the family bot queued for the group; a failure here never fails the tick.
+        if (!force && ctx.notifier && familyChat()) {
+          try {
+            const n = await sendGroupReminders(groupRemindersFile(), ctx.notifier, familyChat()!, now, log);
+            if (n) log(`group reminders sent: ${n}`);
+          } catch (e) {
+            log(`group reminders failed: ${e instanceof Error ? e.message : e}`);
+          }
+        }
         // The pinned dashboard follows the calendars; a failure here never fails the tick.
         if (cfg.dashboard?.enabled && !force) {
           try {
@@ -561,6 +572,7 @@ async function main() {
         const calendarInvite = cfg.outlook.email_agent?.send ? { deskFile, wake } : undefined;
         tools = familyTools({ cfg, calendar, loadState: () => store().data, now: clock, group, deskFile: group ? undefined : deskFile, workInvite, calendarInvite });
         tools.push(capabilityTool(capabilitiesFile(), group ? "family" : "henri", clock));
+        tools.push(...groupReminderTools({ file: groupRemindersFile(), now: clock }));
         // Henri's household register (reminders, papers, holidays): never in the family group's copy.
         if (!group) {
           const creds = driveCredsFromEnv();
