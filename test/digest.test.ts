@@ -160,3 +160,23 @@ test("changes since yesterday: coming days only, no bulletin dates, one line per
   assert.equal(whenLabel("2026-10-28 17:00", fi), "ke 28.10. klo 17.00");
   assert.equal(whenLabel("2026-11-02", fi), "ma 2.11.");
 });
+
+test("a chat-added event that MyClub now also brings shows once: the synced one wins", async () => {
+  const { conflicts, mergeCrossCalendar, toHubEvent } = await import("../src/digest/build.js");
+  const at = (h: string) => ({ dateTime: `2026-11-01T${h}:00+02:00` });
+  const chat = { agent: "family-agent-chat" };
+  const sync = { agent: "family-agent", source: "myclub" };
+  const evs = [
+    toHubEvent({ id: "c1", summary: "Oskar: Futsal - Sininen", start: at("09:30"), end: at("10:30"), extendedProperties: { private: chat } }, "hobbies"),
+    toHubEvent({ id: "m1", summary: "Oskar: PPJ Laru 2017: Futsal - Sininen", start: at("09:30"), end: at("10:30"), location: "Kameleonten 3", extendedProperties: { private: sync } }, "hobbies"),
+    // Another child at the same time, and a chat event at another time: both stay.
+    toHubEvent({ id: "c2", summary: "Oliver: Futsal - Sininen", start: at("09:30"), end: at("10:30"), extendedProperties: { private: chat } }, "family"),
+    toHubEvent({ id: "c3", summary: "Oskar: Futsal - Sininen", start: at("12:00"), end: at("13:00"), extendedProperties: { private: chat } }, "hobbies"),
+  ];
+  const out = mergeCrossCalendar(evs);
+  assert.deepEqual(
+    out.map((e) => `${e.start} ${e.title}`),
+    ["09:30 Oskar: PPJ Laru 2017: Futsal - Sininen", "09:30 Oliver: Futsal - Sininen", "12:00 Oskar: Futsal - Sininen"],
+  );
+  assert.ok(!conflicts(out.filter((e) => e.title.startsWith("Oskar"))).length, "no false overlap");
+});

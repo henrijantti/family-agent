@@ -22,6 +22,10 @@ export interface HubEvent {
   location?: string;
   tentative: boolean;
   alsoOnFamily?: boolean;
+  /** Added from a chat by the family bot. */
+  chat?: boolean;
+  /** Written by a sync (MyClub, Wilma, feeds). */
+  synced?: boolean;
 }
 
 export interface DigestInput {
@@ -121,6 +125,8 @@ export function toHubEvent(e: CalendarEvent, calendar: HubEvent["calendar"]): Hu
     endMs: en,
     location: e.location,
     tentative: e.status === "tentative",
+    ...(e.extendedProperties?.private?.agent === "family-agent-chat" ? { chat: true } : {}),
+    ...(e.extendedProperties?.private?.agent === "family-agent" ? { synced: true } : {}),
   };
 }
 
@@ -128,19 +134,36 @@ function words(t: string) {
   return new Set(t.toLowerCase().replace(/^[^:]{1,30}:\s*/, "").replace(/\(from bulletin\)/, "").split(/[^a-zåäö0-9]+/i).filter((w) => w.length > 2));
 }
 
-/** Same day + similar title on the family calendar and an agent calendar: show once. */
-export function mergeCrossCalendar(events: HubEvent[]): HubEvent[] {
+/** Different children named in the titles: never the same event. */
+const sameKid = (x: HubEvent, y: HubEvent) => {
+  const a = splitTitle(x.title).who?.toLowerCase();
+  const b = splitTitle(y.title).who?.toLowerCase();
+  return !a || !b || a === b;
+};
+
+const similar = (x: string, y: string) => {
+  const a = words(x);
+  const b = words(y);
+  const common = [...a].filter((w) => b.has(w)).length;
+  return common > 0 && common / Math.min(a.size, b.size) >= 0.5;
+};
+
+/**
+ * A chat-added event that a sync now also brings (same day and start time, same
+ * child, similar title, on any calendar): the synced one wins (Henri, 2026-10-27).
+ */
+export function dropChatTwins(events: HubEvent[]): HubEvent[] {
+  return events.filter((e) => !e.chat || !e.start || !events.some((s) => s.synced && s.date === e.date && s.start === e.start && sameKid(e, s) && similar(e.title, s.title)));
+}
+
+/** Same day + similar title on the family calendar and an agent calendar: show once. A chat-added twin of a synced event goes. */
+export function mergeCrossCalendar(all: HubEvent[]): HubEvent[] {
+  const events = dropChatTwins(all);
   const fam = events.filter((e) => e.calendar === "family");
   const out: HubEvent[] = [];
   const dropped = new Set<HubEvent>();
   for (const e of events.filter((x) => x.calendar !== "family")) {
-    const a = words(e.title);
-    const twin = fam.find((f) => {
-      if (f.date !== e.date || dropped.has(f)) return false;
-      const b = words(f.title);
-      const common = [...a].filter((w) => b.has(w)).length;
-      return common > 0 && common / Math.min(a.size, b.size) >= 0.5;
-    });
+    const twin = fam.find((f) => f.date === e.date && !dropped.has(f) && sameKid(e, f) && similar(e.title, f.title));
     if (twin) {
       dropped.add(twin);
       out.push({ ...e, alsoOnFamily: true });
