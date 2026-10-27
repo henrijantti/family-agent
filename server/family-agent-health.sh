@@ -3,7 +3,9 @@
 # family-agent-health.timer. Installed to /home/openclaw/family-agent-health.sh.
 #
 # Sends Henri one short private Telegram message per problem (never the family
-# group), at most once per problem every 6 hours, and one message when it is fixed.
+# group), at most once per problem every 6 hours and never a repeat at night
+# (22-07), and one message when it is fixed. A failed cron run alerts once: the
+# same failure stays quiet until another run fails or it is fixed.
 # Bot token and Henri's chat id come from files under ~/.secrets (not in git):
 #   HEALTH_TOKEN_FILE  default ~/.secrets/telegram-assistant-bot.token (Chief of staff bot)
 #   HEALTH_CHAT_FILE   default ~/.secrets/health-chat-id
@@ -27,12 +29,22 @@ send() {
     --data-urlencode "chat_id=${chat}" --data-urlencode "text=$1" --data-urlencode "disable_notification=false"
 }
 
-# problem <key> <text>: alert now unless the same alert went out in the last 6 h.
+# problem <key> <text> [signature]: alert now unless this alert already went out.
+# With a signature, the same signature never repeats; otherwise it repeats after
+# 6 h, but not at night.
 problem() {
-  local f="$STATE/$1"
-  if [ -f "$f" ] && [ -z "$(find "$f" -mmin +"$REPEAT_MIN")" ]; then return; fi
+  local f="$STATE/$1" sig="${3:-}"
+  if [ -f "$f" ]; then
+    local had; had="$(sed -n 2p "$f")" # empty for an alert from before signatures
+    if [ -n "$sig" ] && [ -n "$had" ]; then [ "$had" = "$sig" ] && return
+    else
+      [ -z "$(find "$f" -mmin +"$REPEAT_MIN")" ] && return
+      local h; h=$((10#$(TZ=Europe/Helsinki date +%H))) # Helsinki hour
+      [ "$h" -ge 22 ] || [ "$h" -lt 7 ] && return
+    fi
+  fi
   # Remember the alert only once it is delivered, so a failed send is retried next run.
-  send "$(printf '⚠️ Palvelinhälytys\n\n%s\n\nKatson asiaa seuraavaksi; sinun ei tarvitse tehdä mitään.' "$2")" && printf '%s\n' "$2" > "$f"
+  send "$(printf '⚠️ Palvelinhälytys\n\n%s\n\nKatson asiaa seuraavaksi; sinun ei tarvitse tehdä mitään.' "$2")" && printf '%s\n%s\n' "$2" "$sig" > "$f"
 }
 
 # ok <key>: if <key> was alerting, say once that it is fixed.
@@ -68,13 +80,19 @@ backup_recent() { # a backup succeeded in the last 26 hours (skips the first day
   [ "$up" -lt 93600 ] && return 0
   unit_ok family-agent-backup.service && [ -n "$(find "$HOME/.backup/repo" -maxdepth 1 -name '*.age' -mmin -1560 2>/dev/null | head -1)" ]
 }
+CRON_BAD="" # failed jobs' names, for the alert
+CRON_SIG="" # names and last run times: a new failed run alerts again, the same one doesn't
 crons_ok() { # the cron list is readable and no enabled job's last runs failed
   local out bad
   # The gateway refuses the cron list without its token (and still exits 0).
   # shellcheck source=/dev/null
   out="$(set -a; . "$HOME/.secrets/gateway.env"; set +a; timeout 60 openclaw cron list --json 2>/dev/null)" || return 1
   bad="$(printf '%s' "$out" | jq -r 'if (.jobs | type) != "array" then "unreadable" else [.jobs[] | select(.enabled != false) | select((.state.consecutiveErrors // 0) > 0 or ((.lastRunStatus // .state.lastRunStatus // "") | test("error|fail"; "i")))] | length end' 2>/dev/null)"
-  [ "$bad" = 0 ]
+  [ "$bad" = 0 ] && return 0
+  CRON_BAD="$(printf '%s' "$out" | jq -r '[.jobs[]? | select(.enabled != false) | select((.state.consecutiveErrors // 0) > 0 or ((.lastRunStatus // .state.lastRunStatus // "") | test("error|fail"; "i"))) | .name // .id] | join(", ")' 2>/dev/null)"
+  CRON_SIG="$(printf '%s' "$out" | jq -c '[.jobs[]? | select(.enabled != false) | select((.state.consecutiveErrors // 0) > 0 or ((.lastRunStatus // .state.lastRunStatus // "") | test("error|fail"; "i"))) | [(.name // .id), (.state.lastRunAtMs // .state.lastRunAt // "")]]' 2>/dev/null)"
+  [ -n "$CRON_SIG" ] || CRON_SIG="unreadable"
+  return 1
 }
 
 # Self-healing (Henri 2026-10-25): a stuck Telegram reader was fixed by hand with a
@@ -124,7 +142,8 @@ check dreaming "Perhebotin viikkoläpikäynnin tietojen haku epäonnistui (sunnu
 check gateway "OpenClaw-palvelu ei ole käynnissä (botit eivät vastaa)" gateway_up
 check remote "Clauden etäyhteys palvelimelle (Claude Code) ei ole käynnissä, joten palvelinta ei voi hoitaa ilman läppäriä" remote_up
 check backup "Yön varmuuskopio ei onnistunut" backup_recent
-check crons "Jokin ajastettu tehtävä (esim. aamukooste) päättyi virheeseen, tai tehtävälistaa ei voi lukea" crons_ok
+if crons_ok; then ok crons
+else problem crons "Jokin ajastettu tehtävä (esim. aamukooste) päättyi virheeseen, tai tehtävälistaa ei voi lukea${CRON_BAD:+: $CRON_BAD}" "$CRON_SIG"; fi
 check memory "Palvelimen muisti on vähissä (alle $MIN_FREE_MB Mt vapaana)" mem_ok
 check disk "Palvelimen levy on yli $MAX_DISK_PCT % täynnä" disk_ok
 exit 0
