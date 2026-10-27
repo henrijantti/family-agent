@@ -63,3 +63,14 @@ test("a failed send stays waiting for the next tick", async () => {
   assert.equal(await sendGroupReminders(file, flaky as never, "group", new Date("2026-10-29T05:10:00Z")), 1);
   assert.equal(await sendGroupReminders(file, flaky as never, "group", new Date("2026-10-29T05:25:00Z")), 1, "A goes on the retry");
 });
+
+test("an overdue reminder never goes out at night: it waits for morning or drops", async () => {
+  const { file, tools } = setup();
+  await call(tools, "group_reminder_add", { date: "2026-10-29", time: "22:00", text: "Myöhäinen" });
+  const tg = new ConsoleNotifier();
+  assert.equal(await sendGroupReminders(file, tg, "group", new Date("2026-10-29T20:10:00Z")), 1, "22:10 is the tick after");
+  await call(tools, "group_reminder_add", { date: "2026-10-30", time: "21:45", text: "Yö" });
+  assert.equal(await sendGroupReminders(file, tg, "group", new Date("2026-10-30T22:00:00Z")), 0, "00:00 Helsinki: held");
+  assert.equal(await sendGroupReminders(file, tg, "group", new Date("2026-10-31T04:00:00Z")), 0, "06:00 is over 6 h late: dropped");
+  assert.equal((await call(tools, "group_reminder_list", { all: true })).json().find((r: any) => r.text === "Yö").status, "missed");
+});

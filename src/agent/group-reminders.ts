@@ -30,6 +30,8 @@ export interface GroupReminderDeps {
 /** Waking hours only: a family-group ping at night helps nobody. */
 const EARLIEST = "06:00";
 const LATEST = "22:00";
+/** A 22:00 reminder still goes on the tick after it; nothing later than this. */
+const SEND_UNTIL = "22:30";
 const MAX_PENDING = 20;
 const MAX_DAYS = 120;
 /** A reminder more than this late (the server was down) is dropped, not sent stale. */
@@ -129,6 +131,8 @@ export async function sendGroupReminders(file: string, notifier: Notifier, chat:
   if (!existsSync(file)) return 0;
   return change(file, async (list) => {
     let sent = 0;
+    const hhmm = localParts(now).time;
+    const awake = hhmm >= EARLIEST && hhmm < SEND_UNTIL;
     for (const r of list.sort((x, y) => x.at.localeCompare(y.at))) {
       if (r.status !== "pending" || atDate(r) > now) continue;
       if (now.getTime() - atDate(r).getTime() > LATE_MS) {
@@ -136,6 +140,8 @@ export async function sendGroupReminders(file: string, notifier: Notifier, chat:
         log(`group reminder ${r.id} for ${r.at} is over 6 h late: dropped`);
         continue;
       }
+      // Late ones (a failed send, the server down) wait for morning rather than ping at night; over 6 h late they drop above.
+      if (!awake) continue;
       try {
         await notifier.send(chat, `⏰ <b>Muistutus:</b> ${esc(r.text)}`);
       } catch (e) {
