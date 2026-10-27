@@ -180,3 +180,14 @@ test("a chat-added event that MyClub now also brings shows once: the synced one 
   );
   assert.ok(!conflicts(out.filter((e) => e.title.startsWith("Oskar"))).length, "no false overlap");
 });
+
+test("a MyClub cancellation still replaces the family-calendar copy of the same child's event", async () => {
+  const { mergeCrossCalendar, toHubEvent } = await import("../src/digest/build.js");
+  const at = (h: string) => ({ dateTime: `2026-11-02T${h}:00+02:00` });
+  const sync = { agent: "family-agent", source: "myclub" };
+  const out = mergeCrossCalendar([
+    toHubEvent({ id: "f1", summary: "Oskar: Futsal - Sininen", start: at("17:00"), end: at("18:00") }, "family"),
+    toHubEvent({ id: "m2", summary: "CANCELLED: Oskar: PPJ Laru 2017: Futsal - Sininen", start: at("17:00"), end: at("18:00"), extendedProperties: { private: sync } }, "hobbies"),
+  ]);
+  assert.deepEqual(out.map((e) => e.title), ["CANCELLED: Oskar: PPJ Laru 2017: Futsal - Sininen"]);
+});

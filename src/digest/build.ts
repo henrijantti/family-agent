@@ -136,8 +136,8 @@ function words(t: string) {
 
 /** Different children named in the titles: never the same event. */
 const sameKid = (x: HubEvent, y: HubEvent) => {
-  const a = splitTitle(x.title).who?.toLowerCase();
-  const b = splitTitle(y.title).who?.toLowerCase();
+  const a = splitTitle(x.title.replace(/^CANCELLED: /, "")).who?.toLowerCase();
+  const b = splitTitle(y.title.replace(/^CANCELLED: /, "")).who?.toLowerCase();
   return !a || !b || a === b;
 };
 
