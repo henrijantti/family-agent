@@ -415,7 +415,7 @@ export function familyTools(d: FamilyDeps): Tool[] {
     tools.push({
       name: "work_calendar_invite",
       description:
-        "Send one event from the family, school or hobbies calendar to Henri's work calendar as an invitation email to his work address. Only when Henri asks for that event. It goes within a few minutes without further approval; the event's own title, time and place are used.",
+        "Send one event from the family, school or hobbies calendar to Henri's work calendar as an invitation email to his work address. Only when Henri or Anna asks for that event. It goes within a few minutes without further approval; the event's own title, time and place are used.",
       input: {
         properties: { calendar: calendarProp, id: { type: "string", maxLength: 1024, description: "the event id from calendar_list" } },
         required: ["calendar", "id"],
